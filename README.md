@@ -133,8 +133,6 @@ Web 中的 API Key 配置覆盖常用兼容服务。模型服务的 OAuth 登录
 | `npm run eval:smoke` | 两道固定任务使用预设解答，通过真实 Pi 工具和工作流运行，再检查独立断言、文件修改与完成状态。 |
 | `npm run eval:agent -- --model provider/model --workflow planned` | 使用已配置的真实模型运行同一任务集，会向对应服务发送任务内容并产生调用费用。 |
 
-**截至 2026-11-03**：活动测试为 **12 个文件、129 项测试**；Windows / Ubuntu × Node.js 22 / 24 的四组远端 CI 均已通过。浏览器验收已在独立 Edge 配置中通过；`eval:smoke` 为 **2/2**。这些分别说明回归检查、交互链路和评测基础设施可运行；尚未取得真实模型的编码质量评测结果。
-
 浏览器验收需要 Edge、Chrome 或 Chromium；也可通过 `FORGE_AGENT_TEST_BROWSER` 指定可执行文件。脚本使用临时项目、独立数据目录和浏览器配置。完整方法、输出路径与限制见 [评测说明](docs/evaluation.md)。修改完成状态、重试、信任、持久化或安全行为时，请补充回归测试，遵守 [AGENTS.md](AGENTS.md)。
 
 ## 本机数据与安全

@@ -133,8 +133,6 @@ The Web API-key editor covers common compatible services. Provider OAuth still u
 | `npm run eval:smoke` | Two fixed tasks with scripted solutions, executed through actual Pi tools and workflows, then checked with independent assertions, file-change checks, and completion checks. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | The same task set with a configured real model. Sends task content to the provider and incurs its usage charges. |
 
-**As of 2026-11-03:** the active suite has **129 tests across 12 files**, and all four remote CI jobs pass on Windows / Ubuntu × Node.js 22 / 24. Browser acceptance has passed in an isolated Edge profile; `eval:smoke` is **2/2**. These establish regression coverage, interaction paths, and evaluation infrastructure. Real-model coding-quality results have not yet been collected.
-
 Browser acceptance needs Edge, Chrome, or Chromium; set `FORGE_AGENT_TEST_BROWSER` to another executable if necessary. It uses a temporary project, isolated data directory, and browser profile. See [evaluation](docs/evaluation.md) for methods, output paths, and limits. Changes to completion, retry state, trust, persistence, or security require regression tests; follow [AGENTS.md](AGENTS.md).
 
 ## Local data and security
