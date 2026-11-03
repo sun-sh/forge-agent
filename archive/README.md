@@ -1,7 +1,7 @@
 # Archived prototypes
 
 `prototype/` preserves the earlier self-built runtime, experiments, tests and demo
-scripts for design reference. Nothing here is part of the active pforge build,
+scripts for design reference. Nothing here is part of the active Forge Agent build,
 test suite, package, supported product, or claimed functionality.
 
 The active product uses Pi Coding Agent 1.4.0 through `src/pi-cli.ts` and

@@ -1,168 +1,98 @@
 # Forge Agent
 
-**Forge Agent** is a local coding agent with a Web client and CLI, built on [Pi Coding Agent](https://github.com/earendil-works/pi) 1.4.0.
-It deliberately keeps Pi as the runtime: authentication, model selection, the interactive TUI,
-sessions, compaction, built-in tools, MCP, skills, extensions, and prompt templates come from Pi.
-forge-agent adds a local Web client, a branded entry point, isolated `FORGE_AGENT_HOME` data,
-and a project verification gate. See [architecture and current scope](docs/architecture.md)
-for the boundary between forge-agent and Pi, including differences between CLI and Web support.
+**在本机浏览器里读代码、规划和修改项目，用验证与审阅记录判断任务是否完成。**
 
-**Status:** early `0.1.0`. The Pi delegation and verification paths are tested locally. This is not
-a claim of benchmark parity with Codex or Claude Code, and it is not an OS-level sandbox.
+简体中文 · [English](README.en.md)
 
-## Install
+[![CI](https://github.com/sun-sh/forge-agent/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/sun-sh/forge-agent/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19.0-43853d)](https://nodejs.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Requires Node.js `>=22.19.0`.
+Forge Agent 是一个以本机 Web 客户端为主要入口的 coding agent。它将项目、对话、模型选择、任务进度和 Git 差异放在同一个工作界面中，也提供可选的命令行入口。
 
-```powershell
-npm install
+项目基于 [Pi Coding Agent](https://github.com/earendil-works/pi) **1.4.0** 的完整运行时构建。我们在 Pi 会话之上实现任务编排、工作模式策略、验证门禁、Git 变更审阅和 Web 交互。当前版本为 **0.1.0，处于早期开发阶段**。
+
+## 可以做什么
+
+- **围绕项目工作**：按项目展开、搜索和恢复历史对话，保留草稿，查看文件变更与 diff。
+- **选择工作方式**：Agent 执行修改；Plan 调研并规划；Ask 阅读代码并回答问题。项目、模式、模型和推理强度都在输入框下方选择。
+- **接入自己的模型**：在设置中添加第三方服务，获取模型列表并批量勾选，也可以手填模型 ID，再通过实际调用测试连接。
+- **让完成状态有依据**：复杂任务可使用“计划并执行”，逐步调研、规划、实现、验证和审阅；页面展示各阶段与验证证据。
+
+## 快速启动
+
+准备 Git、**Node.js >= 22.19.0**，以及一个可用的模型服务。远程服务通常需要 API Key；兼容的本机服务可以明确选择免 Key。
+
+```bash
+git clone https://github.com/sun-sh/forge-agent.git
+cd forge-agent
+npm ci
 npm run build
-npm link
-```
-
-Then start it:
-
-```powershell
 npm start
 ```
 
-`npm start` opens the local Web client. The linked command is `forge-agent web`;
-run `forge-agent` alone for the optional terminal interface.
+`npm start` 会启动本机网关并自动打开默认浏览器，默认端口为 `4317`，正常使用无需复制启动链接或输入本机连接凭证。需要其他端口时使用 `npm start -- --port 4328`。目前从源码安装，尚未发布 npm 包或桌面安装包。
 
-For the Web client, run `forge-agent web`; it starts the local gateway and automatically opens the client in your default browser. No startup link needs to be copied. Select a project, working mode, model and thinking level below the prompt. Configure provider connections in Settings when needed. The model selector uses Pi's catalog, groups available models by provider, and retains the current conversation's selection when services are edited. Conversations are grouped by project in the left sidebar and can be reopened; the same project-session history is stored under `FORGE_AGENT_HOME/sessions`. Use `/help` for Pi's commands in the TUI. The
-interactive screen and `~/.pi` helper downloads are supplied by Pi Core; the command itself is
-`forge-agent`, while advanced TUI branding would require maintaining a Pi source fork.
+第一次使用：
 
-Each conversation is bound to its project. Idle conversations can be opened from another project's
-history; creating a conversation in a different folder starts with New conversation. Restoring a
-session checks its recorded working directory. The composer exposes the project, model, and thinking level below the prompt; those
-choices are persisted through Pi's `SettingsManager` and can also be changed for the current
-session. The Settings drawer also shows Provider authentication state, refreshes Pi's model catalog,
-stores API keys through Pi's `ModelRuntime`, exposes the project trust decision, and shows the
-verification configuration without printing credentials.
+1. 打开 **设置 → 服务 → 添加服务**，填写名称、Base URL、API 协议及 API Key，或明确选择本机免 Key。
+2. 获取模型列表，在可搜索的下拉框中批量选择；没有列表接口时手动填写模型 ID。运行实际调用测试后保存服务。
+3. 在输入框下方选择项目、模型和该模型支持的推理强度。服务保存与当前会话的模型切换是两个独立操作。
+4. 检查项目内容及验证命令，再在项目设置中确认信任。需要验证门禁时，按下文配置 `forge-agent.json`。
+5. 选择工作模式，描述任务并发送。复杂修改可在 Agent 模式中选择 **计划并执行**。
 
-Settings has Service, Model, Project, and About tabs. The model browser filters by
-provider, supports search and pagination, and shows available model capabilities. Choose the current
-model in the composer; choosing one for a new conversation also remembers that preference through Pi.
-Authentication is labeled as configured, rather than as a successful connection test.
+服务编辑器支持兼容 **OpenAI Chat Completions、OpenAI Responses、Anthropic Messages** 的接口；Ollama、LM Studio 等服务需要提供相应的兼容接口。模型能力以目录或手动配置为准，推理强度选项不会仅凭模型名称推断。
 
-Add a third-party service from **Settings → Service → Add service**. Enter its name, Base URL,
-API protocol and API key, then fetch the model list and open the searchable checkbox dropdown.
-Select or clear the filtered results and confirm the batch before saving. Selections survive search
-changes, and existing manual IDs and model parameters are preserved. You can also
-enter model IDs manually when the service has no model-list endpoint. The editor supports OpenAI
-Chat Completions, OpenAI Responses and Anthropic Messages compatible APIs. Local servers such as
-Ollama or LM Studio can use the explicit no-key option. Optional model details include context and
-output limits, reasoning and image input. Keep these values consistent with your service's model.
+## 工作模式与执行流程
 
-**Test model invocation** sends a short request through Pi using the first model and reports success
-only when it receives text; fetching a model list alone is not a successful inference test. Save
-the service to make its models immediately available without restarting; select one below the composer.
-Saving a service does not replace the active conversation's model. Saved services can be
-edited, and an empty Key field keeps an existing key when the destination is unchanged. Changing
-the endpoint or protocol requires an explicit new key or the no-key option.
+工作模式控制本轮允许使用的工具：
 
-The editor writes Pi's `FORGE_AGENT_HOME/models.json` and stores literal keys through Pi's authentication
-API. Keys are never returned by the editor or stored in browser storage. Writes preserve other
-providers, comments and advanced fields; malformed files and stale concurrent edits are rejected.
-Advanced custom headers, OAuth flows and provider extensions remain managed through Pi.
+| 模式 | 用途 | 工具范围 |
+| --- | --- | --- |
+| **Agent** | 实现修改、运行命令与项目验证 | 按 Pi 配置和项目信任启用工具 |
+| **Plan** | 阅读项目并制定计划 | 仅内置读取、搜索工具 |
+| **Ask** | 理解代码、解释实现与回答问题 | 仅内置读取、搜索工具 |
 
-The composer offers three working modes, with **Shift+Tab** to cycle while the prompt has focus:
+Plan 和 Ask 会限制实际工具调用，阻止 shell、写入、MCP/自定义工具、斜杠命令分派和自动验证。模式随会话保存，运行期间不能切换。它们限制模型驱动的操作；可信扩展代码仍以启动者权限运行。
 
-| Mode | Behavior |
+Agent 模式下可以选择两种执行流程：
+
+- **直接对话**：使用 Pi 的交互循环完成日常问答和修改，并执行已配置的验证。
+- **计划并执行**：由 Forge Agent 的任务控制器推进以下阶段，每次模型与工具执行仍交给 Pi。
+
+```mermaid
+flowchart LR
+    Inspect[调研] --> Plan[规划]
+    Plan --> Implement[实现]
+    Implement --> Verify[验证]
+    Verify --> Review[审阅]
+    Review --> Complete[完成]
+```
+
+“计划并执行”的完成门禁要求：配置的验证通过、结构化审阅为 `ready` 且没有未解决问题，在可用的 Git 证据范围内未检测到审阅期间的变更。验证失败最多自动修复 `verifyRetries` 次；审阅发现问题、没有配置检查、审阅无效或证据失效时，任务会进入需要处理的状态。
+
+停止任务会阻止后续阶段。服务重启后，未完成任务显示为中断，只有点击 **重新检查并继续** 才会重新调研当前工作区。模型审阅是第二次检查，仍可能遗漏问题。
+
+## Agent 设计与实现边界
+
+Forge Agent 将产品行为放在 Pi 会话之上，保留明确的职责边界：
+
+| 层 | 职责与实现 |
 | --- | --- |
-| Agent | Uses Pi's configured tools to implement changes and runs configured project verification. |
-| Plan | Reads and searches the codebase, then proposes an implementation plan. Switch to Agent and send an execution instruction to implement it. |
-| Ask | Reads and searches the codebase to answer questions and explain code. |
+| **任务控制器** | [src/task/controller.ts](src/task/controller.ts)：阶段转换、有限修复、停止/恢复、分支中的任务记录和完成门禁。 |
+| **验证与证据** | [src/verification/](src/verification/) 与 [命令执行器](src/tools/command.ts)：保留原始输出、执行超时、终止子进程树、保存逐次报告。 |
+| **工作模式策略** | [src/web/modes.ts](src/web/modes.ts)：通过 Pi 扩展约束实际工具调用，包括嵌套和动态工具调用。 |
+| **Git 审阅** | [src/task/git.ts](src/task/git.ts)：暂存、未暂存与未跟踪变更，受限 diff 预览，任务开始前已有修改的标记与状态指纹。 |
+| **Web 产品层** | [src/web/](src/web/)：服务配置、项目会话、流式传输、重连恢复、草稿、任务与差异面板。 |
+| **底层运行时** | Pi：Agent loop、模型调用与认证、工具、会话与压缩、项目信任、MCP、Skills、扩展和资源发现。 |
 
-Plan and Ask permit only Pi's built-in `read`, `grep`, `find`, and `ls` tools. The Pi extension checks
-actual tool calls, including nested calls and tools that reuse a reader's name. Shell, editing,
-MCP/custom tools, slash-command dispatch and automatic project verification are disabled in these
-modes. A skipped verification is never reported as a pass. The mode is saved as a Pi custom session
-entry and restored with history, including history opened without available model credentials.
-Mode changes are blocked during a run; restoring a session cannot silently switch it into Agent.
-Switching modes keeps the model and unsent draft. These controls restrict model-driven actions;
-trusted extensions and Pi still run with the launching user's OS permissions. This is not an OS sandbox.
+实现没有维护第二套 agent loop。CLI 委托 Pi 的入口，Web 通过 Pi SDK 创建会话；任务控制器负责阶段和判断，每个模型/工具回合仍由 Pi 执行。旧的自建原型保存在 `archive/prototype/`，不参与当前构建、测试或功能声明。
 
-`forge-agent web` hands the startup credential to the browser automatically and prints a plain local
-address. The browser retains an HttpOnly, SameSite=Strict cookie; the credential disappears from
-the address bar when the page starts.
-Afterward, new tabs can open the same local address without a token in the URL. The gateway access
-key is persisted at `FORGE_AGENT_HOME/web/access-token`, so restarting on the same address does not
-invalidate existing browser authorization. A tab without authorization waits for the browser
-bootstrap and reconnects automatically when the same browser receives it. The connection dialog
-has no link or credential input. Recovery retains the active session pointer and unsent text.
-Restart recovery reopens saved Pi history and never automatically resends a task.
-Opening an unauthenticated page does not grant API access. Host, Origin, and cross-site fetch checks
-protect the local gateway. This browser authorization is separate from Pi's model-provider credentials.
+更多说明见 [架构与能力边界](docs/architecture.md) 和 [界面设计记录](docs/ui-design-notes.md)。
 
-For integrations that manage the browser separately, `forge-agent web --no-open` prints the startup
-address with its credential and does not launch a browser. This is optional; normal use needs only
-`forge-agent web`.
+## 配置项目验证
 
-The client renders Markdown, code, reasoning, tool output, and verification reports. Stream
-reconnections use event cursors and current snapshots, and refreshing the page restores the active
-conversation. Historical sessions remain readable without model credentials; selecting an available
-model allows the conversation to continue. Project history can be collapsed and searched. Revoking
-project trust unloads the runtime and its project extensions before another prompt can run.
-
-The Web SDK adapter installs Pi's built-in MCP, codemode, and tool-search factories, preserving
-Pi's disabled/replacement semantics and project trust. Configure servers through Pi's `mcp.json`;
-only trusted project MCP configuration is loaded. Skills and compatible extensions also use
-Pi's resource discovery; terminal-specific custom extension UI remains a TUI capability.
-
-The Web client currently supports API-key setup directly. OAuth providers retain Pi's complete
-authentication flow and can be configured from the local TUI with `forge-agent` followed by `/login`;
-once stored, the Web client will use the resulting Pi credential without copying or displaying it.
-The Web client includes a Git changes panel for staged, unstaged and untracked files, with bounded
-diff previews and labels for edits that predated a planned task. Session archive/fork/export and
-attachment input are not yet exposed. See the [product audit](docs/product-audit.md)
-for remaining gaps and priorities.
-
-Agent engineering details are documented in [architecture](docs/architecture.md),
-and reproducible task evaluation commands and limits in [evaluation](docs/evaluation.md).
-
-For complex coding work, select **计划并执行** below the composer. forge-agent coordinates research,
-planning, implementation, programmatic verification and a read-only model review above Pi's
-execution engine. Phase state, verification evidence and review are stored in the Pi session
-branch. Configured verification failure, missing verification or unresolved review issues do not
-produce a completed task. Direct conversation remains available for simple questions and edits.
-Stopping a task prevents later phases. After a service restart, an interrupted task waits for the
-explicit **重新检查并继续** action and re-inspects the current workspace rather than replaying tools.
-The model review is a second pass, not an independent proof of code correctness.
-
-## Use
-
-```powershell
-forge-agent web                              # start and open the local Web client
-forge-agent web --no-open                    # browser managed by another tool
-forge-agent                                  # interactive TUI
-forge-agent -p "Fix the failing test"        # one-shot
-forge-agent -C path/to/repo                  # choose a workspace
-forge-agent -c                               # continue latest session
-forge-agent -r                               # choose a session
-forge-agent --model provider/model           # select a model
-forge-agent --offline                        # disable startup network work
-```
-
-Inspect local setup without printing credentials:
-
-```powershell
-forge-agent doctor
-```
-
-`doctor` reports credentials as configured/not configured but never prints a key. A missing
-credential makes the command exit nonzero until `/login` or a provider environment variable is configured.
-
-List and run verification directly:
-
-```powershell
-forge-agent check
-```
-
-## Verification gate
-
-Create `forge-agent.json` in the project root (or supply `forge-agent.yaml` / `forge-agent.yml`):
+在目标项目根目录创建 `forge-agent.json`，也支持 `forge-agent.yaml` / `forge-agent.yml`。请将命令替换为该项目实际使用的检查：
 
 ```json
 {
@@ -174,79 +104,65 @@ Create `forge-agent.json` in the project root (or supply `forge-agent.yaml` / `f
 }
 ```
 
-The file is intentionally strict: only `verify` and `verifyRetries` are accepted. Unknown keys are
-configuration errors; they are never silently ignored.
+- 配置严格接受 `verify` 和 `verifyRetries`，未知字段会报错。[JSON Schema](forge-agent.schema.json) 描述了完整约束。
+- 项目必须经过 Pi 信任，才会执行配置中的验证命令。
+- 失败的原始命令输出会反馈给模型，最多进行 `verifyRetries` 次修复，内部自动继续不会重置预算。检查持续失败时，CLI 以非零状态退出。
+- 超时和命令启动失败也会保存失败报告；停止时保留部分输出并结束后续检查和自动修复。新验证开始前会使旧的成功结果失效。
+- 报告按工作区和运行记录保存到 `FORGE_AGENT_HOME/verification`，结果同时写入 Pi 会话分支。Web 可查看关联的验证与审阅记录。
 
-When verification is configured, forge-agent runs the commands before a completed agent run settles.
-On failure, the exact command output is returned to the model and the model gets `verifyRetries`
-repair attempts. If checks still fail, the process exits `1`. The built-in `run_verification` tool
-and `/verify` command are also available. Latest reports are stored under
-`FORGE_AGENT_HOME/verification/<workspace-hash>/latest.json`; run-specific evidence files are retained
-alongside it and the outcome is appended to the Pi session branch. Planned tasks run the same
-verification gate between implementation and review with the same bounded repair budget.
+## 其他入口
 
-Timeout and shell-start failures produce failed verification reports containing the failure
-reason, exact captured output and log path, and use the same finite repair budget. Cancellation
-retains partial evidence, stops later checks and does not start an automatic repair. Starting
-another verification invalidates the prior passing report before any command runs.
+需要命令行时，在源码目录执行一次 `npm link`：
 
-Verification commands come from project configuration, so forge-agent refuses to execute them when Pi
-has not trusted the project. Use Pi's trust flow or `--approve` for a deliberate one-time approval.
-
-## Configuration and data
-
-- Pi configuration and credentials: `FORGE_AGENT_HOME` (default `~/.forge-agent`)
-- Pi sessions: `FORGE_AGENT_HOME/sessions`
-- Local Web gateway key: `FORGE_AGENT_HOME/web/access-token`
-- Project verification: `forge-agent.json`, `forge-agent.yaml`, or `forge-agent.yml`
-- Verification reports: `FORGE_AGENT_HOME/verification`
-
-Existing installations keep their configuration and history: `PFORGE_HOME` remains an alias,
-and the default reuses `~/.pforge` when `~/.forge-agent` does not exist. Set `FORGE_AGENT_HOME`
-to choose a directory explicitly. Legacy `pforge.json`, `pforge.yaml` and `pforge.yml` files
-remain supported; the new `forge-agent.*` files take precedence in the same directory.
-Saved session entry names and browser storage identifiers stay compatible across this rename.
-
-Because forge-agent sets `PI_CODING_AGENT_DIR` and `PI_CODING_AGENT_SESSION_DIR`, model/auth/session
-data lives under `FORGE_AGENT_HOME` rather than Pi's default `~/.pi/agent`. Pi may still install its own
-helper binaries (for example `fd`) under its default directory; those are runtime tooling, not
-forge-agent sessions or credentials.
-
-MCP, skills, extensions, prompt templates, providers, models, and session controls are configured
-through Pi, subject to the Web integration limits described above. See Pi's `configuration.md`, `models.md`, `mcp.md`, `skills.md`, and
-`extensions.md` documentation in the installed package.
-
-## Development
-
-```powershell
-npm run typecheck
-npm test
-npm run build
-npm run check
-npm run test:web
-npm audit --json
+```bash
+forge-agent web                            # 启动 Web 客户端
+forge-agent                                # Pi 提供的交互式终端界面
+forge-agent doctor                         # 检查本机配置，不显示凭据值
+forge-agent check                          # 执行当前项目配置的验证
+forge-agent -C path/to/project -p "Fix the failing tests"
 ```
 
-`test:web` requires a Chromium browser (Edge/Chrome are discovered on Windows; set
-`FORGE_AGENT_TEST_BROWSER` to another executable). It uses a temporary browser profile, project, Pi home,
-and local mock model. It exercises automatic cross-tab recovery, browser cookie authorization, plain-URL
-navigation, service restart without task replay, adding a third-party service from an empty configuration,
-model discovery, Pi inference testing, immediate model selection, settings, folders, streaming, verification, history recovery, and
-the narrow layout. Screenshots and a result manifest are written to `.forge-agent/web-audit/`. This check
-does not use personal browser profiles, saved credentials, or a remote model service.
+Web 中的 API Key 配置覆盖常用兼容服务。模型服务的 OAuth 登录仍使用终端中的 `/login`；MCP、Skills 和扩展的高级配置由 Pi 管理，Web 使用同一份本机配置。
 
-The active product entry points are `src/pi-cli.ts` and `src/web/server.ts`; Web assets live in
-`src/web/ui/`. The forge-agent-specific verification layer is `src/config.ts`, `src/verification/`, and
-`src/tools/command.ts`. Earlier self-built agent/runtime modules remain in the repository as legacy
-code and are excluded from the active build and tests. The Web gateway uses Pi sessions and tools.
+## 验证与开发
 
-## Security boundary
+| 命令 | 验证内容 |
+| --- | --- |
+| `npm run check` | 类型检查、活动回归测试、构建、CLI/bin 入口检查。 |
+| `npm run test:web` | 通过真实 Chromium 浏览器和本地模拟模型验收服务配置、会话恢复、任务进度、Git diff 与窄屏布局。 |
+| `npm run eval:smoke` | 两道固定任务使用预设解答，通过真实 Pi 工具和工作流运行，再检查独立断言、文件修改与完成状态。 |
+| `npm run eval:agent -- --model provider/model --workflow planned` | 使用已配置的真实模型运行同一任务集，会向对应服务发送任务内容并产生调用费用。 |
 
-Like Pi, forge-agent runs with the permissions of the user who starts it. Project trust is not an OS
-sandbox: generated tool calls can access files and processes available to that user. For untrusted
-repositories, use a container, VM, or restricted account. Review the project before using
-`--approve`; extensions and project configuration can execute code inside the agent process.
+**截至 2026-11-03**：活动测试为 **12 个文件、129 项测试**；Windows / Ubuntu × Node.js 22 / 24 的四组远端 CI 均已通过。浏览器验收已在独立 Edge 配置中通过；`eval:smoke` 为 **2/2**。这些分别说明回归检查、交互链路和评测基础设施可运行；尚未取得真实模型的编码质量评测结果。
 
-## License
+浏览器验收需要 Edge、Chrome 或 Chromium；也可通过 `FORGE_AGENT_TEST_BROWSER` 指定可执行文件。脚本使用临时项目、独立数据目录和浏览器配置。完整方法、输出路径与限制见 [评测说明](docs/evaluation.md)。修改完成状态、重试、信任、持久化或安全行为时，请补充回归测试，遵守 [AGENTS.md](AGENTS.md)。
 
-MIT
+## 本机数据与安全
+
+| 内容 | 默认位置 |
+| --- | --- |
+| 配置、模型与认证 | `~/.forge-agent`，可通过 `FORGE_AGENT_HOME` 指定 |
+| 会话 | `FORGE_AGENT_HOME/sessions` |
+| 验证证据与原始输出 | `FORGE_AGENT_HOME/verification` |
+| 本机网关访问凭证 | `FORGE_AGENT_HOME/web/access-token` |
+
+旧的 `PFORGE_HOME`、`~/.pforge` 与 `pforge.json/yaml/yml` 保持兼容；同目录中新的 `forge-agent.*` 配置优先。已有会话继续使用兼容的存储标识。
+
+Web 网关默认绑定 `127.0.0.1`，使用本机访问凭证和 HttpOnly、SameSite=Strict Cookie，并检查 Host 与 Origin。模型 API Key 通过 Pi 认证接口保存，不会返回编辑器或写入浏览器存储。
+
+“本机运行”指客户端、进程和数据存储的位置。使用远程模型时，相关内容仍会发送到你配置的服务。Agent、可信扩展与验证命令拥有启动者的操作系统权限，项目信任不构成 OS 沙箱；不可信项目请使用容器、虚拟机或受限账号。会话和原始日志可能含敏感内容，分享前需要检查。详见 [安全说明](SECURITY.md)。
+
+## 当前范围与后续重点
+
+当前适合本机使用、开发和早期反馈。Web 界面为中文，仍有以下工作：
+
+- 在 Web 中完善 MCP 管理、模型服务高级配置与诊断；OAuth 和部分资源管理目前依赖 Pi 的 TUI/配置。
+- 补充会话归档、分支、导出、后台任务，以及文件引用和附件输入。
+- 扩展到更复杂仓库的真实模型评测，比较直接执行与分阶段执行的成功率、时延和成本。
+- 完善键盘可达性、安装升级与桌面分发。目前未发布 npm 包、GitHub Release 或桌面安装包。
+
+完整现状与优先级见 [产品审计](docs/product-audit.md)。欢迎通过 [Issues](https://github.com/sun-sh/forge-agent/issues) 提交脱敏的复现问题，或围绕上述边界贡献改进。
+
+## 许可与致谢
+
+采用 [MIT License](LICENSE)。感谢 [Pi](https://github.com/earendil-works/pi) 提供 coding-agent 运行时，以及项目使用的开源依赖。

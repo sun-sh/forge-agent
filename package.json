@@ -48,6 +48,7 @@
   "files": [
     "dist",
     "README.md",
+    "README.en.md",
     "LICENSE",
     "forge-agent.schema.json"
   ]
