@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": [
+      "node"
+    ],
+    "removeComments": false
+  },
+  "include": [
+    "src/pi-cli.ts",
+    "src/config.ts",
+    "src/tools/command.ts",
+    "src/verification/pi-extension.ts",
+    "src/verification/verify.ts",
+    "src/protocol.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "tests",
+    "dist",
+    "node_modules"
+  ]
+}

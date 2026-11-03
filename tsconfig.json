@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/pi-cli.ts",
+    "src/config.ts",
+    "src/tools/command.ts",
+    "src/verification/pi-extension.ts",
+    "src/verification/verify.ts",
+    "src/protocol.ts",
+    "tests/pi-cli.test.ts",
+    "tests/web-launch.test.ts",
+    "tests/pi-verification.test.ts",
+    "tests/verification.test.ts",
+    "vitest.config.ts",
+    "tests/pi-e2e.test.ts",
+    "tests/web-console-pi.test.ts",
+    "tests/web-lifecycle.test.ts",
+    "tests/web-providers.test.ts",
+    "tests/web-modes.test.ts",
+    "tests/task-controller.test.ts",
+    "tests/task-git.test.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

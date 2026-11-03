@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forge Agent</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <button class="brand" id="brand-button" aria-label="New task">
+          <span class="brand-mark">F</span><span class="brand-name">Forge Agent</span>
+        </button>
+        <button class="new-chat" id="new-chat-button" title="新对话">+</button>
+      </div>
+       <div class="sidebar-section-head"><span>项目与会话</span><div class="section-actions"><button class="icon-button small" id="history-search-button" title="搜索历史">⌕</button><button class="icon-button small" id="add-project-button" title="打开文件夹">+</button></div></div>
+       <div class="history-search hidden" id="history-search"><input id="history-query" type="search" placeholder="搜索项目或会话" autocomplete="off"><button class="icon-button small" id="history-search-close" title="关闭搜索">×</button></div>
+      <div class="project-list" id="project-list"></div>
+      <div class="sidebar-footer">
+        <button class="settings-link" id="settings-button"><span>⚙</span> 模型与设置</button>
+      </div>
+    </aside>
+    <main class="main-pane">
+      <header class="workspace-header">
+        <button class="mobile-menu icon-button" id="mobile-menu" title="项目与会话">☰</button>
+        <div class="workspace-title"><span class="project-dot"></span><strong id="current-project-name">选择项目</strong><span id="current-project-path"></span></div>
+        <div class="workspace-meta"><span class="trust-pill" id="trust-label">未选择项目</span><span class="status-pill" id="connection-label"><span class="meta-dot"></span>正在连接</span></div>
+      </header>
+      <section class="chat-empty" id="start-state">
+        <div class="empty-copy"><span class="kicker">LOCAL CODING AGENT</span><h1>今天要构建什么？</h1><p>选择一个项目，描述目标。Forge 会读取代码、执行修改并运行验证。</p></div>
+        <form class="composer" id="composer">
+          <textarea id="prompt" rows="5" placeholder="例如：修复登录接口失败的测试，并运行项目验证" autofocus></textarea>
+          <div class="composer-bottom">
+            <div class="composer-selectors">
+              <button type="button" class="selector-chip" id="project-selector"><span>▱</span><span id="project-selector-label">选择文件夹</span><span class="chevron">⌄</span></button>
+              <label class="select-chip mode-chip"><select id="mode-select" aria-label="工作模式" aria-describedby="mode-description"><option value="agent">Agent · 执行</option><option value="plan">Plan · 规划</option><option value="ask">Ask · 问答</option></select></label>
+              <label class="select-chip workflow-chip" title="复杂任务可先调研和规划，再执行、验证与审阅"><select id="workflow-select" aria-label="执行流程"><option value="direct">直接对话</option><option value="planned">计划并执行</option></select></label>
+              <button type="button" class="selector-chip model-picker-button" id="model-picker-button" aria-label="选择模型与推理强度" aria-haspopup="dialog" aria-controls="model-picker" aria-expanded="false"><span>◇</span><span data-model-label>选择模型</span><span class="model-effort hidden" data-effort-label></span><span class="chevron">⌄</span></button>
+            </div>
+            <div class="composer-actions"><span class="key-hint">Ctrl ↵</span><button type="submit" class="button primary" id="run-button">发送</button></div>
+          </div>
+          <div class="composer-mode-note" id="mode-description">读取代码、执行修改，并运行项目验证。</div>
+        </form>
+        <div class="suggestion-row"><button class="suggestion">解释这个项目结构</button><button class="suggestion">找到并修复失败的测试</button><button class="suggestion">审查最近的变更</button></div>
+        <div class="setup-note hidden" id="model-setup-note"><span>还没有配置可用模型</span><button class="text-button" id="setup-model-button">添加 Provider 连接 →</button></div>
+      </section>
+      <section class="conversation-view hidden" id="conversation-view">
+         <div class="conversation-header"><div><div class="run-kicker"><span class="status-dot" id="run-status-dot"></span><span id="run-status-label">准备就绪</span><span class="run-elapsed" id="run-elapsed">0:00</span></div><h2 id="run-title">对话</h2><div class="conversation-meta" id="conversation-meta"></div></div><div class="run-actions"><button class="button quiet" id="rename-button">重命名</button><button class="button quiet" id="compact-button">压缩上下文</button><button class="button quiet" id="stop-button">停止</button></div></div>
+         <details class="verification-report hidden" id="verification-report"><summary id="verification-summary">验证报告</summary><pre id="verification-output"></pre></details>
+         <section class="task-panel hidden" id="task-panel" aria-label="任务进度"><ol class="task-steps" id="task-steps"></ol><div class="task-panel-bottom"><span id="task-note" role="status"></span><button type="button" class="button quiet small hidden" id="resume-task-button">重新检查并继续</button></div><details id="task-evidence"><summary>任务记录与审阅</summary><div id="task-review"></div><div id="task-phase-history"></div></details></section>
+         <details class="changes-panel" id="changes-panel"><summary><span>代码变更</span><span id="changes-count"></span></summary><div class="changes-toolbar"><p id="changes-note">展开读取当前 Git 状态。</p><button type="button" class="button quiet small" id="refresh-changes">刷新</button></div><div class="changes-layout"><div id="changes-files"></div><pre id="changes-diff">选择文件查看差异。</pre></div></details>
+         <div class="extension-widgets" id="extension-widgets"></div>
+        <div class="timeline" id="timeline"></div>
+          <form class="composer followup" id="followup-form"><textarea id="followup-prompt" rows="3" placeholder="继续告诉 Forge..." ></textarea><div class="composer-bottom"><div class="composer-selectors"><button type="button" class="selector-chip" id="followup-project-selector"><span>▱</span><span id="followup-project-label">当前项目</span></button><label class="select-chip mode-chip"><select id="followup-mode-select" aria-label="当前会话工作模式" aria-describedby="followup-mode-description"><option value="agent">Agent · 执行</option><option value="plan">Plan · 规划</option><option value="ask">Ask · 问答</option></select></label><label class="select-chip workflow-chip" title="复杂任务可先调研和规划，再执行、验证与审阅"><select id="followup-workflow-select" aria-label="执行流程"><option value="direct">直接对话</option><option value="planned">计划并执行</option></select></label><button type="button" class="selector-chip model-picker-button" id="followup-model-picker-button" aria-label="切换当前模型与推理强度" aria-haspopup="dialog" aria-controls="model-picker" aria-expanded="false"><span>◇</span><span data-model-label>选择模型</span><span class="model-effort hidden" data-effort-label></span><span class="chevron">⌄</span></button></div><div class="composer-actions"><span class="key-hint">Ctrl ↵</span><button type="submit" class="button primary" id="followup-send">发送</button></div></div><div class="composer-mode-note" id="followup-mode-description">读取代码、执行修改，并运行项目验证。</div></form>
+      </section>
+    </main>
+  </div>
+  <div class="sidebar-backdrop hidden" id="sidebar-backdrop"></div>
+  <section class="model-picker hidden" id="model-picker" role="dialog" aria-label="模型与推理强度">
+    <div class="model-picker-heading"><strong>选择模型</strong><button type="button" class="text-button" id="manage-chat-models">模型设置</button></div>
+    <label class="sr-only" for="chat-model-search">搜索可用模型</label><input id="chat-model-search" type="search" placeholder="搜索模型或服务" autocomplete="off" />
+    <div class="chat-model-options" id="chat-model-options" role="radiogroup" aria-label="可用模型"></div>
+    <div class="model-reasoning"><div class="model-reasoning-heading"><label for="thinking-select">推理强度</label><select id="thinking-select" aria-label="选择推理强度" aria-describedby="thinking-description"></select></div><p id="thinking-description"></p><button type="button" class="text-button hidden" id="configure-thinking">设置推理能力 →</button></div>
+    <div class="model-save-status" id="model-save-status" role="status" aria-live="polite"></div>
+  </section>
+  <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
+  <aside class="drawer hidden" id="drawer"><div class="drawer-header"><h2 id="drawer-title">设置</h2><button class="icon-button" id="drawer-close">×</button></div><div class="drawer-body" id="drawer-body"></div></aside>
+  <div class="modal hidden" id="folder-modal"><div class="modal-card folder-card"><div class="modal-header"><div><span class="kicker">PROJECT</span><h2>选择项目文件夹</h2></div><button class="icon-button" id="folder-close">×</button></div><div class="folder-path" id="folder-path"></div><div class="folder-list" id="folder-list"></div><div class="modal-actions"><button class="button quiet" id="folder-up">上一级</button><button class="button primary" id="folder-use">使用此文件夹</button></div></div></div>
+  <div class="modal hidden" id="name-modal" role="dialog" aria-modal="true" aria-labelledby="name-title"><form class="modal-card" id="name-form"><h2 id="name-title">重命名对话</h2><label class="name-label">对话名称<input id="session-name" required maxlength="120" autocomplete="off"></label><div class="modal-actions"><button type="button" class="button quiet" id="name-cancel">取消</button><button type="submit" class="button primary" id="name-save">保存</button></div></form></div>
+  <div class="modal hidden" id="approval-modal"><div class="modal-card"><div class="modal-header"><div class="approval-icon">!</div><div><span class="kicker" id="approval-kicker">需要确认</span><h2 id="approval-title">执行操作</h2></div></div><p class="approval-summary" id="approval-summary"></p><pre class="approval-detail" id="approval-detail"></pre><div id="approval-input-wrap" class="approval-input-wrap hidden"><textarea id="approval-input" rows="5"></textarea></div><div id="approval-options" class="approval-options hidden"></div><div class="modal-actions"><button class="button quiet" id="deny-button">取消</button><button class="button primary" id="allow-button">确认</button></div></div></div>
+  <div class="modal auth-modal hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-description"><form class="modal-card auth-card" id="auth-form"><span class="kicker">本地连接</span><h2 id="auth-title">等待本地连接</h2><p id="auth-description">运行 <code>forge-agent web</code> 会自动打开已连接的浏览器窗口。连接完成后，同一浏览器中的这个标签页也会自动恢复。</p><code id="auth-origin"></code><p class="auth-help">无需复制或粘贴启动链接。项目、历史定位和未发送内容会保留。</p><p class="auth-error" id="auth-error" role="alert"></p><div class="modal-actions"><button type="submit" class="button primary" id="auth-connect">重试连接</button></div></form></div>
+  <div id="toast-root"></div><script type="module" src="/app.js"></script>
+</body>
+</html>

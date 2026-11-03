@@ -1,0 +1,15 @@
+{
+  "verify": [
+    {
+      "name": "typecheck",
+      "command": "npm run typecheck",
+      "timeoutMs": 120000
+    },
+    {
+      "name": "test",
+      "command": "npm test",
+      "timeoutMs": 300000
+    }
+  ],
+  "verifyRetries": 2
+}
