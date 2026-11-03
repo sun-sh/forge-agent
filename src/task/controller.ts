@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { PforgeVerificationOutcome } from '../verification/pi-extension.js';
 import { verificationOutcomeSchema } from '../verification/pi-extension.js';
-import { verificationMessage } from '../verification/verify.js';
+import { verificationMessage, VerificationInterruptedError } from '../verification/verify.js';
 import type { GitBaseline, GitChanges } from './git.js';
 
 export const TASK_PHASES = ['inspect', 'plan', 'implement', 'verify', 'review', 'complete'] as const;
@@ -92,7 +92,7 @@ export class TaskController {
       await execute('plan', 'Produce a concrete plan for the user task already supplied: scope, affected files, acceptance criteria and validation. Use read-only tools. Continue autonomously within the user request; do not invent approval requirements.');
       await execute('implement', 'Implement the plan for the user task. Preserve unrelated changes. Use the available tools, then describe the implementation. The host will independently run configured verification after this phase; do not invent passing results.');
       for (;;) {
-        check(); this.phase('verify'); task.verification = structuredClone(await adapter.verify(signal)); check(); this.commit();
+        check(); task.verification = undefined; this.phase('verify'); task.verification = structuredClone(await adapter.verify(signal)); check(); this.commit();
         if (task.verification.status !== 'failed' || task.repairs >= retries) break;
         task.repairs++; this.commit();
         const output = task.verification.report ? verificationMessage(task.verification.report) : task.verification.error ?? 'Verification failed.';
@@ -108,13 +108,14 @@ export class TaskController {
         const version = (changes: GitChanges) => JSON.stringify({ head: changes.head, files: changes.files.map(({ path, fingerprint }) => ({ path, fingerprint })) });
         const stale = task.changes.available && reviewedChanges.available && version(task.changes) !== version(reviewedChanges);
         task.changes = reviewedChanges;
-        const verified = task.verification.status === 'passed' && task.verification.report?.passed === true && task.verification.report.results.length > 0 && task.verification.report.results.every((result) => result.passed && result.exitCode === 0);
+        const verified = task.verification.status === 'passed' && task.verification.report?.passed === true && task.verification.report.results.length > 0 && task.verification.report.results.every((result) => result.passed && result.exitCode === 0 && !result.failure && !result.error);
         if (!task.review || task.review.verdict !== 'ready' || task.review.issues.length || !verified || stale) {
           task.status = 'needs_attention';
           task.error = stale ? '验证后工作区发生变化，现有证据已过期，请重新检查并验证。' : !verified ? '没有有效的自动验证通过证据，请配置验证或人工检查。' : !task.review ? '审阅结果格式无效，需要人工检查。' : '审阅发现待处理问题。';
         } else { this.phase('complete'); task.status = 'completed'; task.error = undefined; }
       }
     } catch (error) {
+      if (error instanceof VerificationInterruptedError) task.verification = { status: 'failed', attempts: task.repairs, runId: task.id, checkedAt: new Date().toISOString(), report: error.report, error: error.message };
       task.status = signal.aborted ? 'aborted' : 'failed';
       task.error = signal.aborted ? task.error ?? '任务已停止。' : error instanceof Error ? error.message : String(error);
     } finally {

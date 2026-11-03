@@ -11,6 +11,17 @@ export interface CommandOutputResult {
   truncated: boolean;
   durationMs: number;
   outputPath?: string;
+  failure?: CommandFailure;
+  error?: string;
+}
+
+export type CommandFailure = 'timeout' | 'aborted' | 'spawn_error';
+
+export class CommandExecutionError extends Error {
+  constructor(message: string, readonly result: CommandOutputResult, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'CommandExecutionError';
+  }
 }
 
 interface CommandInput {
@@ -102,18 +113,20 @@ export async function executeCommand(options: ExecuteCommandOptions): Promise<Co
   clearTimeout(timeout);
   options.signal.removeEventListener("abort", onAbort);
   await new Promise<void>((resolve, reject) => stream.end((error?: Error) => error ? reject(error) : resolve()));
-  if (spawnError) throw spawnError;
-  if (aborted) throw new Error("Command aborted");
-  if (timedOut) throw new Error(`Command timed out after ${options.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`);
-  return {
-    exitCode,
+  const failure: CommandFailure | undefined = aborted ? 'aborted' : timedOut ? 'timeout' : spawnError ? 'spawn_error' : undefined;
+  const error = failure === 'aborted' ? 'Command aborted' : failure === 'timeout' ? `Command timed out after ${options.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms` : spawnError?.message;
+  const result: CommandOutputResult = {
+    exitCode: spawnError ? null : exitCode,
     stdout: output.toBuffer().toString("utf8"),
     stderr: errorOutput.toBuffer().toString("utf8"),
     combined: allOutput.toBuffer().toString("utf8"),
     truncated: output.truncated || errorOutput.truncated || allOutput.truncated,
     durationMs: Math.round(performance.now() - started),
-    ...(output.truncated || errorOutput.truncated || allOutput.truncated ? { outputPath } : {})
+    ...(failure || output.truncated || errorOutput.truncated || allOutput.truncated ? { outputPath } : {}),
+    ...(failure ? { failure, error } : {})
   };
+  if (failure) throw new CommandExecutionError(error!, result, spawnError ? { cause: spawnError } : undefined);
+  return result;
 }
 
 export function createCommandTool(run: (input: CommandInput, context: ToolExecutionContext) => Promise<CommandOutputResult>): ToolDefinition<CommandInput> {

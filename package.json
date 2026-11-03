@@ -19,7 +19,7 @@
     "eval:smoke": "npm run build && node scripts/evaluate-agent.mjs",
     "eval:agent": "npm run build && node scripts/evaluate-agent.mjs --real",
     "check": "node scripts/check.mjs",
-    "start": "node dist/pi-cli.js",
+    "start": "node dist/pi-cli.js web",
     "check:agent": "node dist/pi-cli.js --version"
   },
   "dependencies": {

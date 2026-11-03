@@ -1,11 +1,12 @@
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { createPforgeVerification } from "../src/verification/pi-extension.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createPforgeVerification, verificationOutcomeSchema } from "../src/verification/pi-extension.js";
 import type { ExtensionAPI, AgentBeforeSettleEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type Handler = (...args: any[]) => any;
+afterEach(() => vi.unstubAllEnvs());
 
 function fakePi() {
   const handlers = new Map<string, Handler[]>();
@@ -39,7 +40,7 @@ function fakePi() {
   return { pi, ctx, handlers, tools, commands, notifications, fake };
 }
 
-async function workspace(verify: Array<{ name: string; command: string }>, verifyRetries: number) {
+async function workspace(verify: Array<{ name: string; command: string; timeoutMs?: number }>, verifyRetries: number) {
   const root = await mkdtemp(join(tmpdir(), "pforge-pi-extension-"));
   await mkdir(join(root, ".git"));
   await writeFile(join(root, "pforge.json"), JSON.stringify({ verify, verifyRetries }), "utf8");
@@ -160,5 +161,61 @@ describe("Pi verification extension", () => {
     const root = await workspace([{ name: 'unsafe', command: 'node --version' }], 0);
     const runtime = createPforgeVerification(root);
     expect(await runtime.waitForVerification()).toMatchObject({ status: 'failed', error: expect.stringContaining('not trusted') });
+  });
+  it('persists timeout evidence and returns exact output to bounded automatic repairs', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'forge-agent-timeout-home-'));
+    vi.stubEnv('FORGE_AGENT_HOME', home);
+    const root = await workspace([{ name: 'slow', command: 'node -e "process.stdout.write(\'timeout-output\\n\'); setInterval(() => {}, 1000)"', timeoutMs: 3000 }], 1);
+    const observed: unknown[] = [];
+    const runtime = createPforgeVerification(root, { onOutcome: (value) => observed.push(value) });
+    const fake = fakePi(); runtime.extension(fake.pi);
+    await emit(fake, 'before_agent_start', { messageType: 'user' });
+    const first = await emit(fake, 'agent_before_settle', { outcome: 'completed' });
+    expect(first[0]).toMatchObject({ continue: true });
+    expect(first[0].entries[0].content).toContain('timeout-output\n');
+    expect(first[0].entries[0].content).toContain('Command timed out after 3000ms');
+    await emit(fake, 'before_agent_start', { messageType: 'custom' });
+    expect((await emit(fake, 'agent_before_settle', { outcome: 'completed' }))[0]).toBeUndefined();
+    expect(runtime.outcome).toMatchObject({ status: 'failed', attempts: 1, report: { passed: false, results: [{ failure: 'timeout', passed: false, output: 'timeout-output\n' }] } });
+    const { readdir } = await import('node:fs/promises');
+    const workspaceDir = join(home, 'verification', (await readdir(join(home, 'verification')))[0]!);
+    const saved = verificationOutcomeSchema.parse(JSON.parse(await readFile(join(workspaceDir, runtime.outcome.evidenceId + '.json'), 'utf8')));
+    expect(saved.report?.results[0]).toMatchObject({ failure: 'timeout', error: 'Command timed out after 3000ms', outputPath: expect.any(String) });
+    expect(saved.attempts).toBe(1);
+    expect(observed.length).toBeGreaterThan(2);
+  });
+  it('replaces stale passing evidence with the current interrupted report and persists it', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'forge-agent-interrupted-home-'));
+    vi.stubEnv('FORGE_AGENT_HOME', home);
+    const root = await workspace([{ name: 'check', command: 'node check.cjs' }], 1);
+    await writeFile(join(root, 'check.cjs'), 'process.stdout.write("first-pass");');
+    const runtime = createPforgeVerification(root, { isProjectTrusted: () => true });
+    expect((await runtime.verifyTrusted(new AbortController().signal)).status).toBe('passed');
+    await writeFile(join(root, 'check.cjs'), `process.stdout.write('interrupted-output\\n', () => require('node:fs').writeFileSync('ready', 'yes')); setInterval(() => {}, 1000);`);
+    const controller = new AbortController();
+    const pending = runtime.verifyTrusted(controller.signal).catch((error: unknown) => error);
+    try {
+      await vi.waitFor(() => readFile(join(root, 'ready'), 'utf8'), { timeout: 10000 });
+      expect(runtime.outcome.report).toBeUndefined();
+      controller.abort(); await pending;
+      expect(runtime.outcome).toMatchObject({ status: 'failed', attempts: 0, report: { passed: false, results: [{ failure: 'aborted', passed: false, output: 'interrupted-output\n' }] } });
+      const { readdir } = await import('node:fs/promises');
+      const workspaceDir = join(home, 'verification', (await readdir(join(home, 'verification')))[0]!);
+      const saved = verificationOutcomeSchema.parse(JSON.parse(await readFile(join(workspaceDir, 'latest.json'), 'utf8')));
+      expect(saved.report?.results[0]?.failure).toBe('aborted');
+      expect(saved.report?.results[0]?.output).not.toContain('first-pass');
+    } finally { controller.abort(); await pending; }
+  });
+  it('invalidates old success even if the next verification is cancelled before spawning', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'forge-agent-cancelled-home-'));
+    vi.stubEnv('FORGE_AGENT_HOME', home);
+    const root = await workspace([{ name: 'check', command: 'node --version' }], 0);
+    const runtime = createPforgeVerification(root, { isProjectTrusted: () => true });
+    await runtime.verifyTrusted(new AbortController().signal);
+    expect(runtime.outcome.status).toBe('passed');
+    const controller = new AbortController(); controller.abort();
+    await expect(runtime.verifyTrusted(controller.signal)).rejects.toThrow();
+    expect(runtime.outcome.status).toBe('failed');
+    expect(runtime.outcome.report).toBeUndefined();
   });
 });

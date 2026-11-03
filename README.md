@@ -23,8 +23,11 @@ npm link
 Then start it:
 
 ```powershell
-forge-agent
+npm start
 ```
+
+`npm start` opens the local Web client. The linked command is `forge-agent web`;
+run `forge-agent` alone for the optional terminal interface.
 
 For the Web client, run `forge-agent web`; it starts the local gateway and automatically opens the client in your default browser. No startup link needs to be copied. Select a project, working mode, model and thinking level below the prompt. Configure provider connections in Settings when needed. The model selector uses Pi's catalog, groups available models by provider, and retains the current conversation's selection when services are edited. Conversations are grouped by project in the left sidebar and can be reopened; the same project-session history is stored under `FORGE_AGENT_HOME/sessions`. Use `/help` for Pi's commands in the TUI. The
 interactive screen and `~/.pi` helper downloads are supplied by Pi Core; the command itself is
@@ -181,6 +184,11 @@ and `/verify` command are also available. Latest reports are stored under
 `FORGE_AGENT_HOME/verification/<workspace-hash>/latest.json`; run-specific evidence files are retained
 alongside it and the outcome is appended to the Pi session branch. Planned tasks run the same
 verification gate between implementation and review with the same bounded repair budget.
+
+Timeout and shell-start failures produce failed verification reports containing the failure
+reason, exact captured output and log path, and use the same finite repair budget. Cancellation
+retains partial evidence, stops later checks and does not start an automatic repair. Starting
+another verification invalidates the prior passing report before any command runs.
 
 Verification commands come from project configuration, so forge-agent refuses to execute them when Pi
 has not trusted the project. Use Pi's trust flow or `--approve` for a deliberate one-time approval.

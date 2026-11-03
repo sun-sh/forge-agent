@@ -19,7 +19,7 @@ await mkdir(output, { recursive: true });
 let mock, activeTask, requests = 0;
 if (!real) {
   const home = join(root, 'home'); await mkdir(home);
-  process.env.PFORGE_HOME = home; process.env.PI_CODING_AGENT_DIR = home; process.env.PI_CODING_AGENT_SESSION_DIR = join(home, 'sessions');
+  process.env.FORGE_AGENT_HOME = home; process.env.PFORGE_HOME = home; process.env.PI_CODING_AGENT_DIR = home; process.env.PI_CODING_AGENT_SESSION_DIR = join(home, 'sessions');
   mock = createServer(async (request, response) => {
     let raw = ''; for await (const chunk of request) raw += chunk;
     const input = JSON.parse(raw), text = JSON.stringify(input.messages); requests++;

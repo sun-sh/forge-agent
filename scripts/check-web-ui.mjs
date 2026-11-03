@@ -19,6 +19,7 @@ const output = resolve('.forge-agent/web-audit');
 await Promise.all([mkdir(project), mkdir(home), mkdir(output, { recursive: true })]);
 execFileSync('git', ['init'], { cwd: project, windowsHide: true, stdio: 'ignore' });
 await writeFile(join(project, 'sample.txt'), 'visible diff evidence\n');
+process.env.FORGE_AGENT_HOME = home;
 process.env.PFORGE_HOME = home;
 process.env.PI_CODING_AGENT_DIR = home;
 process.env.PI_CODING_AGENT_SESSION_DIR = join(home, 'sessions');

@@ -98,6 +98,19 @@ async function client(initial = {}) {
 }
 
 describe('Web client integration', () => {
+  it('shows the product name and readable timeout diagnostics with original verification output', async () => {
+    const { window, app } = await client();
+    expect(window.document.title).toBe('Forge Agent');
+    expect(window.document.getElementById('connection-label').textContent).toContain('Forge Agent');
+    const output = 'first line\n<untrusted-output>\nlast line';
+    app.state.sessionId = 'verification-test';
+    app.applySnapshot({ id: 'verification-test', project: 'C:\\repo', running: false, outcome: 'failed', messages: [], verification: { status: 'failed', attempts: 1, report: { passed: false, results: [{ command: 'npm test', exitCode: null, passed: false, durationMs: 1500, failure: 'timeout', error: 'Command timed out after 1500ms', output }] } } });
+    const rendered = window.document.getElementById('verification-output');
+    expect(rendered.textContent).toContain('超时');
+    expect(rendered.textContent).toContain('Command timed out after 1500ms');
+    expect(rendered.textContent).toContain(output);
+    expect(rendered.querySelector('untrusted-output')).toBeNull();
+  });
   it('ties effort to the model menu and distinguishes missing, unsupported, fixed and adjustable capabilities', async () => {
     const { window, app } = await client();
     const find = (id) => window.document.getElementById(id);

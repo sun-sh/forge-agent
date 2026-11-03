@@ -40,6 +40,13 @@ async function run(verify: string) {
 }
 
 describe("pforge end-to-end", () => {
+  it('exits nonzero for a timed-out configured check and prints its original output', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'forge-agent-check-timeout-')), home = await mkdtemp(join(tmpdir(), 'forge-agent-check-home-'));
+    await writeFile(join(project, 'forge-agent.json'), JSON.stringify({ verify: [{ name: 'timeout', command: 'node -e "process.stdout.write(\'cli-timeout-output\\n\'); setInterval(() => {}, 1000)"', timeoutMs: 3000 }], verifyRetries: 0 }));
+    new ProjectTrustStore(home).set(project, true);
+    const options = { cwd: project, env: { ...process.env, FORGE_AGENT_HOME: home, PFORGE_HOME: home }, windowsHide: true, timeout: 15000 };
+    await expect(promisify(execFile)(process.execPath, [join(process.cwd(), 'dist', 'pi-cli.js'), 'check'], options)).rejects.toMatchObject({ code: 1, stdout: expect.stringContaining('cli-timeout-output\n') });
+  });
   it('gates pforge check on Pi trust and never runs rejected project commands', async () => {
     const project = await mkdtemp(join(tmpdir(), 'pforge-check-trust-')), home = await mkdtemp(join(tmpdir(), 'pforge-check-home-'));
     await writeFile(join(project, 'pforge.json'), JSON.stringify({ verify: [{ name: 'trust-check', command: 'node -e "require(\'node:fs\').writeFileSync(\'marker\',\'yes\')"' }] }));

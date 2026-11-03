@@ -6,7 +6,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { z } from 'zod';
 import { loadConfig } from "../config.js";
 import { pforgeHome } from "../pforge-home.js";
-import { runVerification, verificationMessage, type VerificationReport } from "./verify.js";
+import { runVerification, verificationMessage, VerificationInterruptedError, type VerificationReport } from "./verify.js";
 
 export interface PforgeVerificationOutcome {
   status: "unchecked" | "running" | "passed" | "failed" | "skipped";
@@ -30,7 +30,7 @@ export interface PforgeVerificationRuntime {
 export const verificationOutcomeSchema = z.object({
   status: z.enum(['unchecked', 'running', 'passed', 'failed', 'skipped']), attempts: z.number().int().min(0).max(20),
   reason: z.string().optional(), error: z.string().optional(), runId: z.uuid().optional(), evidenceId: z.uuid().optional(), checkedAt: z.iso.datetime().optional(),
-  report: z.object({ passed: z.boolean(), summary: z.string(), results: z.array(z.object({ name: z.string().optional(), command: z.string(), exitCode: z.number().int().nullable(), passed: z.boolean(), durationMs: z.number().min(0), output: z.string() })).max(1000) }).optional()
+  report: z.object({ passed: z.boolean(), summary: z.string(), results: z.array(z.object({ name: z.string().optional(), command: z.string(), exitCode: z.number().int().nullable(), passed: z.boolean(), durationMs: z.number().min(0), output: z.string(), failure: z.enum(['timeout', 'aborted', 'spawn_error']).optional(), error: z.string().optional(), outputPath: z.string().optional() })).max(1000) }).optional()
 });
 
 function stateRoot(): string {
@@ -84,12 +84,13 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
   let inFlight: Promise<VerificationReport> | undefined;
   const run = (signal: AbortSignal): Promise<VerificationReport> => {
     if (inFlight) return inFlight;
-    signal.throwIfAborted();
     outcome.runId ??= randomUUID();
     outcome.evidenceId = randomUUID();
     outcome.status = "running";
+    outcome.report = undefined;
     outcome.error = undefined;
     outcome.reason = undefined;
+    options.onOutcome?.(structuredClone(outcome));
     const current = runVerification(cwd, commands, signal, verificationOutputRoot(cwd))
       .then(async (report) => {
         outcome.report = report;
@@ -100,6 +101,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
       })
       .catch(async (error) => {
         outcome.status = "failed";
+        if (error instanceof VerificationInterruptedError) outcome.report = error.report;
         outcome.error = error instanceof Error ? error.message : String(error);
         outcome.checkedAt = new Date().toISOString();
         await persist();

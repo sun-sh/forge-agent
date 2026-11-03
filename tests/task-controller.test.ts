@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TaskController, restoreTask, type TaskAdapter, type TaskState } from '../src/task/controller.js';
 import type { PforgeVerificationOutcome } from '../src/verification/pi-extension.js';
+import { VerificationInterruptedError } from '../src/verification/verify.js';
 
 function fixture(verification: PforgeVerificationOutcome = { status: 'passed', attempts: 0, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }, review = '{"verdict":"ready","summary":"Reviewed","issues":[]}') {
   const saved: TaskState[] = [], phases: string[] = [], messages: string[] = [];
@@ -68,5 +69,29 @@ describe('task workflow controller', () => {
     f.adapter.changes = async () => ({ available: true, truncated: false, files: [{ path: 'code.ts', status: ' M', fingerprint: String(++calls), preexisting: false, observed: true }] });
     const result = await f.controller.run('Fix', 0, f.adapter);
     expect(result.status).toBe('needs_attention'); expect(result.error).toContain('证据已过期');
+  });
+  it('rejects contradictory timeout evidence even if exit code and claimed status say passed', async () => {
+    const f = fixture({ status: 'passed', attempts: 0, report: { passed: true, summary: 'Claimed pass', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'partial', failure: 'timeout', error: 'Command timed out' }] } });
+    const result = await f.controller.run('Fix', 0, f.adapter);
+    expect(result.status).toBe('needs_attention');
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: result }])?.verification?.report?.results[0]?.failure).toBe('timeout');
+  });
+  it('does not launch repair or review after cancellation during verification', async () => {
+    const f = fixture();
+    f.adapter.verify = async () => { f.controller.cancel(); return { status: 'failed', attempts: 0, error: 'interrupted' }; };
+    const result = await f.controller.run('Fix', 2, f.adapter);
+    expect(result.status).toBe('aborted');
+    expect(result.repairs).toBe(0);
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement']);
+  });
+  it('retains the partial verification report when a running command is interrupted', async () => {
+    const f = fixture();
+    const report = { passed: false, summary: 'FAIL: cancelled', results: [{ command: 'test', exitCode: null, passed: false, durationMs: 1, output: 'partial', failure: 'aborted' as const, error: 'Command aborted' }] };
+    f.adapter.verify = async () => { f.controller.cancel(); throw new VerificationInterruptedError(report, new Error('cancel')); };
+    const result = await f.controller.run('Fix', 2, f.adapter);
+    expect(result.status).toBe('aborted');
+    expect(result.verification?.report).toEqual(report);
+    expect(result.repairs).toBe(0);
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: result }])?.verification?.report).toEqual(report);
   });
 });
