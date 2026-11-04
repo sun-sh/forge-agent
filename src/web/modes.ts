@@ -34,6 +34,9 @@ export function createWebModePolicy(getMode: () => WebMode, manager: SessionMana
   const savedTools = [...manager.getBranch()].reverse().find((entry) => entry.type === 'custom' && entry.customType === 'pforge.web.agent-tools');
   const saved = savedTools?.type === 'custom' ? savedTools.data : undefined;
   let agentTools: string[] | undefined = Array.isArray(saved) && saved.every((name) => typeof name === 'string') ? saved : undefined;
+  const savedDirect = [...manager.getBranch()].reverse().find((entry) => entry.type === 'custom' && entry.customType === 'pforge.web.agent-direct-tools');
+  const baseline = savedDirect?.type === 'custom' ? savedDirect.data : undefined;
+  let directToolsAtRestriction: Set<string> | undefined = Array.isArray(baseline) && baseline.every((name) => typeof name === 'string') ? new Set(baseline) : undefined;
   const extension: ExtensionFactory = (pi) => {
     const readers = () => pi.getAllTools()
       .filter((tool) => READ_TOOLS.has(tool.name) && tool.sourceInfo.source === 'builtin')
@@ -60,9 +63,19 @@ export function createWebModePolicy(getMode: () => WebMode, manager: SessionMana
     extension,
     apply(session: AgentSession) {
       if (getMode() === 'agent') {
-        if (agentTools) session.setActiveToolsByName(agentTools);
+        if (agentTools) {
+          // A configuration reload can add direct tools while the session is read-only.
+          // Keep old choices, and add only newly direct tools. Pi still filters hidden tools.
+          const added = directToolsAtRestriction ? session.getAllTools().filter((tool) => tool.exposure === 'direct' && !directToolsAtRestriction!.has(tool.name)).map((tool) => tool.name) : [];
+          session.setActiveToolsByName([...new Set([...agentTools, ...added])]);
+        }
         agentTools = undefined;
+        directToolsAtRestriction = undefined;
       } else {
+        if (!directToolsAtRestriction) {
+          directToolsAtRestriction = new Set(session.getAllTools().filter((tool) => tool.exposure === 'direct').map((tool) => tool.name));
+          manager.appendCustomEntry('pforge.web.agent-direct-tools', [...directToolsAtRestriction]);
+        }
         if (!agentTools) {
           agentTools = session.getActiveToolNames();
           manager.appendCustomEntry('pforge.web.agent-tools', agentTools);

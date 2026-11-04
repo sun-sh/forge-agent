@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { safeMarkdown, sessionOutcome } from '../src/web/ui/render.js';
 import { createSseParser, readEventStream, StreamError } from '../src/web/ui/stream.js';
 import { mountCustomProviders } from '../src/web/ui/providers.js';
+import { mountMcp } from '../src/web/ui/mcp.js';
 
 const windows = [];
 afterEach(() => { windows.splice(0).forEach((window) => { window.__app?.state.eventSource?.close(); window.close(); }); vi.unstubAllGlobals(); });
@@ -67,7 +68,7 @@ async function client(initial = {}) {
   const modelThinkingLevels = { ...initial.modelThinkingLevels };
   const streams = [], requests = [];
   Object.assign(window, {
-    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders,
+    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp,
     safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
     fetch: async (url, init = {}) => {
@@ -86,6 +87,7 @@ async function client(initial = {}) {
       if (url.startsWith('/api/projects/trust')) data = { trust: { trusted: true } };
       if (url.startsWith('/api/history')) data = { projects: [] };
       if (url.startsWith('/api/config')) data = { cwd: 'C:\\repo', verify: [], piVersion: '1.4.0' };
+      if (url.startsWith('/api/mcp')) data = { project: 'C:\\repo', projectTrusted: true, servers: [], errors: [], paths: {} };
       if (url === '/api/credentials') data = { credentials: [] };
       if (url === '/api/session') { const input = JSON.parse(init.body); data = { id: 'created', project: 'C:\\repo', running: false, model: models.find((item) => item.key === input.model) || models[0], thinkingLevel: input.thinkingLevel || thinkingLevel, messages: [] }; }
       return { ok: true, status: 200, json: async () => data };
@@ -98,6 +100,18 @@ async function client(initial = {}) {
 }
 
 describe('Web client integration', () => {
+  it('opens the MCP settings entry and preserves a configuration draft across change notifications', async () => {
+    const { window, app, streams } = await client();
+    app.state.sessionId = 'mcp-session'; app.connect('mcp-session');
+    await app.openSettings('mcp');
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(5);
+    const root = window.document.getElementById('mcp-settings');
+    root.querySelector('[data-action="add"]').click();
+    const name = root.querySelector('[name="name"]'); name.value = 'unsaved-service';
+    streams[0].onEvent({ id: '1', data: JSON.stringify({ type: 'pforge_mcp_changed' }) });
+    expect(root.querySelector('[name="name"]')).toBe(name);
+    expect(name.value).toBe('unsaved-service');
+  });
   it('shows the product name and readable timeout diagnostics with original verification output', async () => {
     const { window, app } = await client();
     expect(window.document.title).toBe('Forge Agent');
@@ -477,5 +491,144 @@ describe('Web client integration', () => {
     expect(window.document.getElementById('run-status-label').textContent).toContain('验证失败');
     expect(window.document.getElementById('verification-output').textContent).toContain('FAIL test');
     expect(window.document.getElementById('followup-send').disabled).toBe(true);
+  });
+});
+
+function mcpEditor(initial = {}, onChanged = () => {}, options = {}) {
+  const dom = new JSDOM('<div id="mcp-root"></div>', { url: 'http://localhost/' }); windows.push(dom.window);
+  const root = dom.window.document.getElementById('mcp-root'), requests = [];
+  const snapshot = { project: 'C:\\repo', projectTrusted: true, servers: [], errors: [], ...initial };
+  let rejected = false;
+  const api = vi.fn(async (url, init = {}) => {
+    const input = init.body ? JSON.parse(init.body) : undefined; requests.push({ url, input, method: init.method });
+    if (rejected && init.method === 'POST') throw new Error('配置已被其他窗口修改，请刷新');
+    if (url.endsWith('/test')) return { status: 'connected', tools: [{ name: 'mcp__docs__read' }] };
+    return snapshot;
+  });
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (value) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[value]);
+  const controller = mountMcp(root, { api, esc, initial: snapshot, projectPath: snapshot.project, onChanged, ...options });
+  return { root, window: dom.window, requests, api, controller, snapshot, field: (name) => root.querySelector('[name="' + name + '"]'), click: (action) => root.querySelector('[data-action="' + action + '"]').click(), reject() { rejected = true; } };
+}
+
+describe('MCP settings interactions', () => {
+  it('edits original tool names and preserves pattern rules while allowing an override to be cleared', async () => {
+    const f = mcpEditor({ servers: [{ name: 'docs', scope: 'global', revision: 'rev', effective: true, config: { type: 'stdio', command: 'node', toolExposure: { '*write*': 'hidden', 'read/file': 'direct' } }, probe: { tools: [{ name: 'mcp__docs__read_file', rawName: 'read/file', description: 'Read a file.' }] } }] });
+    f.click('tools');
+    const select = f.root.querySelector('[data-tool-name="read/file"]').closest('.mcp-tool-rule').querySelector('select');
+    expect(select.value).toBe('direct'); select.value = '';
+    f.root.querySelector('form').dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(f.requests.some((request) => request.url.endsWith('/tools'))).toBe(true));
+    expect(f.requests[0].input).toMatchObject({ revision: 'rev', changes: { 'read/file': null, '*write*': 'hidden' } });
+    expect(f.requests[0].input.changes).not.toHaveProperty('read_file');
+  });
+  it('shows a safe OAuth link when popups are blocked and supports cancellation without storing authorization data', async () => {
+    const f = mcpEditor({ servers: [{ name: 'docs', scope: 'global', revision: 'rev', effective: true, config: { type: 'http', url: 'https://example.com/mcp' } }] });
+    vi.spyOn(f.window, 'open').mockReturnValue(null);
+    let cancelled = false;
+    const job = { id: 'a'.repeat(32), name: 'docs', action: 'login', state: 'waiting', authorizationUrl: 'https://auth.example.com/authorize?state=local-flow-state' };
+    f.api.mockImplementation(async (url, init = {}) => {
+      if (url.endsWith('/login')) return { ...job, state: 'starting', authorizationUrl: undefined };
+      if (url.endsWith('/cancel')) { cancelled = true; return {}; }
+      if (url.includes('/mcp/auth/')) return { ...job, state: cancelled ? 'cancelled' : 'waiting', message: cancelled ? '已取消授权' : undefined };
+      return f.snapshot;
+    });
+    f.click('login');
+    await vi.waitFor(() => expect(f.root.querySelector('.mcp-auth-panel a')?.href).toContain('https://auth.example.com/authorize'));
+    expect(f.root.querySelector('.mcp-auth-panel a').rel).toContain('noopener');
+    expect(Object.values(f.window.localStorage).join('') + Object.values(f.window.sessionStorage).join('')).not.toContain('local-flow-state');
+    f.click('cancel-auth'); await vi.waitFor(() => expect(f.root.textContent).toContain('已取消授权'));
+    f.controller.dispose();
+  });
+  it('polls actual session state without rebuilding an open tool or configuration editor, and stops on disposal', async () => {
+    const f = mcpEditor({}, () => {}, { runtimeEnabled: true });
+    await vi.waitFor(() => expect(f.requests.length).toBeGreaterThan(0));
+    f.api.mockResolvedValue({ sessions: [{ id: 'a1', title: 'Live conversation', mode: 'plan', supported: true, servers: [{ name: 'docs', state: 'disconnected', toolCount: 0 }] }] });
+    await f.controller.refreshRuntime();
+    expect(f.root.textContent).toContain('已断开');
+    f.click('add'); f.field('name').value = 'unsaved-draft';
+    await f.controller.refreshRuntime(); expect(f.field('name').value).toBe('unsaved-draft');
+    f.controller.dispose(); const calls = f.api.mock.calls.length;
+    await f.controller.refreshRuntime(); expect(f.api.mock.calls.length).toBe(calls);
+  });
+  it('keeps an unsaved service draft when OAuth finishes in the background', async () => {
+    const f = mcpEditor({ servers: [{ name: 'docs', scope: 'global', revision: 'rev', effective: true, config: { type: 'http', url: 'https://example.com/mcp' } }] });
+    vi.spyOn(f.window, 'open').mockReturnValue(null);
+    let reads = 0;
+    const job = { id: 'b'.repeat(32), name: 'docs', action: 'login' };
+    f.api.mockImplementation(async (url) => {
+      if (url.endsWith('/login')) return { ...job, state: 'starting' };
+      if (url.includes('/mcp/auth/')) return ++reads === 1 ? { ...job, state: 'waiting', authorizationUrl: 'https://auth.example.com/authorize' } : { ...job, state: 'succeeded', message: '授权成功' };
+      return f.snapshot;
+    });
+    f.click('login'); await vi.waitFor(() => expect(f.root.querySelector('.mcp-auth-panel a')).not.toBeNull());
+    f.click('add'); f.field('name').value = 'unsaved-service';
+    await vi.waitFor(() => expect(f.root.querySelector('#mcp-feedback').textContent).toContain('授权已更新'), { timeout: 3000 });
+    expect(f.field('name').value).toBe('unsaved-service'); f.controller.dispose();
+  });
+  it('keeps the saved form locked until parent state refresh finishes, so the new list is immediately interactive', async () => {
+    let release, entered = false;
+    const waiting = new Promise((done) => { release = done; });
+    const f = mcpEditor({}, async () => { entered = true; await waiting; });
+    f.click('add'); f.field('name').value = 'local'; f.field('command').value = 'node';
+    f.root.querySelector('form').dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(entered).toBe(true));
+    expect(f.root.querySelector('[data-action="save"]').disabled).toBe(true);
+    expect(f.root.querySelector('[data-action="add"]')).toBeNull();
+    release(); await vi.waitFor(() => expect(f.root.querySelector('#mcp-form')).toBeNull());
+    f.click('add'); expect(f.root.querySelector('#mcp-form')).not.toBeNull();
+  });
+  it('switches HTTP/stdio validation and submits only the visible transport with blank secrets preserved', async () => {
+    const f = mcpEditor(); f.click('add');
+    f.field('name').value = 'docs'; f.field('transport').value = 'http'; f.field('transport').dispatchEvent(new f.window.Event('change', { bubbles: true }));
+    f.field('url').value = 'https://example.com/mcp';
+    expect(f.field('command').closest('fieldset').disabled).toBe(true);
+    expect(f.root.querySelector('form').checkValidity()).toBe(true);
+    f.click('add-row');
+    // The first map is stdio and is inactive; HTTP data is independent.
+    f.root.querySelector('[data-map-name="headers"]').click();
+    const row = f.root.querySelector('[data-map="headers"] .mcp-map-row');
+    row.querySelector('[data-key]').value = 'Authorization'; row.querySelector('[data-value]').value = 'Bearer private-ui-secret';
+    f.click('test-draft');
+    await vi.waitFor(() => expect(f.root.textContent).toContain('连接成功'));
+    expect(f.requests[0].input.config).toMatchObject({ type: 'http', url: 'https://example.com/mcp', headers: [{ key: 'Authorization', value: 'Bearer private-ui-secret' }] });
+    expect(f.requests[0].input.config).not.toHaveProperty('command');
+    f.root.querySelector('form').dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(f.root.querySelector('#mcp-form')).toBeNull());
+    expect(f.requests.find((request) => request.url === '/api/mcp/servers').input.config).toEqual(f.requests[0].input.config);
+    expect(Object.values(f.window.localStorage).join('') + Object.values(f.window.sessionStorage).join('')).not.toContain('private-ui-secret');
+  });
+  it('edits redacted values, clears optional fields, and keeps the form on a rejected update', async () => {
+    const f = mcpEditor({ servers: [{ name: 'docs', scope: 'global', revision: 'revision-1', effective: true, config: { type: 'http', url: 'https://example.com/mcp', timeout: 90, auth: { provider: 'github' }, headers: [{ key: 'Authorization', configured: true }], oauth: { clientId: 'old-client', clientSecretConfigured: true } } }] });
+    f.click('edit');
+    expect(f.root.querySelector('[data-value]').value).toBe('');
+    expect(f.field('clientSecret').value).toBe('');
+    f.field('clientId').value = ''; f.field('authProvider').value = ''; f.field('timeout').value = '';
+    f.reject(); f.root.querySelector('form').dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(f.root.textContent).toContain('其他窗口修改'));
+    expect(f.requests[0].input).toMatchObject({ revision: 'revision-1', config: { auth: null, timeout: null, oauth: {}, headers: [{ key: 'Authorization', value: '' }] } });
+    expect(f.field('url').value).toBe('https://example.com/mcp');
+    expect(f.root.querySelector('[data-action="save"]').disabled).toBe(false);
+  });
+  it('imports one selected service with tool exposure and uses the same configuration for test and save', async () => {
+    const f = mcpEditor(); f.click('add');
+    f.root.querySelector('#mcp-import-json').value = JSON.stringify({ mcpServers: { first: { command: 'node' }, docs: { url: 'https://example.com/mcp', headers: { Authorization: 'Bearer import-secret' }, toolExposure: { '*write*': 'hidden' } } } });
+    f.click('read-import'); f.root.querySelector('#mcp-import-server').value = 'docs'; f.click('apply-import');
+    expect(f.field('name').value).toBe('docs');
+    f.click('test-draft'); await vi.waitFor(() => expect(f.root.textContent).toContain('连接成功'));
+    f.root.querySelector('form').dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(f.root.querySelector('#mcp-form')).toBeNull());
+    const inputs = f.requests.filter((request) => request.method === 'POST').map((request) => request.input.config);
+    expect(inputs[0]).toEqual(inputs[1]);
+    expect(inputs[0].toolExposure).toEqual({ '*write*': 'hidden' });
+    expect(inputs[0].headers).toEqual([{ key: 'Authorization', value: 'Bearer import-secret' }]);
+    expect(f.root.innerHTML).not.toContain('import-secret');
+  });
+  it('requires delete confirmation and blocks testing an untrusted project configuration', async () => {
+    const f = mcpEditor({ projectTrusted: false, servers: [{ name: 'local', scope: 'project', revision: 'rev', effective: false, config: { type: 'stdio', command: 'node' } }] });
+    expect(f.root.querySelector('[data-action="test"]').disabled).toBe(true);
+    f.click('edit'); expect(f.root.querySelector('[data-action="test-draft"]').disabled).toBe(true);
+    f.click('cancel'); f.click('delete'); expect(f.requests).toHaveLength(0);
+    f.click('confirm-delete');
+    await vi.waitFor(() => expect(f.requests.some((request) => request.method === 'DELETE' && request.url.includes('revision=rev'))).toBe(true));
   });
 });

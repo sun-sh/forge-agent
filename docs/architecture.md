@@ -1,6 +1,6 @@
 # Forge Agent architecture and current scope
 
-Reviewed against the local implementation on 2026-11-03. The current package is
+Reviewed against the local implementation on 2026-11-04. The current package is
 `forge-agent` 0.1.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
 
 forge-agent is a product layer built on the Pi Coding Agent SDK. It does not fork Pi
@@ -32,6 +32,7 @@ flowchart TD
 | Agent / Plan / Ask | forge-agent policy registered as a Pi extension; Plan and Ask allow only built-in read/search tools. |
 | Project verification and bounded repair attempts | forge-agent `src/config.ts`, `src/verification/pi-extension.ts`, `src/verification/verify.ts`, and `src/tools/command.ts`. |
 | Local gateway authorization | forge-agent `src/web/auth.ts` and gateway checks; separate from Pi's provider credentials. |
+| Web MCP management | forge-agent `src/web/mcp.ts`, `src/web/mcp-runtime.ts` and `src/web/ui/mcp.js`: scoped editing, probes, browser authorization, per-tool controls and session connection views. Pi owns validation, protocol, OAuth and execution. |
 | Planned task orchestration | forge-agent `src/task/controller.ts`; Pi still executes every model/tool turn. |
 | Git change evidence and bounded diff preview | forge-agent `src/task/git.ts` and the Web changes panel; pre-existing dirty files are marked. |
 
@@ -66,6 +67,13 @@ automatically.
   adapter now installs the same factories and preserves Pi's builtin,
   replaceable, disabled-extension, and project-trust semantics. The Web mode
   policy still blocks dynamically activated or nested MCP calls in Plan and Ask.
+- Web settings expose MCP CRUD, global/project overlays, per-tool exposure, connection tests,
+  browser OAuth and per-session status with reconnection.
+  The control plane uses Pi's public extension registration API for validation and
+  temporary Pi sessions for probes and authorization. A small adapter captures the built-in
+  extension's public command/tool registrations, reads its RPC status, and preserves original
+  tool names. It reloads idle sessions after configuration
+  changes. See [MCP management](mcp-management.md) for lifecycle and credential rules.
 - Skills and compatible extensions use Pi discovery. Terminal-specific custom
   extension UI cannot be rendered as an arbitrary browser component; the Web
   adapter reports that limitation.

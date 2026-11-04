@@ -4,7 +4,7 @@ import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SessionManager, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { SessionManager, type AgentSession, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { createWebModePolicy, restoredWebMode, type WebMode } from '../src/web/modes.js';
 import { startWebConsole } from '../src/web/server.js';
 
@@ -67,6 +67,58 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
 }
 
 describe('Web working modes with real Pi sessions', () => {
+  it('invokes a service added from the Web through an existing Pi session and removes its tools when disabled', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    const response = await f.api('mcp/servers', { project: f.root, scope: 'global', name: 'fixture', config: { command: process.execPath, args: [fileURLToPath(new URL('./fixtures/pi-mcp-server.mjs', import.meta.url)), join(f.root, 'mcp-called'), join(f.root, 'mcp-pid')], exposure: 'direct' } });
+    expect(response.status).toBe(200);
+    const saved: any = await response.json();
+    f.calls([{ name: 'mcp__fixture__echo', arguments: { text: 'web-configured' } }]);
+    expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Use the service just added in settings' })).status).toBe(202);
+    expect((await f.settled(session.id)).outcome).toBe('completed');
+    expect(await readFile(join(f.root, 'mcp-called'), 'utf8')).toBe('web-configured\n');
+    const item = saved.snapshot.servers[0];
+    expect((await f.api('mcp/servers/fixture/toggle', { project: f.root, scope: 'global', revision: item.revision, enabled: false })).status).toBe(200);
+    const index = f.requests.length;
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Respond after disabling the service' });
+    await f.settled(session.id);
+    expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('mcp__fixture__echo');
+    expect(await readFile(join(f.root, 'mcp-called'), 'utf8')).toBe('web-configured\n');
+  });
+  it.each(['plan', 'ask'] as const)('retains %s tool restrictions after a Web MCP configuration reload', async (mode) => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode })).json();
+    const saved = await f.api('mcp/servers', { project: f.root, scope: 'global', name: 'fixture', config: { command: process.execPath, args: [fileURLToPath(new URL('./fixtures/pi-mcp-server.mjs', import.meta.url)), join(f.root, 'mcp-called'), join(f.root, 'mcp-pid')], exposure: 'direct' } });
+    expect(saved.status).toBe(200);
+    await vi.waitFor(async () => expect(Number(await readFile(join(f.root, 'mcp-pid'), 'utf8'))).toBeGreaterThan(0));
+    f.calls([{ name: 'mcp__fixture__echo', arguments: { text: 'blocked' } }, { name: 'write', arguments: { path: 'unsafe-write', content: 'blocked' } }]);
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Try to use tools after the settings update' });
+    const state = await f.settled(session.id);
+    expect(state.mode).toBe(mode);
+    const tools = f.requests[0].tools.map((tool: any) => tool.function.name);
+    expect(tools).not.toContain('mcp__fixture__echo'); expect(tools).not.toContain('write');
+    await expect(access(join(f.root, 'mcp-called'))).rejects.toThrow();
+    await expect(access(join(f.root, 'unsafe-write'))).rejects.toThrow();
+    await f.api('sessions/' + session.id + '/mode', { mode: 'agent' });
+    const index = f.requests.length;
+    f.calls([{ name: 'mcp__fixture__echo', arguments: { text: 'now-enabled' } }]);
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Use the newly configured service in Agent mode' });
+    await f.settled(session.id);
+    expect(f.requests[index].tools.map((tool: any) => tool.function.name)).toContain('mcp__fixture__echo');
+    expect(await readFile(join(f.root, 'mcp-called'), 'utf8')).toBe('now-enabled\n');
+  });
+  it('refuses MCP configuration changes during an active task without overwriting disk', async () => {
+    const f = await fixture({ mcp: 'direct' });
+    const before = await readFile(join(f.home, 'mcp.json'), 'utf8');
+    const session: any = await (await f.api('session', { project: f.root })).json();
+    f.pause(); await f.api('sessions/' + session.id + '/prompt', { message: 'Wait for the fixture' });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    try {
+      const response = await f.api('mcp/servers', { project: f.root, scope: 'global', name: 'blocked', config: { command: 'node', enabled: false } });
+      expect(response.status).toBe(409);
+      expect(await readFile(join(f.home, 'mcp.json'), 'utf8')).toBe(before);
+    } finally { f.release(); await f.settled(session.id); }
+  });
   it('blocks actual MCP and codemode calls while in a read-only Web mode', async () => {
     const f = await fixture({ mcp: 'codemode' }); const session: any = await (await f.api('session', { project: f.root, mode: 'plan' })).json();
     f.calls([{ name: 'codemode', arguments: { code: 'await tools.mcp__fixture__echo({text:"unsafe"});' } }, { name: 'mcp__fixture__echo', arguments: { text: 'unsafe-direct' } }]);
@@ -117,9 +169,11 @@ describe('Web working modes with real Pi sessions', () => {
     const f = await fixture(); const session: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
     expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Do it', workflow: 'planned' })).status).toBe(400);
     expect(f.requests).toHaveLength(0);
-    await f.api('sessions/' + session.id + '/mode', { mode: 'agent' });
-    f.pause(); await f.api('sessions/' + session.id + '/prompt', { message: 'Do it', workflow: 'planned' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    expect((await f.api('sessions/' + session.id + '/mode', { mode: 'agent' })).status).toBe(200);
+    f.pause();
+    expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Do it', workflow: 'planned' })).status).toBe(202);
+    // Planned execution captures the Git baseline before making its first model request.
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1), { timeout: 15000 });
     expect((await f.api('sessions/' + session.id + '/abort', {})).status).toBe(200);
     const state = await f.settled(session.id); expect(state.task.status).toBe('aborted');
     f.release(); expect(f.requests).toHaveLength(1);
@@ -216,5 +270,19 @@ describe('Web working modes with real Pi sessions', () => {
     expect(handlers['tool_call']!({ toolName: 'grep' })).toBeUndefined();
     mode = 'agent';
     expect(handlers['tool_call']!({ toolName: 'write' })).toBeUndefined();
+  });
+  it('persists the direct-tool baseline and restores newly direct tools without re-enabling previously inactive or hidden tools', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forge-mode-reload-'));
+    const manager = SessionManager.inMemory(root);
+    let mode: WebMode = 'plan', active = ['read', 'write'];
+    let tools = ['read', 'write', 'disabled-before'].map((name) => ({ name, exposure: 'direct', sourceInfo: { source: name === 'read' ? 'builtin' : 'extension' } }));
+    const agent = { getActiveToolNames: () => active, getAllTools: () => tools, setActiveToolsByName: (names: string[]) => { active = names; } } as unknown as AgentSession;
+    createWebModePolicy(() => mode, manager).apply(agent);
+    expect(active).toEqual(['read']);
+    tools = [...tools, { name: 'new-mcp', exposure: 'direct', sourceInfo: { source: 'extension' } }, { name: 'hidden-mcp', exposure: 'hidden', sourceInfo: { source: 'extension' } }];
+    const restored = createWebModePolicy(() => mode, manager);
+    restored.apply(agent); mode = 'agent'; restored.apply(agent);
+    expect(active).toEqual(['read', 'write', 'new-mcp']);
+    expect(active).not.toContain('disabled-before'); expect(active).not.toContain('hidden-mcp');
   });
 });

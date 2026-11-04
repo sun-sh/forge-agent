@@ -17,6 +17,7 @@ It builds on the complete [Pi Coding Agent](https://github.com/earendil-works/pi
 - **Work by project:** expand, search, and reopen project history; retain drafts; inspect changed files and diffs.
 - **Choose how to work:** Agent implements changes, Plan investigates and proposes a plan, and Ask reads code to answer questions. Select the project, mode, model, and reasoning effort below the composer.
 - **Connect your models:** add a compatible provider in settings, discover models with a searchable multi-select, or enter model IDs manually. Test an actual model invocation before using it.
+- **Connect external tools:** add local or HTTP services in MCP settings, import configuration, complete browser OAuth, configure individual tools, and inspect each session's connection state.
 - **Inspect completion evidence:** use the planned workflow for complex tasks, with visible investigation, planning, implementation, verification, and review stages.
 
 ## Quick start
@@ -39,7 +40,8 @@ For your first task:
 2. Fetch the model list and select models in the searchable checkbox dropdown. Enter IDs manually if the provider has no listing endpoint. Run an actual invocation test, then save the service.
 3. Select a project, model, and supported reasoning effort below the composer. Saving a service and switching the active conversation's model are separate actions.
 4. Inspect the project and its verification commands, then confirm project trust in settings. Configure `forge-agent.json` as described below to use the verification gate.
-5. Choose a working mode, describe the task, and send it. For a complex change, select **Plan and execute** (`计划并执行`) in Agent mode.
+5. If you need external tools, add a service under **Settings → MCP** and test the connection. HTTP services requiring OAuth have a **Sign In** (`登录授权`) action.
+6. Choose a working mode, describe the task, and send it. For a complex change, select **Plan and execute** (`计划并执行`) in Agent mode.
 
 The provider editor supports APIs compatible with **OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages**. Services such as Ollama and LM Studio need to expose a compatible endpoint. Capabilities come from the catalog or explicit configuration; reasoning levels are not inferred from model names. The Web interface is currently in Chinese.
 
@@ -83,12 +85,37 @@ Forge Agent places product behavior above Pi sessions, with explicit responsibil
 | **Verification and evidence** | [src/verification/](src/verification/) and the [command executor](src/tools/command.ts): exact output, timeouts, child-process tree termination, and per-run reports. |
 | **Working-mode policy** | [src/web/modes.ts](src/web/modes.ts): a Pi extension constrains actual tool calls, including nested and dynamically activated tools. |
 | **Git review** | [src/task/git.ts](src/task/git.ts): staged, unstaged, and untracked changes; bounded diff previews; pre-existing change labels and status fingerprints. |
+| **MCP management** | [Configuration and authorization](src/web/mcp.ts), the [runtime adapter](src/web/mcp-runtime.ts), and [settings UI](src/web/ui/mcp.js): global/project configuration, connection tests, browser authorization, tool rules, and session status. Pi owns protocol and execution. |
 | **Web product layer** | [src/web/](src/web/): provider settings, project sessions, streaming, reconnect recovery, drafts, task progress, and change panels. |
 | **Underlying runtime** | Pi: agent loop, model calls and authentication, tools, sessions and compaction, project trust, MCP, skills, extensions, and resource discovery. |
 
 The implementation keeps one agent loop. The CLI delegates to Pi's entry point; the Web gateway creates sessions through Pi's SDK. The task controller owns stages and decisions, and Pi executes each model/tool turn. Earlier custom prototypes remain in `archive/prototype/`, outside the active build, tests, and supported feature set.
 
 See [architecture and capability boundaries](docs/architecture.md) and the [UI design notes](docs/ui-design-notes.md) (Chinese).
+
+## Connect MCP services
+
+Open **Settings → MCP → Add** (`设置 → MCP → 添加`). Choose local STDIO or Streamable HTTP, then enter a command and arguments, or a URL and headers. You can also expand **Import from JSON** (`从 JSON 导入配置`), paste another client's `mcpServers` configuration, and choose one service to fill the form. Enter one command argument per line; keep a path containing spaces on the same line.
+
+Choose **Test current configuration** (`测试当前配置`), inspect the connection result and available tool catalog, then save. If an HTTP service reports that OAuth is required, choose **Sign In** (`登录授权`) after saving and approve access in the browser. The callback completes automatically. If popups are blocked, use the authorization link. Pasted redirects, cancellation, and removing local authorization are also supported. MCP authorization and model-provider sign-in are managed separately.
+
+- **Global and project scope:** global configuration lives at `FORGE_AGENT_HOME/mcp.json`; project configuration lives at `<project>/.pi/mcp.json` and loads only after project trust. A same-name project entry can replace a global service, or override only its enabled state and tool exposure. A partial override does not copy global credentials into the project.
+- **Connection tests:** a temporary Pi session opens a real connection and reports the latest result and discovered tools. It does not request a model or call tools. Testing starts the service process and closes the connection afterward. Results do not describe every chat session's live connection state.
+- **Applying changes:** saving, toggling, or deleting reloads affected idle sessions through Pi. Stop active tasks before changing configuration. Existing working-mode restrictions remain in force.
+- **Tool Settings:** configure individual tools, add wildcard rules, or restore inheritance. Existing `toolExposure` rules are preserved. Exact names take precedence over wildcard rules; the first matching wildcard rule wins. Plan and Ask continue to block MCP tool execution.
+- **Session connections:** inspect the services actually loaded in each conversation in the current project. Status and tool counts refresh every three seconds; idle sessions can reconnect.
+- **Credentials and editing:** saved environment values, header values, and OAuth client secrets are not returned to the editor. Leave them blank to retain existing values; remove a row or select secret removal to clear them. Concurrent edits are checked for conflicts. Authorization completion and status refresh preserve open editor drafts.
+
+Open **Tool Settings** (`工具设置`) on a service card to choose how its tools are made available:
+
+| Mode | Behavior and use case |
+| --- | --- |
+| **Codemode** (default) | The agent discovers and combines tools in scripts, useful when calls or results need composition and filtering. |
+| **Deferred** | Tools are loaded through search when needed, useful for services with many tools. |
+| **Direct** | Tools are declared directly to the model and remain callable from scripts, useful for a small set of frequently used tools. |
+| **Hidden** | Tools are hidden and cannot be called. |
+
+Pi owns MCP protocol, transports, tool discovery, execution, and OAuth. Browser authorization refreshes idle sessions; running sessions refresh after their current task ends. Put credentials in environment, header, or OAuth secret fields rather than command arguments or URLs. Changing a connection target requires re-entering credentials you want to retain. External vendors' OAuth metadata, registration policies, and proxy environments still need compatibility checks with those services. See the [MCP management design](docs/mcp-management.md) for implementation details.
 
 ## Configure project verification
 
@@ -122,14 +149,14 @@ forge-agent check                          # Run the current project's configure
 forge-agent -C path/to/project -p "Fix the failing tests"
 ```
 
-The Web API-key editor covers common compatible services. Provider OAuth still uses `/login` in the terminal interface. Pi manages advanced MCP, skill, and extension configuration; the Web client uses the same local configuration.
+The Web API-key editor covers common compatible services, and MCP has a dedicated settings entry. Provider OAuth still uses `/login` in the terminal interface. Pi manages advanced skill and extension configuration; the Web client uses the same local configuration.
 
 ## Validation and development
 
 | Command | What it checks |
 | --- | --- |
 | `npm run check` | Type checking, active regression tests, build, and CLI/bin integration. |
-| `npm run test:web` | A real Chromium browser against a local fixture model: provider setup, session recovery, task progress, Git diffs, and narrow layouts. |
+| `npm run test:web` | A real Chromium browser against local fixture services: model setup, MCP authorization and tool settings, session connections and recovery, task progress, Git diffs, and narrow layouts. |
 | `npm run eval:smoke` | Two fixed tasks with scripted solutions, executed through actual Pi tools and workflows, then checked with independent assertions, file-change checks, and completion checks. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | The same task set with a configured real model. Sends task content to the provider and incurs its usage charges. |
 
@@ -140,6 +167,8 @@ Browser acceptance needs Edge, Chrome, or Chromium; set `FORGE_AGENT_TEST_BROWSE
 | Data | Default location |
 | --- | --- |
 | Configuration, models, and authentication | `~/.forge-agent`, overridden by `FORGE_AGENT_HOME` |
+| Global MCP configuration and OAuth credentials | `FORGE_AGENT_HOME/mcp.json` and `FORGE_AGENT_HOME/mcp-auth.json` |
+| Project MCP configuration | `<project>/.pi/mcp.json`, loaded only after project trust |
 | Sessions | `FORGE_AGENT_HOME/sessions` |
 | Verification evidence and raw output | `FORGE_AGENT_HOME/verification` |
 | Local gateway access credential | `FORGE_AGENT_HOME/web/access-token` |
@@ -154,7 +183,7 @@ Local operation describes where the client, process, and data live. With a remot
 
 The current release is intended for local use, development, and early feedback. The Web interface is in Chinese, and further work includes:
 
-- Web management for MCP, advanced provider settings, and diagnostics; OAuth and some resource management currently use Pi's TUI/configuration.
+- Advanced provider settings and resource management; some provider sign-in, skill, and extension configuration currently uses Pi's TUI/configuration.
 - Session archive, fork, export, and background tasks, plus file references and attachment input.
 - Real-model evaluation on larger repositories, comparing direct and staged workflows for success rate, latency, and cost.
 - Keyboard accessibility, installation, upgrades, and desktop distribution. No npm package, GitHub Release, or desktop installer has been published.

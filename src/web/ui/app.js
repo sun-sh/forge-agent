@@ -3,6 +3,7 @@ import DOMPurify from '/vendor/purify.js';
 import { safeMarkdown, textContent, sessionOutcome } from './render.js';
 import { readEventStream, StreamError } from './stream.js';
 import { mountCustomProviders } from './providers.js';
+import { mountMcp } from './mcp.js';
 
 function stored(key, fallback, storage = localStorage) { try { return JSON.parse(storage.getItem(key)) ?? fallback; } catch { return fallback; } }
 function saveStored(key, value, storage = localStorage) { try { value === null ? storage.removeItem(key) : storage.setItem(key, JSON.stringify(value)); } catch {} }
@@ -493,6 +494,7 @@ function handleEvent(event) {
   if (event.type === 'extension_title') { document.title = (event.title || 'Forge') + ' · Forge'; return; }
   if (event.type === 'extension_widget') { if (event.lines) state.widgets.set(event.key, event.lines.join('\n')); else state.widgets.delete(event.key); $('extension-widgets').textContent = [...state.widgets.values()].join('\n'); return; }
   if (event.type === 'extension_ui_notify') { toast(event.message, event.level); return; }
+  if (event.type === 'pforge_mcp_changed') { toast('MCP 配置已更新，空闲会话已重新加载；列表可点击刷新', 'info'); return; }
   if (event.type === 'pforge_status') { $('run-status-label').textContent = event.text || '准备就绪'; return; }
   if (event.type === 'pforge_error') { setRunning(false); state.error = event.error; state.outcome = 'failed'; renderRunStatus(); toast(event.error, 'error'); }
   if (event.type === 'compaction_start') $('run-status-label').textContent = '正在压缩上下文';
@@ -615,16 +617,18 @@ async function openSettings(tab, editModel) {
   $('drawer').classList.remove('hidden'); $('drawer-backdrop').classList.remove('hidden'); toggleSidebar(false);
   $('drawer-body').innerHTML = '<p class="settings-note">正在读取本机设置…</p>';
   try {
-    const [config, credentials, settings] = await Promise.all([api('/api/config' + (state.project ? '?project=' + encodeURIComponent(state.project.path) : '')), api('/api/credentials'), api('/api/settings')]);
+    state.mcpSettings?.dispose();
+    const [config, credentials, settings, mcp] = await Promise.all([api('/api/config' + (state.project ? '?project=' + encodeURIComponent(state.project.path) : '')), api('/api/credentials'), api('/api/settings'), api('/api/mcp' + (state.project ? '?project=' + encodeURIComponent(state.project.path) : ''))]);
     state.providers = settings.providers || [];
     state.models = settings.models || [];
     const models = settings.models || [];
     const credentialRows = (credentials.credentials || []).map((item) => '<div class="credential-row"><span>' + esc(item.provider) + '</span><small>' + esc(item.type) + '</small><button class="text-button" data-remove-provider="' + esc(item.provider) + '">移除</button></div>').join('');
     const currentDefault = models.find((model) => model.key === settings.model);
     $('drawer-body').innerHTML =
-      '<nav class="settings-tabs" aria-label="设置分类"><button data-settings-tab="provider">服务</button><button data-settings-tab="model">模型</button><button data-settings-tab="project">项目</button><button data-settings-tab="system">关于</button></nav>' +
+      '<nav class="settings-tabs" aria-label="设置分类"><button data-settings-tab="provider">服务</button><button data-settings-tab="model">模型</button><button data-settings-tab="mcp">MCP</button><button data-settings-tab="project">项目</button><button data-settings-tab="system">关于</button></nav>' +
       '<div data-settings-panel="model"><section class="settings-block"><div class="settings-heading"><div><h3>可用模型</h3><p>当前使用的模型和推理强度，在聊天框下方选择。</p></div><button class="button quiet small" id="refresh-models">刷新目录</button></div><label>服务筛选<select id="model-provider-filter"><option value="">所有服务</option>' + state.providers.filter((provider) => provider.availableModelCount).map((provider) => '<option value="' + esc(provider.id) + '">' + esc(provider.name) + '</option>').join('') + '</select></label><label>搜索模型<input id="model-search" type="search" placeholder="模型名称、ID 或能力" autocomplete="off"></label><div class="settings-note" id="model-count"></div><div class="model-list" id="model-list"></div><button class="button quiet small hidden" id="more-models">显示更多</button><button class="button quiet small" id="manage-model-services">管理服务与可用模型</button></section></div>' +
       '<div data-settings-panel="provider"><div id="custom-providers"></div><section class="settings-block"><details class="builtin-provider"><summary>内置服务与凭据</summary><div class="provider-form"><p>选择内置服务并保存 Key。OAuth 登录请使用本机 forge-agent 中的 /login。</p><label>Provider<select id="credential-provider">' + providerOptions() + '</select></label><div id="provider-info" class="model-facts"></div><label>API Key<input id="credential-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="保存后不会回显"></label><button class="button primary" id="save-credential">保存凭据</button><div class="credential-list">' + (credentialRows || '<p class="settings-note">暂无已保存的凭据</p>') + '</div></div></details></section><p class="settings-note">配置和凭据保存在本机。已配置凭据表示可以发起调用，实际结果以模型请求为准。</p></div>' +
+      '<div data-settings-panel="mcp"><div id="mcp-settings"></div></div>' +
       '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify 与 verifyRetries。</p><pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
       '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section></div>';
     const activateTab = (name) => {
@@ -658,10 +662,11 @@ async function openSettings(tab, editModel) {
     $('toggle-trust').disabled = state.running || !state.project;
     action('toggle-trust', '更新中…', async () => { if (!state.project) throw new Error('请先选择项目'); const result = await api('/api/projects/trust', { method: 'POST', body: JSON.stringify({ path: state.project.path, trusted: !state.trust?.trusted }) }); state.trust = result.trust; renderTrust(); if (state.sessionId) await refreshSessionState(); await loadProjects(); await openSettings(); });
     await mountCustomProviders($('custom-providers'), { api, esc, setBusy, initialProvider: editModel?.provider, initialModel: editModel?.id, onSaved: async () => { await loadModels(); if (state.sessionId) await refreshSessionState(); await openSettings('provider'); toast('服务已保存，在聊天框下方选择模型与推理强度'); } });
+    state.mcpSettings = mountMcp($('mcp-settings'), { api, esc, initial: mcp, projectPath: state.project?.path || config.cwd, runtimeEnabled: true, isVisible: () => !$('drawer').classList.contains('hidden') && state.settingsTab === 'mcp', onChanged: async () => { await loadProjects(); if (state.sessionId) await refreshSessionState(); } });
   } catch (error) { $('drawer-body').textContent = '读取设置失败：' + error.message; toast(error.message, 'error'); }
   finally { state.openingSettings = false; }
 }
-function closeSettings() { $('drawer').classList.add('hidden'); $('drawer-backdrop').classList.add('hidden'); }
+function closeSettings() { state.mcpSettings?.dispose(); state.mcpSettings = null; $('drawer').classList.add('hidden'); $('drawer-backdrop').classList.add('hidden'); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('mobile-open', open); $('sidebar-backdrop').classList.toggle('hidden', !open); $('mobile-menu').setAttribute('aria-expanded', String(open)); }
 function setBusy(button, busy, label = '处理中…') { if (!button) return; if (busy) { button.dataset.label = button.textContent; button.textContent = label; } else if (button.dataset.label) { button.textContent = button.dataset.label; delete button.dataset.label; } button.disabled = busy; }
 const MODES = {

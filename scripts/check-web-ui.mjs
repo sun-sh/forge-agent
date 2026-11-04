@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../dist/web/server.js';
+import { startOAuthFixture } from '../tests/fixtures/oauth-mcp-server.mjs';
 
 const candidates = [process.env.FORGE_AGENT_TEST_BROWSER, process.env.PFORGE_TEST_BROWSER, 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium', '/usr/bin/google-chrome'];
 const executable = candidates.find((candidate) => candidate && existsSync(candidate));
@@ -51,7 +52,8 @@ saved.appendMessage({ role: 'user', content: '历史会话验收', timestamp: Da
 saved.appendMessage({ role: 'assistant', content: [{ type: 'text', text: '## 历史已恢复\n\n这是独立测试会话。' }], api: 'openai-completions', provider: 'mock', model: 'mock', stopReason: 'stop', timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
 saved.appendSessionInfo('历史会话验收');
 
-let server, child, socket;
+let server, child, socket, captureFailure;
+const oauthFixture = await startOAuthFixture();
 const failures = [];
 const screenshots = [];
 try {
@@ -88,6 +90,7 @@ try {
   const waitFor = async (expression) => { const deadline = Date.now() + 20000; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression); };
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const screenshot = async (name) => { const result = await cdp('Page.captureScreenshot', { format: 'png' }); await writeFile(join(output, name + '.png'), Buffer.from(result.data, 'base64')); screenshots.push(name); };
+  captureFailure = async (error) => { await screenshot('failure'); await writeFile(join(output, 'failure.json'), JSON.stringify({ error: String(error), pageText: await evaluate('document.body.innerText') }, null, 2)); };
   await cdp('Runtime.enable'); await cdp('Page.enable');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url: origin + '/?token=' + 'expired'.repeat(5) });
@@ -143,15 +146,98 @@ try {
   assert.equal(await evaluate(`Object.values(localStorage).join('').includes('local-test-only') || Object.values(sessionStorage).join('').includes('local-test-only')`), false);
   await click('[data-settings-tab="model"]');
   await waitFor(`!!document.querySelector('#model-provider-filter')`);
-  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 4);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 5);
   assert.equal(await evaluate(`document.querySelectorAll('.model-card').length`), 2);
   assert.equal(await evaluate(`document.querySelector('#default-model')`), null);
   await screenshot('settings');
-  for (const tab of ['provider', 'project', 'system', 'model']) {
+  for (const tab of ['provider', 'project', 'system', 'model', 'mcp']) {
     await click(`[data-settings-tab="${tab}"]`);
     assert.equal(await evaluate(`document.querySelectorAll('[data-settings-panel]:not(.hidden)').length`), 1);
   }
   assert.equal(await evaluate(`document.getElementById('credential-key').value`), '');
+  await click('#mcp-settings [data-action="add"]');
+  const mcpFill = (name, value) => evaluate(`document.querySelector('#mcp-settings [name=' + ${JSON.stringify(name)} + ']').value = ${JSON.stringify(value)}`);
+  await mcpFill('name', 'fixture'); await mcpFill('command', process.execPath);
+  await mcpFill('args', [resolve('tests/fixtures/pi-mcp-server.mjs'), join(project, 'mcp-called'), join(project, 'mcp-pid')].join('\n'));
+  await mcpFill('exposure', 'direct');
+  await click('#mcp-settings [data-action="test-draft"]');
+  await waitFor(`document.getElementById('mcp-feedback').textContent.includes('连接成功')`);
+  assert.equal(existsSync(join(project, 'mcp-called')), false);
+  await screenshot('mcp-editor');
+  await evaluate(`document.querySelector('#mcp-form').requestSubmit()`);
+  await waitFor(`document.querySelectorAll('#mcp-settings .mcp-card').length === 1`);
+  await click('#mcp-settings [data-action="test"]');
+  await waitFor(`document.querySelector('#mcp-settings .mcp-status')?.textContent === '连接成功'`);
+  assert.ok((await evaluate(`document.querySelector('#mcp-settings .mcp-tools').textContent`)).includes('mcp__fixture__echo'));
+  await screenshot('mcp-tools');
+  await click('#mcp-settings [data-action="tools"]');
+  await waitFor(`!!document.querySelector('[data-tool-name="echo"]')`);
+  await evaluate(`document.querySelector('#mcp-tool-rules select').value = 'hidden'; document.getElementById('mcp-tools-form').requestSubmit()`);
+  await waitFor(`!document.getElementById('mcp-tools-form')`);
+  await click('#mcp-settings [data-action="tools"]');
+  assert.equal(await evaluate(`document.querySelector('#mcp-tool-rules select').value`), 'hidden');
+  await screenshot('mcp-tool-settings');
+  await evaluate(`document.querySelector('#mcp-tool-rules select').value = 'direct'; document.getElementById('mcp-tools-form').requestSubmit()`);
+  await waitFor(`!document.getElementById('mcp-tools-form')`);
+  await click('#mcp-settings [data-action="edit"]');
+  await click('#mcp-settings [data-map-name="env"]');
+  await evaluate(`document.querySelector('#mcp-settings [data-key]').value = 'MCP_TEST_SECRET'; document.querySelector('#mcp-settings [data-value]').value = 'private-mcp-browser-fixture'`);
+  await evaluate(`document.querySelector('#mcp-form').requestSubmit()`);
+  await waitFor(`!document.getElementById('mcp-form')`);
+  await click('#mcp-settings [data-action="edit"]');
+  assert.equal(await evaluate(`document.querySelector('#mcp-settings [data-value]').value`), '');
+  assert.equal(await evaluate(`Object.values(localStorage).join('').includes('private-mcp-browser-fixture') || Object.values(sessionStorage).join('').includes('private-mcp-browser-fixture')`), false);
+  await mcpFill('description', 'Local MCP browser acceptance fixture');
+  await evaluate(`document.querySelector('#mcp-form').requestSubmit()`);
+  await waitFor(`!document.getElementById('mcp-form')`);
+  await click('#mcp-settings [data-action="toggle"]');
+  await waitFor(`document.querySelector('#mcp-settings .mcp-enabled').textContent === '已禁用'`);
+  await click('#mcp-settings [data-action="add"]');
+  await mcpFill('scope', 'project');
+  await evaluate(`document.querySelector('#mcp-settings [name="scope"]').dispatchEvent(new Event('change', { bubbles: true }))`);
+  await mcpFill('name', 'fixture'); await click('#mcp-settings [name="override"]');
+  await click('#mcp-settings [name="enabled"]');
+  assert.equal(await evaluate(`document.querySelector('#mcp-settings [data-action="test-draft"]').disabled`), true);
+  await evaluate(`document.querySelector('#mcp-form').requestSubmit()`);
+  await waitFor(`document.querySelectorAll('#mcp-settings .mcp-card').length === 2`);
+  assert.ok((await evaluate(`document.getElementById('mcp-settings').textContent`)).includes('项目覆盖'));
+  await screenshot('mcp-project-override');
+  await click('#mcp-settings [data-action="add"]');
+  await mcpFill('name', 'oauth-fixture'); await mcpFill('transport', 'http');
+  await evaluate(`document.querySelector('#mcp-settings [name="transport"]').dispatchEvent(new Event('change', { bubbles: true }))`);
+  await mcpFill('scope', 'global'); await mcpFill('url', oauthFixture.origin + '/mcp');
+  await evaluate(`document.querySelector('#mcp-form').requestSubmit()`);
+  await waitFor(`document.querySelectorAll('#mcp-settings .mcp-card').length === 3`);
+  // Exercise the explicit authorization link when a browser blocks popups.
+  await evaluate(`window.open = () => null`);
+  await click('#mcp-settings [data-action="login"]');
+  await waitFor(`!!document.querySelector('.mcp-auth-panel a')`);
+  await screenshot('mcp-oauth');
+  const authorizationUrl = await evaluate(`document.querySelector('.mcp-auth-panel a').href`);
+  assert.ok(authorizationUrl.startsWith(oauthFixture.origin + '/authorize'));
+  await click('#mcp-settings [data-action="add"]');
+  await mcpFill('name', 'unsaved-during-authorization'); await mcpFill('command', 'node');
+  assert.equal((await fetch(authorizationUrl)).ok, true);
+  await waitFor(`document.getElementById('mcp-feedback')?.textContent.includes('授权已更新')`);
+  assert.equal(await evaluate(`document.querySelector('#mcp-settings [name="name"]').value`), 'unsaved-during-authorization');
+  assert.equal(await evaluate(`document.querySelector('#mcp-settings [name="command"]').value`), 'node');
+  await screenshot('mcp-oauth-draft');
+  await click('#mcp-settings [data-action="cancel"]');
+  await waitFor(`document.querySelector('.mcp-auth-panel')?.textContent.includes('授权成功')`);
+  assert.equal(oauthFixture.grants, 1); assert.equal(oauthFixture.calls, 0);
+  assert.equal(await evaluate(`document.body.innerHTML.includes(${JSON.stringify(oauthFixture.secret)}) || Object.values(localStorage).join('').includes(${JSON.stringify(oauthFixture.secret)}) || Object.values(sessionStorage).join('').includes(${JSON.stringify(oauthFixture.secret)})`), false);
+  await screenshot('mcp-oauth-complete');
+  await click('#mcp-settings [data-action="logout"]'); await click('#mcp-settings [data-action="confirm-logout"]');
+  await waitFor(`document.querySelector('.mcp-auth-panel')?.textContent.includes('已移除')`);
+  await click('#mcp-settings [data-action="login"]');
+  await waitFor(`!!document.querySelector('.mcp-auth-panel a')`);
+  await click('#mcp-settings [data-action="cancel-auth"]');
+  await waitFor(`document.querySelector('.mcp-auth-panel')?.textContent.includes('已取消授权')`);
+  assert.equal(oauthFixture.grants, 1);
+  await evaluate(`Array.from(document.querySelectorAll('.mcp-card')).find(card => card.textContent.includes('oauth-fixture')).querySelector('[data-action="delete"]').click()`);
+  await click('#mcp-settings [data-action="confirm-delete"]');
+  await waitFor(`document.querySelectorAll('#mcp-settings .mcp-card').length === 2`);
+  await click('[data-settings-tab="model"]');
   await click('#drawer-close');
   await click('#model-picker-button');
   await click('[data-choose-model="mock/mock-alt"]');
@@ -179,6 +265,17 @@ try {
   assert.equal(await evaluate(`document.querySelectorAll('.diff-add').length`), 1);
   await screenshot('conversation');
   assert.equal(observedEfforts.at(-1), 'high');
+  await click('#settings-button'); await waitFor(`!!document.getElementById('mcp-settings')`); await click('[data-settings-tab="mcp"]');
+  await click('#mcp-settings .mcp-card[data-server="1"] [data-action="toggle"]');
+  await waitFor(`document.querySelector('#mcp-settings .mcp-card[data-server="1"] .mcp-enabled')?.textContent === '已启用'`);
+  await waitFor(`document.querySelector('.mcp-live-row')?.textContent.includes('已连接')`);
+  await click('.mcp-live-panel > summary');
+  await screenshot('mcp-live-connections');
+  await click('.mcp-live-row [data-action="reconnect"]');
+  await waitFor(`!document.querySelector('.mcp-live-row [data-action="reconnect"]')?.disabled`);
+  await click('#mcp-settings .mcp-card[data-server="1"] [data-action="toggle"]');
+  await waitFor(`document.querySelector('#mcp-settings .mcp-card[data-server="1"] .mcp-enabled')?.textContent === '已禁用'`);
+  await click('#drawer-close');
   await click('#followup-model-picker-button');
   await evaluate(`document.getElementById('thinking-select').value = 'low'; document.getElementById('thinking-select').dispatchEvent(new Event('change'))`);
   await waitFor(`!document.querySelector('#thinking-select').disabled && document.querySelector('#followup-model-picker-button [data-effort-label]').textContent === '低'`);
@@ -264,13 +361,24 @@ try {
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   assert.equal(await evaluate(`document.getElementById('custom-key').value`), '');
   assert.ok((await evaluate(`document.getElementById('custom-key').placeholder`)).includes('留空保留'));
+  await click('[data-settings-tab="mcp"]');
+  await waitFor(`document.querySelectorAll('#mcp-settings .mcp-card').length === 2`);
+  await click('#mcp-settings [data-action="edit"]');
+  await evaluate(`document.getElementById('drawer-body').scrollTop = 0`);
+  await screenshot('mobile-mcp-editor');
+  assert.equal(await evaluate(`document.getElementById('drawer-body').scrollWidth <= document.getElementById('drawer-body').clientWidth`), true);
+  assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   assert.deepEqual(failures, []);
-  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'four settings tabs', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'project collapse', 'history restore', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
-  console.log('Web browser smoke checks passed: model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task stages and review, Git diff, persistent drafts, restored history and desktop/mobile layout. Screenshots: ' + output);
+  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'five settings tabs', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'project collapse', 'history restore', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
+  console.log('Web browser smoke checks passed: MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, Git diff, persistent drafts and desktop/mobile layout. Screenshots: ' + output);
+} catch (error) {
+  try { await captureFailure?.(error); } catch { /* Preserve the original assertion failure. */ }
+  throw error;
 } finally {
   socket?.close();
   if (child && child.exitCode === null) { child.kill(); await Promise.race([new Promise((done) => child.once('exit', done)), new Promise((done) => setTimeout(done, 3000))]); }
   await server?.close();
+  await oauthFixture.close();
   await new Promise((done) => modelServer.close(done));
   if (dirname(temporary) === resolve(tmpdir()) && basename(temporary).startsWith('pforge-web-smoke-')) await rm(temporary, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
 }

@@ -16,6 +16,8 @@ import { createWebModePolicy, isWebMode, restoredRunMode, restoredWebMode, saveW
 import { webBuiltinExtensions } from './pi-extensions.js';
 import { restoreTask, TaskController } from '../task/controller.js';
 import { captureGit, compareGit, readGitDiff } from '../task/git.js';
+import { McpControlPlane, McpError } from './mcp.js';
+import { McpRuntimeView } from './mcp-runtime.js';
 
 export interface WebConsoleOptions { cwd: string; host?: string; port?: number; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
@@ -51,6 +53,8 @@ interface SessionState {
   unsubscribe?: () => void;
   heartbeat?: ReturnType<typeof setInterval>;
   disposing?: Promise<void>;
+  mcpRuntime?: McpRuntimeView;
+  mcpReloadPending?: boolean;
 }
 const MAX_BODY = 2_000_000;
 const MAX_DIRECTORY_ENTRIES = 500;
@@ -60,7 +64,7 @@ const MAX_LIVE_SESSIONS = 12;
 class HttpError extends Error { constructor(public readonly status: number, message: string) { super(message); this.name = 'HttpError'; } }
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }
 async function body(req: IncomingMessage): Promise<any> { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); size += b.length; if (size > MAX_BODY) throw new HttpError(413, 'Request body too large'); chunks.push(b); } if (!chunks.length) return {}; let parsed: unknown; try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'Request body must be valid JSON'); } if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'Request body must be a JSON object'); return parsed; }
-const ASSETS = ['index.html', 'app.js', 'style.css', 'render.js', 'stream.js', 'providers.js', 'vendor/marked.js', 'vendor/purify.js'];
+const ASSETS = ['index.html', 'app.js', 'style.css', 'render.js', 'stream.js', 'providers.js', 'mcp.js', 'vendor/marked.js', 'vendor/purify.js'];
 function asset(root: string, pathname: string) { const file = pathname === '/' ? 'index.html' : pathname.slice(1); if (!ASSETS.includes(file)) throw new HttpError(404, 'Invalid asset path'); return join(root, file); }
 const vendorAssets = new Map([['/vendor/marked.js', fileURLToPath(import.meta.resolve('marked'))], ['/vendor/purify.js', fileURLToPath(import.meta.resolve('dompurify'))]]);
 function sse(res: ServerResponse, record: SessionEventRecord) { if (res.writableLength > 8_000_000) { res.destroy(); return; } if (!res.destroyed && !res.writableEnded) res.write('id: ' + record.id + '\ndata: ' + JSON.stringify(record.event) + '\n\n'); }
@@ -161,19 +165,78 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   const config = loadConfig(root);
   const modelRuntime = await ModelRuntime.create({ authPath: join(home, 'auth.json'), modelsPath: join(home, 'models.json') });
   const customProviders = new CustomProviders(home, modelRuntime);
+  const mcpControl = new McpControlPlane(home);
   let modelMutation = false;
+  let mcpMutation = false;
+  let mcpOperations = 0;
+  let mcpWrite: Promise<void> = Promise.resolve();
   let openingCount = 0;
   function assertModelsIdle() {
     if (openingCount || [...sessions.values()].some((session) => session.running || session.busy || session.task)) throw new ProviderError(409, '请先停止正在运行的任务，再修改服务连接');
   }
+  function assertMcpIdle() {
+    if (openingCount || [...sessions.values()].some((session) => session.running || session.busy || session.task)) throw new HttpError(409, '请先停止正在运行的任务，再修改 MCP 配置');
+  }
+  async function mcpProject(value: unknown): Promise<{ project: string }> {
+    const project = await requireDirectory(typeof value === 'string' ? value : root);
+    return { project };
+  }
+  function emitMcpChanged(project: string, scope: string) {
+    for (const session of sessions.values()) {
+      if (scope === 'global' || resolve(session.project) === resolve(project)) emit(session, { type: 'pforge_mcp_changed' });
+    }
+  }
   async function mutateModels<T>(work: () => Promise<T>): Promise<T> {
-    if (modelMutation) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+    if (modelMutation || mcpMutation || mcpOperations) throw new ProviderError(409, '服务连接正在更新或测试，请稍后重试');
     assertModelsIdle();
     modelMutation = true;
-    try { return await work(); } finally { modelMutation = false; }
+    try { return await work(); } finally { modelMutation = false; void flushMcpReloads(); }
   }
   const settingsManager = SettingsManager.create(root, home, { projectTrusted: false });
   const trustStore = new ProjectTrustStore(home);
+  async function mcpSnapshot(project: string) {
+    return mcpControl.snapshot(project, trustView(trustStore, settingsManager, project).trusted);
+  }
+  async function reloadMcpSession(session: SessionState) {
+    if (!session.session) return;
+    session.busy = true;
+    try {
+      session.settingsManager.setProjectTrusted(trustView(trustStore, settingsManager, session.project).trusted);
+      await session.session.reload(); session.modePolicy.apply(session.session); session.mcpReloadPending = false;
+    } catch {
+      const previous = session.session;
+      session.session = undefined; session.readOnly = true; session.mcpReloadPending = false;
+      if (previous) await retireAgent(previous);
+      emit(session, { type: 'extension_ui_notify', level: 'warning', message: 'MCP 已更新，但会话重新加载失败；请重新选择模型后继续' });
+    } finally { session.busy = false; }
+    emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+  }
+  function flushMcpReloads() {
+    if (![...sessions.values()].some((session) => session.mcpReloadPending)) return Promise.resolve();
+    const change = mcpWrite.then(async () => {
+      if (shuttingDown || modelMutation || mcpMutation || mcpOperations || openingCount) return;
+      mcpMutation = true;
+      try { for (const session of sessions.values()) if (session.mcpReloadPending && !session.running && !session.task && !session.busy) await reloadMcpSession(session); }
+      finally { mcpMutation = false; }
+    });
+    mcpWrite = change.catch(() => {}); return change;
+  }
+  async function mutateMcp(project: string, scope: string, work: () => Promise<void>) {
+    const change = mcpWrite.then(async () => {
+      if (modelMutation || mcpOperations || shuttingDown) throw new HttpError(409, '服务正在更新或测试，请稍后重试');
+      assertMcpIdle(); mcpMutation = true;
+      try {
+        await work();
+        // Pi reload closes old transports before reading the new config. No task is interrupted.
+        const affected = [...sessions.values()].filter((session) => scope === 'global' || resolve(session.project) === resolve(project));
+        for (const session of affected) await reloadMcpSession(session);
+        emitMcpChanged(project, scope);
+        return { snapshot: await mcpSnapshot(project) };
+      } finally { mcpMutation = false; }
+    });
+    mcpWrite = change.then(() => {}, () => {});
+    return change;
+  }
   const sessionRoot = resolve(join(home, 'sessions'));
   const settingsPath = join(home, 'settings.json');
   let settingsWrite: Promise<void> = Promise.resolve();
@@ -349,7 +412,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   }
 
   async function attachAgent(session: SessionState, model: any, selectedThinking?: string) {
-    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(), { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'pforge-task', factory: (pi) => {
+    session.mcpRuntime = new McpRuntimeView();
+    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'pforge-task', factory: (pi) => {
       pi.on('before_agent_start', (event) => {
         if (!session.controller.active) { delete event.systemPromptOptions.sections['pforge_task']; return; }
         delete event.systemPromptOptions.sections['pforge_mode'];
@@ -363,6 +427,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     session.session = created.session;
     session.readOnly = false;
     await created.session.bindExtensions({ mode: 'rpc', uiContext: webUi(session) });
+    session.mcpRuntime.bind(created.session);
     session.modePolicy.apply(created.session);
     if (session.closed) { await retireAgent(created.session); throw new HttpError(503, 'Web server is shutting down'); }
     if (typeof selectedThinking === 'string') created.session.setThinkingLevel(selectedThinking as ModelThinkingLevel, { persist: false });
@@ -496,6 +561,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       if (session.outcome === 'running') session.outcome = 'idle';
       if (!session.closed) session.modePolicy.apply(agent);
       session.task = undefined; session.lastActivity = Date.now();
+      void flushMcpReloads();
       emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
     });
   }
@@ -534,7 +600,106 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         return;
       }
       if (!authenticated) { json(response, 401, { error: 'Local Web authorization required', code: 'LOCAL_AUTH_REQUIRED' }); return; }
-      if (modelMutation && request.method === 'POST' && (url.pathname === '/api/session' || url.pathname === '/api/projects/trust' || /^\/api\/sessions\/[^/]+\/(prompt|resume-task|model|mode|compact)$/.test(url.pathname))) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+      if ((modelMutation || mcpMutation) && request.method === 'POST' && (url.pathname === '/api/session' || url.pathname === '/api/projects/trust' || /^\/api\/sessions\/[^/]+\/(prompt|resume-task|model|thinking|mode|compact)$/.test(url.pathname))) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+      if (url.pathname === '/api/mcp/runtime' && request.method === 'GET') {
+        const { project } = await mcpProject(url.searchParams.get('project'));
+        const live = await Promise.all([...sessions.values()].filter((session) => resolve(session.project) === resolve(project)).map(async (session) => {
+          const view = session.mcpRuntime?.snapshot();
+          return { id: session.id, title: session.manager.getSessionName() ?? session.title, running: session.running, mode: session.mode, readOnly: session.readOnly,
+            supported: !!session.session && !!view?.supported, checkedAt: view?.checkedAt, refreshing: view?.refreshing, servers: view?.servers ?? [],
+            tools: await mcpControl.liveTools(project, trustView(trustStore, settingsManager, project).trusted, view?.tools ?? []) };
+        }));
+        json(response, 200, { sessions: live }); return;
+      }
+      const authAction = url.pathname.match(/^\/api\/mcp\/auth\/([a-f0-9]{32})(?:\/(cancel|redirect))?$/);
+      if (authAction) {
+        const id = authAction[1]!;
+        if (!authAction[2] && request.method === 'GET') { json(response, 200, mcpControl.auth(id)); return; }
+        if (authAction[2] === 'cancel' && request.method === 'POST') { mcpControl.cancelAuth(id); json(response, 200, mcpControl.auth(id)); return; }
+        if (authAction[2] === 'redirect' && request.method === 'POST') { const input = await body(request); mcpControl.redirectAuth(id, input.url); json(response, 200, { ok: true }); return; }
+      }
+      const mcpTools = url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)\/tools$/);
+      if (mcpTools && request.method === 'POST') {
+        const input = await body(request); const { project } = await mcpProject(input.project);
+        if (input.scope !== 'global' && input.scope !== 'project') throw new HttpError(400, 'scope must be global or project');
+        json(response, 200, await mutateMcp(project, input.scope, () => mcpControl.updateTools({ project, scope: input.scope, name: decodeURIComponent(mcpTools[1]!), revision: input.revision, changes: input.changes }, assertMcpIdle))); return;
+      }
+      const mcpReconnect = url.pathname.match(/^\/api\/mcp\/sessions\/([a-f0-9]+)\/servers\/([A-Za-z0-9_-]+)\/reconnect$/);
+      if (mcpReconnect && request.method === 'POST') {
+        const session = sessions.get(mcpReconnect[1]!);
+        if (!session || !session.session || !session.mcpRuntime?.available()) throw new HttpError(404, '此会话未加载内置 MCP');
+        if (session.running || session.busy || session.task || mcpMutation || modelMutation || mcpOperations) throw new HttpError(409, '请先等待会话或服务操作结束后再重连');
+        session.busy = true; lockedSession = session;
+        let failed = false;
+        await session.mcpRuntime.run('reconnect ' + mcpReconnect[2], { notify: (_message, level) => { if (level === 'error') failed = true; } });
+        session.modePolicy.apply(session.session); session.mcpRuntime.refresh();
+        if (failed) throw new HttpError(409, '重连未成功，请查看会话连接状态并检查服务配置');
+        json(response, 200, { ok: true }); return;
+      }
+      const mcpLogin = url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)\/(login|logout)$/);
+      if (mcpLogin && request.method === 'POST') {
+        const input = await body(request); const { project } = await mcpProject(input.project);
+        if (input.scope !== 'global' && input.scope !== 'project') throw new HttpError(400, 'scope must be global or project');
+        if (mcpMutation || modelMutation || mcpOperations || shuttingDown) throw new HttpError(409, 'MCP 服务正在更新或测试，请稍后重试');
+        mcpOperations++;
+        try {
+          const auth = await mcpControl.startAuth({ project, scope: input.scope, name: decodeURIComponent(mcpLogin[1]!), revision: input.revision }, trustView(trustStore, settingsManager, project).trusted, modelRuntime, mcpLogin[2] as 'login' | 'logout');
+          void auth.done.finally(async () => {
+            mcpOperations--;
+            if (!shuttingDown && mcpControl.auth(auth.view.id).state === 'succeeded') {
+              for (const session of sessions.values()) if (input.scope === 'global' || resolve(session.project) === resolve(project)) session.mcpReloadPending = true;
+              await flushMcpReloads(); emitMcpChanged(project, input.scope);
+            }
+          }).catch(() => {});
+          json(response, 202, auth.view);
+        } catch (error) { mcpOperations--; throw error; }
+        return;
+      }
+      if ((url.pathname === '/api/mcp' || url.pathname === '/api/mcp/servers') && request.method === 'GET') {
+        const { project } = await mcpProject(url.searchParams.get('project'));
+        json(response, 200, await mcpSnapshot(project));
+        return;
+      }
+      if (url.pathname === '/api/mcp/servers' && request.method === 'POST') {
+        const input = await body(request);
+        const { project } = await mcpProject(input.project);
+        if (input.scope !== 'global' && input.scope !== 'project') throw new HttpError(400, 'scope must be global or project');
+        if (input.config === undefined) throw new HttpError(400, 'config is required');
+        const saved = await mutateMcp(project, input.scope, () => mcpControl.save({ project, scope: input.scope, name: input.name, config: input.config, override: input.override === true, revision: input.revision }, assertMcpIdle));
+        json(response, 200, saved);
+        return;
+      }
+      const mcpAction = url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)\/(toggle|test)$/);
+      if (mcpAction && request.method === 'POST') {
+        const name = decodeURIComponent(mcpAction[1]!);
+        const input = await body(request);
+        const { project } = await mcpProject(input.project);
+        const scope = input.scope === 'project' ? 'project' : input.scope === 'global' ? 'global' : undefined;
+        if (!scope) throw new HttpError(400, 'scope must be global or project');
+        if (mcpAction[2] === 'test') {
+          if (mcpOperations >= 3 || mcpMutation || modelMutation || shuttingDown) throw new HttpError(409, 'MCP 服务正在更新或测试，请稍后重试');
+          mcpOperations++;
+          try {
+            const result = await mcpControl.test({ project, scope, name, config: input.config, revision: input.revision }, trustView(trustStore, settingsManager, project).trusted, modelRuntime);
+            json(response, 200, result);
+          } finally { mcpOperations--; void flushMcpReloads(); }
+          return;
+        }
+        if (typeof input.enabled !== 'boolean') throw new HttpError(400, 'enabled must be boolean');
+        const changed = await mutateMcp(project, scope, () => mcpControl.toggle({ project, scope, name, enabled: input.enabled, revision: input.revision }, assertMcpIdle));
+        json(response, 200, changed);
+        return;
+      }
+      const mcpDelete = url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)$/);
+      if (mcpDelete && request.method === 'DELETE') {
+        const projectValue = url.searchParams.get('project');
+        const { project } = await mcpProject(projectValue);
+        const scope = url.searchParams.get('scope');
+        if (scope !== 'global' && scope !== 'project') throw new HttpError(400, 'scope must be global or project');
+        const result = await mutateMcp(project, scope, () => mcpControl.remove({ project, scope, name: decodeURIComponent(mcpDelete[1]!), revision: url.searchParams.get('revision') ?? undefined }, assertMcpIdle));
+        json(response, 200, result);
+        return;
+      }
       if (url.pathname === '/api/providers/custom' && request.method === 'GET') { json(response, 200, { providers: await customProviders.list() }); return; }
       if (url.pathname === '/api/providers/custom' && request.method === 'POST') {
         const input = await body(request);
@@ -634,7 +799,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const project = await requireDirectory(typeof input.path === 'string' ? input.path : root);
         if (typeof input.trusted !== 'boolean') { json(response, 400, { error: 'trusted must be boolean' }); return; }
         const affected = [...sessions.values()].filter((session) => resolve(session.project) === resolve(project));
-        if (affected.some((session) => session.running || session.busy || session.task)) throw new HttpError(409, 'Stop the active session before changing project trust');
+        if (mcpMutation || mcpOperations || openingCount || affected.some((session) => session.running || session.busy || session.task)) throw new HttpError(409, 'Stop the active session before changing project trust');
         trustStore.set(project, input.trusted);
         // Already-loaded extensions retain executable code. Dispose them when the trust decision changes.
         for (const session of affected) {
@@ -677,7 +842,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       if (url.pathname === '/api/session' && request.method === 'POST') {
         const input = await body(request);
-        if (modelMutation) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+        if (modelMutation || mcpMutation) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
         openingCount++;
         try {
         const project = typeof input.project === 'string' ? input.project : root;
@@ -724,6 +889,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         }
         if (action === 'prompt' && request.method === 'POST') {
           const input = await body(request);
+          if (mcpMutation || modelMutation) throw new HttpError(409, '服务连接正在更新，请稍后重试');
           if (session.readOnly || !session.session) { json(response, 409, { error: 'This session is read-only until a model is configured' }); return; }
           if (typeof input.message !== 'string' || !input.message.trim()) { json(response, 400, { error: 'message is required' }); return; }
           if (session.running) { json(response, 409, { error: 'Session is already running' }); return; }
@@ -825,13 +991,22 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       json(response, 404, { error: 'Not found' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProviderError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError ? error.status : 500;
       json(response, status, { error: error instanceof Error ? error.message : String(error) });
-    } finally { if (lockedSession) lockedSession.busy = false; }
+    } finally { if (lockedSession) { lockedSession.busy = false; void flushMcpReloads(); } }
   });
 
   await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(port, host, () => resolveListen()); });
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
-  return { url: 'http://' + host + ':' + actualPort + '/?token=' + encodeURIComponent(token), token, close() { return closing ??= (async () => { shuttingDown = true; for (const session of sessions.values()) void disposeSession(session); sessions.clear(); await Promise.allSettled([...retiring]); await new Promise<void>((resolveClose) => server.close(() => resolveClose())); })(); } };
+  return { url: 'http://' + host + ':' + actualPort + '/?token=' + encodeURIComponent(token), token, close() { return closing ??= (async () => {
+    shuttingDown = true;
+    const mcpClosing = mcpControl.close();
+    // A reload can attach fresh transports. Finish it before disposing the sessions.
+    await mcpWrite;
+    for (const session of sessions.values()) void disposeSession(session);
+    sessions.clear();
+    await Promise.allSettled([...retiring, mcpClosing]);
+    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+  })(); } };
 }
