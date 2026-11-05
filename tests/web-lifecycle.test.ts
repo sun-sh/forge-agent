@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, writeFile, readFile, stat, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, stat, access, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { AgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../src/web/server.js';
 import { loadWebToken } from '../src/web/auth.js';
@@ -11,6 +11,7 @@ const closers: Array<() => Promise<void>> = [];
 const streamClosers: Array<() => Promise<unknown>> = [];
 beforeEach(async () => {
   const home = await mkdtemp(join(tmpdir(), 'pforge-lifecycle-home-'));
+  vi.stubEnv('FORGE_AGENT_HOME', home);
   vi.stubEnv('PFORGE_HOME', home);
   vi.stubEnv('PI_CODING_AGENT_DIR', home);
   vi.stubEnv('PI_CODING_AGENT_SESSION_DIR', join(home, 'sessions'));
@@ -198,6 +199,49 @@ describe('Web lifecycle regressions', () => {
     expect((await api('api/sessions/' + first.id + '/prompt', { message: 'continue' })).status).toBe(409);
   });
 
+  it('canonicalizes session aliases before opening or mutating the live runtime', async () => {
+    vi.spyOn(ModelRuntime.prototype, 'getAvailable').mockResolvedValue([]);
+    const { root, home, api } = await fixture();
+    const file = await savedSession(root, home);
+    const aliasRoot = join(home, 'sessions-alias');
+    await symlink(join(home, 'sessions'), aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+    const aliasFile = join(aliasRoot, basename(file));
+    const responses = await Promise.all([
+      api('api/session', { project: root, sessionFile: file }),
+      api('api/session', { project: root, sessionFile: aliasFile })
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    const [canonical, alias] = await Promise.all(responses.map((response) => response.json())) as any[];
+    expect(alias.id).toBe(canonical.id);
+    const archived = await api('api/history', { path: aliasFile, action: 'archive' });
+    expect(archived.status).toBe(200);
+    expect(await (await api('api/sessions/' + canonical.id)).json()).toMatchObject({ history: { status: 'archived' } });
+    expect((await api('api/sessions/' + canonical.id + '/prompt', { message: 'blocked' })).status).toBe(409);
+  });
+
+  it('blocks history writes and forks during a model turn and requires restore before continuing', async () => {
+    const { root, home, api } = await fixture({ model: true });
+    const path = await savedSession(root, home);
+    const created = await (await api('api/session', { project: root, sessionFile: path, model: 'mock/mock' })).json() as any;
+    let release!: () => void;
+    const gate = new Promise<void>((done) => { release = done; });
+    const prompt = vi.spyOn(AgentSession.prototype, 'prompt').mockImplementation(async () => { await gate; });
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'working' })).status).toBe(202);
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledOnce());
+    try {
+      expect((await api('api/history', { path: created.sessionFile, action: 'archive' })).status).toBe(409);
+      expect((await api('api/sessions/' + created.id + '/fork', { entryId: 'any' })).status).toBe(409);
+    } finally { release(); }
+    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
+    expect((await api('api/history', { path, action: 'archive' })).status).toBe(200);
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'blocked' })).status).toBe(409);
+    expect((await api('api/sessions/' + created.id + '/resume-task', {})).status).toBe(409);
+    expect(prompt).toHaveBeenCalledOnce();
+    expect((await api('api/history', { path, action: 'restore' })).status).toBe(200);
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'allowed' })).status).toBe(202);
+    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
+  });
+
   it('allows a read-only historical session to continue after selecting a currently available Pi model', async () => {
     const { root, home, api, base, headers } = await fixture({ model: true });
     const file = await savedSession(root, home);
@@ -302,6 +346,52 @@ describe('Web lifecycle regressions', () => {
     expect(await response.json()).toMatchObject({ error: 'Compaction cancelled' });
     expect(await (await api(prefix)).json()).toMatchObject({ running: false, context: { compacting: false, error: 'Compaction cancelled' } });
     expect((await api(prefix + '/name', { name: 'unlocked' })).status).toBe(200);
+  });
+
+  it('scopes global, project and session memory and exposes Pi compaction settings', async () => {
+    const { root, api } = await fixture({ model: true });
+    const other = await mkdtemp(join(tmpdir(), 'pforge-memory-project-'));
+    const global = await api('api/memory', { project: root, layer: 'global', items: [{ text: 'Prefer concise answers', kind: 'preference' }] });
+    expect(global.status).toBe(200);
+    const globalSnapshot = await (await api('api/memory?project=' + encodeURIComponent(root))).json() as any;
+    expect(globalSnapshot.global.items[0].text).toBe('Prefer concise answers');
+    await api('api/memory', { project: root, layer: 'project', items: [{ text: 'Use pnpm here', kind: 'constraint' }] });
+    await api('api/memory', { project: other, layer: 'project', items: [{ text: 'Other project only', kind: 'fact' }] });
+    const isolated = await (await api('api/memory?project=' + encodeURIComponent(other))).json() as any;
+    expect(isolated.project.items.map((item: any) => item.text)).toEqual(['Other project only']);
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    await api('api/memory', { project: root, session: created.id, layer: 'session', items: [{ text: 'Keep this conversation focused', kind: 'decision' }] });
+    const sessionMemory = await (await api('api/memory?project=' + encodeURIComponent(root) + '&session=' + created.id)).json() as any;
+    expect(sessionMemory.session.items[0].text).toBe('Keep this conversation focused');
+    const sessionSnapshot = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(sessionSnapshot.context.memory.sessionItems).toBe(1);
+    const settings = await (await api('api/settings')).json() as any;
+    expect(settings.compaction).toMatchObject({ enabled: true, reserveTokens: expect.any(Number), keepRecentTokens: expect.any(Number) });
+    expect((await api('api/settings/compaction', { enabled: false })).status).toBe(200);
+    const disabledSnapshot = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(disabledSnapshot.context.autoCompaction).toBe(false);
+    expect((await api('api/settings/compaction', { enabled: true })).status).toBe(200);
+    const enabledSnapshot = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(enabledSnapshot.context.autoCompaction).toBe(true);
+  });
+
+  it('rejects memory edits while the affected session is running', async () => {
+    const { root, api } = await fixture({ model: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(AgentSession.prototype, 'prompt').mockImplementationOnce(async () => { await pending; });
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'hold' })).status).toBe(202);
+    await vi.waitFor(async () => {
+      const runningSnapshot = await (await api('api/sessions/' + created.id)).json() as any;
+      expect(runningSnapshot.running).toBe(true);
+    });
+    expect((await api('api/memory', { project: root, session: created.id, layer: 'session', items: [{ text: 'blocked' }] })).status).toBe(409);
+    release();
+    await vi.waitFor(async () => {
+      const finishedSnapshot = await (await api('api/sessions/' + created.id)).json() as any;
+      expect(finishedSnapshot.running).toBe(false);
+    });
   });
 
   it('rejects invalid input with specific HTTP status codes and serves all browser dependencies with a CSP', async () => {

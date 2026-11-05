@@ -11,7 +11,7 @@ import { startWebConsole } from '../src/web/server.js';
 const closers: Array<() => Promise<unknown>> = [];
 beforeEach(async () => {
   const home = await mkdtemp(join(tmpdir(), 'pforge-mode-home-'));
-  vi.stubEnv('PFORGE_HOME', home); vi.stubEnv('PI_CODING_AGENT_DIR', home);
+  vi.stubEnv('FORGE_AGENT_HOME', home); vi.stubEnv('PFORGE_HOME', home); vi.stubEnv('PI_CODING_AGENT_DIR', home);
   vi.stubEnv('PI_CODING_AGENT_SESSION_DIR', join(home, 'sessions'));
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });

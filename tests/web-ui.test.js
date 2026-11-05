@@ -115,6 +115,49 @@ async function client(initial = {}) {
 
 function streamText(app, delta) { app.handleEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } }); }
 
+describe('History navigation', () => {
+  it('keeps empty projects visible and places history operations in a keyboard accessible menu', async () => {
+    const { window, app, requests } = await client(), doc = window.document;
+    expect(doc.querySelector('[data-project-toggle] .project-icon svg')).not.toBeNull();
+    expect(doc.querySelector('.empty-sessions').textContent).toContain('还没有对话');
+    app.state.sessionId = 'source';
+    app.applySnapshot({ id: 'source', title: 'Current session', sessionFile: 'C:\\sessions\\source.jsonl', running: false, history: { status: 'active', pinned: false }, forkableEntries: ['user'], messages: [] });
+    doc.getElementById('conversation-menu-button').click();
+    const menu = doc.getElementById('session-menu');
+    expect(menu.classList.contains('hidden')).toBe(false);
+    expect(doc.activeElement.dataset.historyAction).toBe('rename');
+    menu.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    expect(doc.activeElement.dataset.historyAction).toBe('pin');
+    menu.querySelector('[data-history-action="rename"]').click();
+    expect(doc.getElementById('name-modal').classList.contains('hidden')).toBe(false);
+    expect(doc.getElementById('session-name').value).toBe('Current session');
+    expect(doc.querySelector('.conversation-header #rename-button')).toBeNull();
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('starts answer forks with an empty draft and preserves the source draft without sending a model prompt', async () => {
+    const { window, app, requests } = await client(), doc = window.document;
+    app.state.sessionId = 'source';
+    const message = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Saved answer' }] };
+    app.applySnapshot({ id: 'source', title: 'Source', sessionFile: 'C:\\sessions\\source.jsonl', running: false, history: { status: 'active', pinned: false }, forkableEntries: ['answer'], entries: [{ id: 'answer', type: 'message', message }] });
+    doc.getElementById('followup-prompt').value = 'Only belongs to the source';
+    const originalFetch = window.fetch;
+    window.fetch = async (url, init) => {
+      if (url.endsWith('/fork')) {
+        expect(JSON.parse(init.body)).toEqual({ entryId: 'answer' });
+        return { ok: true, json: async () => ({ path: 'C:\\sessions\\fork.jsonl', project: 'C:\\repo', draft: '', origin: { kind: 'continue', sourceTitle: 'Source' } }) };
+      }
+      return originalFetch(url, init);
+    };
+    doc.querySelector('[data-fork-entry="answer"]').click();
+    await vi.waitFor(() => expect(app.state.sessionId).toBe('created'));
+    await vi.waitFor(() => expect(app.state.loadingSession).toBe(false));
+    expect(doc.getElementById('followup-prompt').value).toBe('');
+    expect(JSON.parse(window.sessionStorage.getItem('pforge.draft.C:\\sessions\\source.jsonl'))).toBe('Only belongs to the source');
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+});
+
 describe('Composer commands and context', () => {
   function type(window, value, id = 'prompt') {
     const input = window.document.getElementById(id); input.value = value; input.focus(); input.setSelectionRange(value.length, value.length); input.dispatchEvent(new window.Event('input', { bubbles: true })); return input;
@@ -721,7 +764,7 @@ describe('Web client integration', () => {
     const { window, app, streams } = await client();
     app.state.sessionId = 'mcp-session'; app.connect('mcp-session');
     await app.openSettings('mcp');
-    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(6);
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(7);
     const root = window.document.getElementById('mcp-settings');
     root.querySelector('[data-action="add"]').click();
     const name = root.querySelector('[name="name"]'); name.value = 'unsaved-service';
@@ -1262,6 +1305,45 @@ describe('Web client integration', () => {
     await vi.waitFor(() => expect(app.state.model.key).toBe('mock/b'));
     expect(window.document.querySelector('#followup-model-picker-button [data-model-label]').textContent).toBe('b');
     expect(requests.find((request) => request.url === '/api/settings' && request.method === 'POST').body).toContain('mock/b');
+  });
+
+  it('manages scoped memory and Pi automatic compaction from one settings surface', async () => {
+    const { window, app, requests } = await client();
+    app.state.sessionId = 'memory-session'; app.state.readOnly = false;
+    app.applySnapshot({ id: 'memory-session', project: 'C:\\repo', running: false, outcome: 'completed', history: { status: 'active', pinned: false }, messages: [], context: { autoCompaction: true, compactions: 2 } });
+    const fetcher = window.fetch;
+    const memoryWrites = [];
+    window.fetch = async (url, init = {}) => {
+      if (url.startsWith('/api/memory')) { if (init.method === 'POST') memoryWrites.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ document: { layer: 'project', items: [] }, global: { layer: 'global', items: [{ id: 'global-1', text: 'Prefer concise answers', kind: 'preference', enabled: true }] }, project: { layer: 'project', items: [] }, session: { layer: 'session', items: [] }, compaction: { count: 2 } }) }; }
+      if (url === '/api/settings/compaction') { requests.push({ url, ...init }); return { ok: true, status: 200, json: async () => ({ enabled: JSON.parse(init.body).enabled }) }; }
+      return fetcher(url, init);
+    };
+    await app.openSettings('memory');
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(7);
+    expect(window.document.querySelectorAll('[data-memory-layer]')).toHaveLength(3);
+    expect(window.document.querySelector('[data-memory-layer="global"] textarea').value).toBe('Prefer concise answers');
+    const project = window.document.querySelector('[data-memory-layer="project"]');
+    project.querySelector('[data-memory-new-text]').value = 'Keep generated files untouched';
+    project.querySelector('[data-memory-add]').click();
+    project.querySelector('[data-memory-save]').click();
+    await vi.waitFor(() => expect(memoryWrites.some((request) => request.layer === 'project')).toBe(true));
+    const toggle = window.document.getElementById('memory-auto-compaction'); toggle.click();
+    await vi.waitFor(() => expect(requests.some((request) => request.url === '/api/settings/compaction')).toBe(true));
+    expect(window.document.querySelector('.memory-summary').textContent).toContain('三层记忆');
+  });
+
+  it('offers edit retry for failed sessions by branching the last user request', async () => {
+    const { window, app, requests } = await client();
+    app.state.sessionId = 'failed-session';
+    app.applySnapshot({ id: 'failed-session', title: 'Failed task', project: 'C:\\repo', sessionFile: 'C:\\sessions\\failed.jsonl', running: false, outcome: 'failed', error: 'verification failed', history: { status: 'active', pinned: false }, lastUserEntryId: 'failed-user', forkableEntries: ['failed-user'], entries: [{ id: 'failed-user', type: 'message', message: { role: 'user', content: 'Fix the failing test' } }], messages: [{ role: 'user', content: 'Fix the failing test' }] });
+    const button = window.document.getElementById('edit-retry-button');
+    expect(button.classList.contains('hidden')).toBe(false);
+    const fetcher = window.fetch;
+    window.fetch = async (url, init = {}) => url.endsWith('/fork') ? { ok: true, status: 201, json: async () => ({ path: 'C:\\sessions\\retry.jsonl', project: 'C:\\repo', draft: 'Fix the failing test', origin: { kind: 'edit', sourceTitle: 'Failed task' } }) } : fetcher(url, init);
+    button.click();
+    await vi.waitFor(() => expect(app.state.sessionId).toBe('created'));
+    await vi.waitFor(() => expect(window.document.getElementById('followup-prompt').value).toBe('Fix the failing test'));
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
   });
 
   it('restores an authoritative session mode, preserves a draft, handles rejected switches and locks mode during a run', async () => {

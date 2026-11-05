@@ -14,10 +14,13 @@ It builds on the complete [Pi Coding Agent](https://github.com/earendil-works/pi
 
 ## What you can do
 
-- **Work by project:** expand, search, and reopen project history; retain drafts; inspect changed files and diffs.
+- **Work by project:** expand, search, and reopen project history; retain drafts; inspect changed files and diffs. Session menus support rename, pin, archive, trash, and restore.
+- **Export reusable records:** export the current or historical conversation as Markdown or structured JSON without changing the source session or branch.
+- **Branch a turn:** message actions can edit a user message into a new branch or continue from a complete answer. The original session remains intact, and the branch uses Pi's native session file and context.
 - **Choose how to work:** Agent uses **Adaptive execution** by default. Expand the small arrow beside Agent to opt into **Plan and execute**; Plan investigates and proposes a plan, while Ask reads code to answer questions. Select the project, mode, model, and reasoning effort below the composer.
 - **Connect your models:** add a compatible provider in settings, discover models with a searchable multi-select, or enter model IDs manually. Test an actual model invocation before using it.
 - **Manage skills:** search global and project skills, preview instructions, enable or disable them, and import local skill directories. Saved changes update idle sessions and their command menus.
+- **Use scoped memory and compaction:** manage global, project, and session memory from Settings. Project memory stays with its folder, session memory follows the Pi session tree and forks, and the composer exposes Pi's context usage and automatic compaction state.
 - **Connect external tools:** add local or HTTP services in MCP settings, import configuration, complete browser OAuth, configure individual tools, and inspect each session's connection state.
 - **Inspect completion evidence:** use the planned workflow for complex tasks, with visible investigation, planning, implementation, verification, and review stages.
 
@@ -96,6 +99,8 @@ Type `/` in the composer or select **Commands** (`命令`) below it to search fo
 The menu separates actions, skills, and templates; extensions appear when loaded. Chinese titles distinguish model selection (`/model`) from working modes (`/mode`), and a fully typed command shows only its exact match. Select the **Skills** (`技能`) category to load the current project's skill list. Choosing a skill fills `/skill:name` into the composer so you can add the task before sending. Browsing and selecting skills do not request a model; Pi handles execution. The model can also read suitable skills on demand. Unavailable actions explain why, and unknown commands stay in the composer for editing. Model and reasoning changes selected during a run still apply to the next message.
 
 Context usage and **Compact** (`压缩`) stay below the composer. Open the context details for cumulative input/output, cache usage, catalog-estimated cost, and compaction count; cumulative usage is shown separately from current window usage. Manual compaction calls the current model, requires an idle session, and can be cancelled. Conversation history is retained. After compaction, the old usage estimate is hidden until the next model response updates it.
+
+Open **Settings → Memory** (`设置 → 记忆`) to maintain three layers of reference material: global memory is reused across projects, project memory is injected only for the current folder, and session memory is stored in the Pi session tree and retained by forks. Each item can be marked as a fact, preference, decision, or constraint and can be disabled independently. Memory is injected as user reference material and never grants tool permissions. The page also shows Pi's automatic compaction switch, `reserveTokens`, `keepRecentTokens`, and the number of compactions in the current session.
 
 ## Manage skills
 
@@ -181,13 +186,15 @@ forge-agent -C path/to/project -p "Fix the failing tests"
 
 The Web API-key editor covers common compatible services, and MCP has a dedicated settings entry. Provider OAuth still uses `/login` in the terminal interface. Pi manages advanced skill and extension configuration; the Web client uses the same local configuration.
 
+Sessions are stored under `FORGE_AGENT_HOME/sessions`. The sidebar groups them by project, and menu actions persist through Pi session metadata. Archive and trash change the Web presentation state while retaining the original session file for recovery. A fork creates a new Pi session file and records its origin; it does not send a model request automatically. Editing a user-message fork places the text back in the composer.
+
 ## Validation and development
 
 | Command | What it checks |
 | --- | --- |
 | `npm run check` | Type checking, active regression tests, build, and CLI/bin integration. |
-| `npm run test:web` | A real Chromium browser against local fixture services: model setup, MCP authorization and tool settings, session connections and recovery, task progress, Git diffs, and narrow layouts. |
-| `npm run eval:smoke` | Two fixed tasks with scripted solutions, executed through actual Pi tools and workflows, then checked with independent assertions, file-change checks, and completion checks. |
+| `npm run test:web` | A real Chromium browser against local fixture services: model setup, scoped memory and Pi compaction controls, MCP authorization and tool settings, history menus, archive/restore, message forks, session connections and recovery, task progress, Git diffs, and narrow layouts. |
+| `npm run eval:smoke` | Fixed coding tasks with scripted solutions, executed through actual Pi tools and workflows, then checked with held-out assertions, workspace integrity, verification gates, and completion gates. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | The same task set with a configured real model. Sends task content to the provider and incurs its usage charges. |
 
 Browser acceptance needs Edge, Chrome, or Chromium; set `FORGE_AGENT_TEST_BROWSER` to another executable if necessary. It uses a temporary project, isolated data directory, and browser profile. See [evaluation](docs/evaluation.md) for methods, output paths, and limits. Changes to completion, retry state, trust, persistence, or security require regression tests; follow [AGENTS.md](AGENTS.md).
@@ -200,6 +207,7 @@ Browser acceptance needs Edge, Chrome, or Chromium; set `FORGE_AGENT_TEST_BROWSE
 | Global MCP configuration and OAuth credentials | `FORGE_AGENT_HOME/mcp.json` and `FORGE_AGENT_HOME/mcp-auth.json` |
 | Project MCP configuration | `<project>/.pi/mcp.json`, loaded only after project trust |
 | Sessions | `FORGE_AGENT_HOME/sessions` |
+| Global and project memory | `FORGE_AGENT_HOME/memory`; session memory is stored in the Pi session tree |
 | Verification evidence and raw output | `FORGE_AGENT_HOME/verification` |
 | Local gateway access credential | `FORGE_AGENT_HOME/web/access-token` |
 
@@ -214,8 +222,8 @@ Local operation describes where the client, process, and data live. With a remot
 The current release is intended for local use, development, and early feedback. The Web interface is in Chinese, and further work includes:
 
 - Advanced provider settings and resource management; some provider sign-in, skill, and extension configuration currently uses Pi's TUI/configuration.
-- Session archive, fork, export, and background tasks, plus file references and attachment input.
-- Real-model evaluation on larger repositories, comparing direct and staged workflows for success rate, latency, and cost.
+- An independent background-task queue, plus file references and attachment input; archive, trash, rename, pin, restore, message forks, and session export are already persisted through Pi sessions.
+- Real-model evaluation on larger repositories, comparing direct and staged workflows for quality gates, success rate, latency, and cost.
 - Keyboard accessibility, installation, upgrades, and desktop distribution. No npm package, GitHub Release, or desktop installer has been published.
 
 See the [product audit](docs/product-audit.md) (Chinese) for the full status and priorities. Report issues with sanitized reproductions through [Issues](https://github.com/sun-sh/forge-agent/issues), or contribute within the boundaries above.

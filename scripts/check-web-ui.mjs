@@ -32,6 +32,7 @@ process.env.FORGE_AGENT_HOME = home;
 process.env.PFORGE_HOME = home;
 process.env.PI_CODING_AGENT_DIR = home;
 process.env.PI_CODING_AGENT_SESSION_DIR = join(home, 'sessions');
+for (const key of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL_NAME', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME']) delete process.env[key];
 
 const reply = '## Smoke check passed\n\n**Markdown** and streamed output work.\n\n- Live headings and lists\n- Tables and code while streaming\n\n| Check | Result |\n|---|---|\n| Local agent | OK |\n\n```diff\n-old\n+new\n```';
 let modelRequests = 0;
@@ -103,6 +104,7 @@ try {
   });
   const evaluate = async (expression) => { const result = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails)); return result.result.value; };
   const waitFor = async (expression) => { const deadline = Date.now() + 20000; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression); };
+  const waitHistoryIdle = () => waitFor("!document.getElementById('history-filter').disabled && document.getElementById('session-menu').classList.contains('hidden')");
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const pointerClick = async (selector) => {
     const point = await evaluate(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); node.scrollIntoView({block:'nearest'}); const rect = node.getBoundingClientRect(); return {x:rect.left+rect.width/2,y:rect.top+rect.height/2}; })()`);
@@ -166,11 +168,11 @@ try {
   assert.equal(await evaluate(`Object.values(localStorage).join('').includes('local-test-only') || Object.values(sessionStorage).join('').includes('local-test-only')`), false);
   await click('[data-settings-tab="model"]');
   await waitFor(`!!document.querySelector('#model-provider-filter')`);
-  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 6);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 7);
   assert.equal(await evaluate(`document.querySelectorAll('.model-card').length`), 2);
   assert.equal(await evaluate(`document.querySelector('#default-model')`), null);
   await screenshot('settings');
-  for (const tab of ['provider', 'project', 'system', 'model', 'skills', 'mcp']) {
+  for (const tab of ['provider', 'project', 'system', 'model', 'memory', 'skills', 'mcp']) {
     await click(`[data-settings-tab="${tab}"]`);
     assert.equal(await evaluate(`document.querySelectorAll('[data-settings-panel]:not(.hidden)').length`), 1);
   }
@@ -529,7 +531,56 @@ try {
   await waitFor(`document.querySelectorAll('[data-session]').length >= 2`);
   await evaluate(`Array.from(document.querySelectorAll('[data-session]')).find(node => node.textContent.includes('历史会话验收')).click()`);
   await waitFor(`document.querySelector('.turn.assistant h2')?.textContent === '历史已恢复'`);
+  const historyRequests = modelRequests;
   await screenshot('history');
+  await waitHistoryIdle();
+  await evaluate(`(() => { const row = [...document.querySelectorAll('.session-row')].find(node => node.textContent.includes('历史会话验收')); row.querySelector('[data-session-menu]').click(); })()`);
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  assert.ok((await evaluate(`document.getElementById('session-menu').textContent`)).includes('重命名'));
+  assert.ok((await evaluate(`document.getElementById('session-menu').textContent`)).includes('归档'));
+  assert.ok((await evaluate(`document.getElementById('session-menu').textContent`)).includes('导出 Markdown'));
+  await click('[data-history-action="export-markdown"]');
+  await waitFor(`document.getElementById('toast-root').textContent.includes('Markdown 会话已导出')`);
+  await waitHistoryIdle();
+  await evaluate(`(() => { const row = [...document.querySelectorAll('.session-row')].find(node => node.textContent.includes('历史会话验收')); row.querySelector('[data-session-menu]').click(); })()`);
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  await click('[data-history-action="pin"]');
+  await waitFor(`!!document.querySelector('.session-pin') && !document.getElementById('history-filter').disabled`);
+  await waitHistoryIdle();
+  await evaluate(`(() => { const row = [...document.querySelectorAll('.session-row')].find(node => node.textContent.includes('历史会话验收')); row.querySelector('[data-session-menu]').click(); })()`);
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  await click('[data-history-action="archive"]');
+  await waitFor(`![...document.querySelectorAll('[data-session]')].some(node => node.textContent.includes('历史会话验收')) && !document.getElementById('history-filter').disabled`);
+  await evaluate(`document.getElementById('history-filter').value = 'archived'; document.getElementById('history-filter').dispatchEvent(new Event('change'))`);
+  await waitFor(`!![...document.querySelectorAll('[data-session]')].find(node => node.textContent.includes('历史会话验收')) && !document.getElementById('history-filter').disabled`);
+  await evaluate(`(() => { const row = [...document.querySelectorAll('.session-row')].find(node => node.textContent.includes('历史会话验收')); row.querySelector('[data-session-menu]').click(); })()`);
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  await click('[data-history-action="rename"]');
+  await waitFor(`!document.getElementById('name-modal').classList.contains('hidden')`);
+  await evaluate(`document.getElementById('session-name').value = '历史会话验收 · 已命名'; document.getElementById('name-form').requestSubmit()`);
+  await waitFor(`document.getElementById('run-title').textContent === '历史会话验收 · 已命名' && !document.getElementById('history-filter').disabled`);
+  await waitFor(`!![...document.querySelectorAll('[data-session]')].find(node => node.textContent.includes('历史会话验收 · 已命名'))`);
+  await waitHistoryIdle();
+  await evaluate(`(() => { const row = [...document.querySelectorAll('.session-row')].find(node => node.textContent.includes('历史会话验收 · 已命名')); row.querySelector('[data-session-menu]').click(); })()`);
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  await click('[data-history-action="restore"]');
+  await waitFor(`document.getElementById('history-filter').value === 'archived' && ![...document.querySelectorAll('[data-session]')].some(node => node.textContent.includes('历史会话验收 · 已命名')) && !document.getElementById('history-filter').disabled`);
+  await evaluate(`document.getElementById('history-filter').value = 'active'; document.getElementById('history-filter').dispatchEvent(new Event('change'))`);
+  await waitFor(`!![...document.querySelectorAll('[data-session]')].find(node => node.textContent.includes('历史会话验收 · 已命名')) && !document.getElementById('history-filter').disabled`);
+  await pointerClick('#conversation-menu-button');
+  await waitFor(`!document.getElementById('session-menu').classList.contains('hidden')`);
+  assert.equal(await evaluate(`(() => { const r = document.getElementById('session-menu').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()`), true);
+  await screenshot('history-menu');
+  await pointerClick('[data-history-action="trash"]');
+  await waitFor(`document.getElementById('history-notice-text').textContent.includes('回收站') && !document.getElementById('history-filter').disabled`);
+  assert.equal(await evaluate(`document.getElementById('followup-send').disabled`), true);
+  await evaluate(`document.getElementById('history-filter').value = 'trashed'; document.getElementById('history-filter').dispatchEvent(new Event('change'))`);
+  await waitFor(`!![...document.querySelectorAll('[data-session]')].find(node => node.textContent.includes('历史会话验收 · 已命名'))`);
+  await click('#restore-conversation');
+  await waitFor(`document.getElementById('history-notice').classList.contains('hidden') && !document.getElementById('history-filter').disabled`);
+  await evaluate(`document.getElementById('history-filter').value = 'active'; document.getElementById('history-filter').dispatchEvent(new Event('change'))`);
+  await waitFor(`!![...document.querySelectorAll('[data-session]')].find(node => node.textContent.includes('历史会话验收 · 已命名'))`);
+  assert.equal(modelRequests, historyRequests);
   const previousSession = await evaluate("JSON.parse(sessionStorage.getItem('pforge.activeSession')).id");
   const gatewayToken = server.token;
   const previousRequests = modelRequests;
@@ -543,8 +594,22 @@ try {
   assert.equal(await evaluate("document.getElementById('auth-modal').classList.contains('hidden')"), true);
   assert.equal(modelRequests, previousRequests);
   await screenshot('restart-recovery');
+  await waitFor(`document.querySelectorAll('[data-fork-entry]').length >= 1`);
+  await evaluate(`document.querySelector('[data-fork-entry]').click()`);
+  await waitFor(`document.getElementById('fork-origin').classList.contains('hidden') === false && document.getElementById('followup-prompt').value.length > 0 && !document.getElementById('conversation-menu-button').disabled`);
+  assert.ok((await evaluate(`document.getElementById('fork-origin-label').textContent`)).includes('历史会话验收'));
+  await screenshot('conversation-fork');
+  await click('#fork-origin');
+  await waitFor(`document.getElementById('fork-origin').classList.contains('hidden') && !!document.querySelector('.turn.assistant [data-fork-entry]:not(:disabled)')`);
+  assert.equal(await evaluate(`document.getElementById('followup-prompt').value`), draft);
+  await evaluate(`document.querySelector('.turn.assistant [data-fork-entry]').click()`);
+  await waitFor(`!document.getElementById('fork-origin').classList.contains('hidden') && document.getElementById('followup-prompt').value === '' && !document.getElementById('conversation-menu-button').disabled`);
+  assert.equal(await evaluate(`document.querySelector('.turn.assistant h2')?.textContent`), '历史已恢复');
+  assert.equal(modelRequests, previousRequests);
+  await screenshot('answer-fork');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await waitFor(`document.getElementById('sidebar').getBoundingClientRect().right <= 1`);
+  assert.equal(await evaluate(`document.querySelectorAll('#toast-root > .toast').length <= 2`), true);
   await screenshot('mobile');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   await evaluate(`document.getElementById('followup-prompt').value=''; document.getElementById('followup-prompt').dispatchEvent(new Event('input'))`);
@@ -610,8 +675,8 @@ try {
   assert.equal(await evaluate(`document.getElementById('drawer-body').scrollWidth <= document.getElementById('drawer-body').clientWidth`), true);
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   assert.deepEqual(failures, []);
-  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['composer slash commands and keyboard selection', 'loaded Pi skills and prompt templates in command menu', 'context estimates and compaction beneath composer', 'manual compaction cancellation and unknown post-compaction usage', '390px command and context popovers', 'no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'six settings tabs', 'skill content preview, Pi-native toggle persistence, local directory import/removal', 'active session skill command reload without a model request', 'centered composer labels and SVG chevrons', '390px skills settings layout', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'composer stop and continuation with real Pi cancellation', 'interrupted state survives page refresh without replay', 'continuation returns to send on completion', 'right-side Git review outside the chat', 'diff scroll and selection survive refresh', 'review changes to a modal drawer at narrow widths', '390px review drawer and keyboard focus', 'project collapse', 'history restore', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
-  console.log('Web browser smoke checks passed: slash commands, context usage, manual compaction and cancellation, MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, right-side Git review with independent scrolling and retained selection, narrow-screen review drawer and keyboard focus, persistent drafts and desktop/mobile layout. Screenshots: ' + output);
+  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['composer slash commands and keyboard selection', 'loaded Pi skills and prompt templates in command menu', 'context estimates and compaction beneath composer', 'manual compaction cancellation and unknown post-compaction usage', '390px command and context popovers', 'no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'seven settings tabs including memory and Pi compaction controls', 'skill content preview, Pi-native toggle persistence, local directory import/removal', 'active session skill command reload without a model request', 'centered composer labels and SVG chevrons', '390px skills settings layout', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'composer stop and continuation with real Pi cancellation', 'interrupted state survives page refresh without replay', 'continuation returns to send on completion', 'right-side Git review outside the chat', 'diff scroll and selection survive refresh', 'review changes to a modal drawer at narrow widths', '390px review drawer and keyboard focus', 'project collapse', 'history restore', 'history rename pin archive trash restore without model requests', 'Markdown session export from history menu', 'keyboard and pointer session menus within viewport', 'native Pi user-edit and answer-continuation forks', 'fork source navigation and per-session draft isolation', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
+  console.log('Web browser smoke checks passed: slash commands, context usage, manual compaction and cancellation, memory layers and Pi compaction controls, MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, right-side Git review with independent scrolling and retained selection, narrow-screen review drawer and keyboard focus, history menus, recoverable trash, per-message Pi forks, isolated drafts and desktop/mobile layout. Screenshots: ' + output);
 } catch (error) {
   try { await captureFailure?.(error); } catch { /* Preserve the original assertion failure. */ }
   throw error;

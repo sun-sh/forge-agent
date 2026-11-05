@@ -15,5 +15,13 @@ export const tasks = [
     solution: 'export function parsePort(value) { if (typeof value !== "string" || !/^[0-9]+$/.test(value)) return null; const port = Number(value); return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null; }\n',
     visible: 'assert.equal(mod.parsePort("4328"), 4328); assert.equal(mod.parsePort("12tail"), null);',
     heldOut: 'for (const value of ["0", "65536", "1.2", " 80", "80 ", "+80", "", null, 80]) assert.equal(mod.parsePort(value), null); assert.equal(mod.parsePort("65535"), 65535); assert.equal(mod.parsePort("00080"), 80);'
+  },
+  {
+    id: 'stable-dedupe',
+    prompt: 'Fix uniqueStable in solution.mjs. Return a new array with duplicate values removed while preserving the first occurrence order. Do not mutate the input array. Support primitive values and object references. Preserve notes.txt and do not alter verify.mjs. Use the configured verification.',
+    initial: 'export function uniqueStable(values) { return values; }\n',
+    solution: 'export function uniqueStable(values) { return [...new Set(values)]; }\n',
+    visible: 'assert.deepEqual(mod.uniqueStable(["a", "b", "a"]), ["a", "b"]);',
+    heldOut: 'const object = { id: 1 }; const input = [object, "x", object, "x", "y"]; const output = mod.uniqueStable(input); assert.deepEqual(output, [object, "x", "y"]); assert.notStrictEqual(output, input); assert.deepEqual(input, [object, "x", object, "x", "y"]);'
   }
 ];

@@ -46,6 +46,7 @@ try {
     const gateway = await startWebConsole({ cwd: project, port: 0 }); const origin = new URL(gateway.url).origin;
     const api = async (path, input) => { const response = await fetch(origin + '/api/' + path, { headers: { 'content-type': 'application/json', 'x-pforge-token': gateway.token }, ...(input ? { method: 'POST', body: JSON.stringify(input) } : {}) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || String(response.status)); return data; };
     let snapshot, session, error;
+    let heldOutPass = false, verificationGate = false, workspaceIntegrity = false, taskCompletion = false;
     try {
       await api('projects/trust', { path: project, trusted: true });
       session = await api('session', { project, mode: 'agent', model, title: 'Evaluation ' + task.id });
@@ -56,17 +57,24 @@ try {
       const evaluator = join(root, task.id + '-held-out.mjs');
       await writeFile(evaluator, 'import assert from "node:assert/strict"; import * as mod from ' + JSON.stringify(pathToFileURL(join(project, 'solution.mjs')).href) + ';\n' + task.heldOut + '\nconsole.log("held-out assertions passed");');
       await execute(process.execPath, [evaluator], { cwd: root, windowsHide: true, timeout: 30000 });
-      if (await readFile(join(project, 'notes.txt'), 'utf8') !== 'pre-existing user work\n') throw new Error('Unrelated user file was modified');
-      if (await readFile(join(project, 'verify.mjs'), 'utf8') !== visible) throw new Error('Visible verification was modified');
-      if (snapshot.verification.status !== 'passed' || (workflow === 'planned' && snapshot.task?.status !== 'completed')) throw new Error(snapshot.task?.error || snapshot.error || 'Completion gate did not pass');
+      heldOutPass = true;
+      const notesIntact = await readFile(join(project, 'notes.txt'), 'utf8') === 'pre-existing user work\n';
+      const verificationIntact = await readFile(join(project, 'verify.mjs'), 'utf8') === visible;
+      workspaceIntegrity = notesIntact && verificationIntact;
+      if (!workspaceIntegrity) throw new Error('Workspace integrity gate failed');
+      verificationGate = snapshot.verification.status === 'passed';
+      taskCompletion = workflow === 'planned' ? snapshot.task?.status === 'completed' : snapshot.outcome === 'completed';
+      if (!verificationGate || !taskCompletion) throw new Error(snapshot.task?.error || snapshot.error || 'Completion gate did not pass');
     } catch (failure) { error = failure.message; }
     finally { await gateway.close(); }
-    const result = { id: task.id, passed: !error, error, durationMs: Math.round(performance.now() - started), modelRequests: real ? null : requests - beforeRequests, taskStatus: snapshot?.task?.status ?? snapshot?.outcome, verification: snapshot?.verification?.status, repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0, stats: snapshot?.state ?? null, workspace: project, sessionFile: snapshot?.sessionFile };
+    const qualityPass = !error && heldOutPass && verificationGate && workspaceIntegrity && taskCompletion;
+    const latencyMs = Math.round(performance.now() - started);
+    const result = { id: task.id, passed: qualityPass, qualityPass, heldOutPass, verificationGate, workspaceIntegrity, taskCompletion, error, durationMs: latencyMs, latencyMs, modelRequests: real ? null : requests - beforeRequests, taskStatus: snapshot?.task?.status ?? snapshot?.outcome, verification: snapshot?.verification?.status, repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0, stats: snapshot?.state ?? null, workspace: project, sessionFile: snapshot?.sessionFile };
     results.push(result); console.log((result.passed ? 'PASS ' : 'FAIL ') + task.id + ' · ' + result.durationMs + 'ms' + (error ? ' · ' + error : ''));
     await writeFile(join(output, task.id + '.json'), JSON.stringify({ ...result, task: snapshot?.task, verification: snapshot?.verification }, null, 2));
   }
 } finally { if (mock) await new Promise((done) => { mock.close(done); mock.closeAllConnections(); }); }
-const report = { schemaVersion: 1, timestamp: new Date().toISOString(), kind: real ? 'real-model' : 'scripted-smoke', model, workflow, note: real ? 'Small public task suite; results are not a frontier benchmark.' : 'Known solutions are scripted by a local fixture. These results validate tool execution, evidence, completion and evaluation plumbing, not model coding ability.', passed: results.filter((result) => result.passed).length, total: results.length, results };
+const report = { schemaVersion: 2, timestamp: new Date().toISOString(), kind: real ? 'real-model' : 'scripted-smoke', model, workflow, note: real ? 'Small public task suite; results are not a frontier benchmark.' : 'Known solutions are scripted by a local fixture. These results validate tool execution, evidence, completion and evaluation plumbing, not model coding ability.', metrics: { qualityPassRate: results.length ? results.filter((result) => result.qualityPass).length / results.length : 0, heldOutPassRate: results.length ? results.filter((result) => result.heldOutPass).length / results.length : 0, verificationGateRate: results.length ? results.filter((result) => result.verificationGate).length / results.length : 0, workspaceIntegrityRate: results.length ? results.filter((result) => result.workspaceIntegrity).length / results.length : 0, taskCompletionRate: results.length ? results.filter((result) => result.taskCompletion).length / results.length : 0, averageLatencyMs: results.length ? Math.round(results.reduce((sum, result) => sum + result.latencyMs, 0) / results.length) : 0, totalToolCalls: results.reduce((sum, result) => sum + result.toolCalls, 0), totalRepairs: results.reduce((sum, result) => sum + (result.repairs || 0), 0) }, passed: results.filter((result) => result.passed).length, total: results.length, results };
 await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2));
 console.log(report.kind + ': ' + report.passed + '/' + report.total + ' · ' + join(output, 'report.json'));
 process.exitCode = report.passed === report.total ? 0 : 1;

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, join, resolve, basename, relative, isAbsolute, sep } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,8 @@ import { McpControlPlane, McpError } from './mcp.js';
 import { McpRuntimeView } from './mcp-runtime.js';
 import { isRuntimeCommand, runtimeCommands } from './commands.js';
 import { SkillsControl, SkillError } from './skills.js';
+import { changeHistory, exportSession, forkable, forkHistory, forkOrigin, HistoryError, historyPath, historyState, renameHistory, sessionTitle } from './history.js';
+import { MEMORY_LAYERS, MemoryError, MemoryStore, type MemoryLayer } from './memory.js';
 
 export interface WebConsoleOptions { cwd: string; host?: string; port?: number; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
@@ -70,6 +72,15 @@ const MAX_EVENT_BYTES = 2_000_000;
 const MAX_LIVE_SESSIONS = 12;
 class HttpError extends Error { constructor(public readonly status: number, message: string) { super(message); this.name = 'HttpError'; } }
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }
+function attachment(res: ServerResponse, status: number, value: { body: string; contentType: string; filename: string }) {
+  const encoded = encodeURIComponent(value.filename);
+  res.writeHead(status, {
+    'content-type': value.contentType,
+    'content-disposition': `attachment; filename="${value.filename.replace(/["\\\r\n]/g, '_')}"; filename*=UTF-8''${encoded}`,
+    'cache-control': 'no-store'
+  });
+  res.end(value.body);
+}
 async function body(req: IncomingMessage): Promise<any> { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); size += b.length; if (size > MAX_BODY) throw new HttpError(413, 'Request body too large'); chunks.push(b); } if (!chunks.length) return {}; let parsed: unknown; try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'Request body must be valid JSON'); } if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'Request body must be a JSON object'); return parsed; }
 const ASSETS = ['index.html', 'app.js', 'style.css', 'render.js', 'stream.js', 'providers.js', 'mcp.js', 'skills.js', 'commands.js', 'vendor/marked.js', 'vendor/purify.js'];
 function asset(root: string, pathname: string) { const file = pathname === '/' ? 'index.html' : pathname.slice(1); if (!ASSETS.includes(file)) throw new HttpError(404, 'Invalid asset path'); return join(root, file); }
@@ -85,6 +96,12 @@ async function requireDirectory(path: string) {
   try { info = await stat(target); } catch { throw new HttpError(400, 'Project path does not exist'); }
   if (!info.isDirectory()) throw new HttpError(400, 'Project path is not a directory');
   return target;
+}
+async function sameDirectory(left: string, right: string) {
+  try {
+    const [a, b] = await Promise.all([realpath(left), realpath(right)]);
+    return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+  } catch { return process.platform === 'win32' ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right); }
 }
 async function projectList(root: string) { const entries = await readdir(root, { withFileTypes: true }); const projects = [{ path: root, name: basename(root) }]; for (const entry of entries) { if (!entry.isDirectory() || entry.name.startsWith('.')) continue; const path = join(root, entry.name); if (existsSync(join(path, '.git')) || existsSync(join(path, 'package.json'))) projects.push({ path, name: entry.name }); } return projects; }
 function modelKey(model: any) { return model.provider + '/' + model.id; }
@@ -174,8 +191,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   const customProviders = new CustomProviders(home, modelRuntime);
   const mcpControl = new McpControlPlane(home);
   const skillsControl = new SkillsControl(home);
+  const memoryStore = new MemoryStore(home);
   let modelMutation = false;
   let mcpMutation = false;
+  let memoryMutation = false;
   let mcpOperations = 0;
   let mcpWrite: Promise<void> = Promise.resolve();
   let openingCount = 0;
@@ -188,6 +207,29 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   async function mcpProject(value: unknown): Promise<{ project: string }> {
     const project = await requireDirectory(typeof value === 'string' ? value : root);
     return { project };
+  }
+  async function memoryProject(value: unknown): Promise<{ project: string }> {
+    const project = await requireDirectory(typeof value === 'string' ? value : root);
+    return { project };
+  }
+  function emitMemoryChanged(project: string, scope: MemoryLayer) {
+    for (const session of sessions.values()) {
+      if (scope === 'global' || resolve(session.project) === resolve(project)) {
+        emit(session, { type: 'pforge_memory_changed' });
+      }
+    }
+  }
+  function assertMemoryIdle(scope: MemoryLayer, project: string, sessionId?: string) {
+    if (memoryMutation) throw new HttpError(409, '记忆正在更新，请稍后重试');
+    const affected = [...sessions.values()].filter((session) => scope === 'global' || resolve(session.project) === resolve(project));
+    if (sessionId) {
+      const target = sessions.get(sessionId);
+      if (!target || resolve(target.project) !== resolve(project)) throw new HttpError(404, '会话不存在或不属于当前项目');
+      if (target.running || target.busy || target.task || target.session?.isCompacting) throw new HttpError(409, '请先等待会话运行结束，再修改会话记忆');
+      historyWritable(target);
+      return;
+    }
+    if (affected.some((session) => session.running || session.busy || session.task || session.session?.isCompacting)) throw new HttpError(409, '请先等待相关会话运行结束，再修改记忆');
   }
   function emitMcpChanged(project: string, scope: string) {
     for (const session of sessions.values()) {
@@ -250,7 +292,17 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     await mutateResources(project, scope, 'MCP', work);
     return { snapshot: await mcpSnapshot(project) };
   }
-  const sessionRoot = resolve(join(home, 'sessions'));
+  const sessionRootPath = resolve(join(home, 'sessions'));
+  await mkdir(sessionRootPath, { recursive: true });
+  // SessionManager must receive one canonical directory so a Windows long
+  // path, short path, or junction alias cannot create a second live runtime
+  // for the same Pi session file.
+  const sessionRoot = await realpath(sessionRootPath);
+  let historyMutation = false;
+  const sameSessionPath = (left: string | undefined, right: string) => Boolean(left && (process.platform === 'win32' ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right)));
+  function historyWritable(session: SessionState) {
+    if (historyState(session.manager).status !== 'active') throw new HttpError(409, '请先从归档或回收站恢复会话，再继续对话');
+  }
   const settingsPath = join(home, 'settings.json');
   let settingsWrite: Promise<void> = Promise.resolve();
   function updateSettings<T>(work: () => T | Promise<T>): Promise<T> {
@@ -348,12 +400,17 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
 
   function sessionContext(session: SessionState) {
     const stats = session.session?.getSessionStats();
+    const model = session.session?.model;
+    const compaction = session.settingsManager.getCompactionSettings(model ? { provider: model.provider, id: model.id } : undefined);
+    const memory = memoryStore.session(session.manager);
     return {
       usage: stats?.contextUsage ?? null,
-      autoCompaction: session.session?.autoCompactionEnabled ?? null,
+      autoCompaction: session.session?.autoCompactionEnabled ?? compaction.enabled,
+      compaction,
       compacting: Boolean(session.compacting || session.session?.isCompacting),
       error: session.compactionError,
       compactions: session.manager.getBranch().filter((entry) => entry.type === 'compaction').length,
+      memory: { sessionItems: memory.items.filter((item) => item.enabled).length },
       stats
     };
   }
@@ -365,6 +422,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       project: session.project,
       title: session.manager.getSessionName?.() ?? session.title,
       sessionFile: session.manager.getSessionFile?.(),
+      history: historyState(session.manager),
+      fork: forkOrigin(session.manager),
+      forkableEntries: session.manager.getBranch().filter(forkable).map((entry) => entry.id),
+      lastUserEntryId: [...session.manager.getBranch()].reverse().find((entry) => entry.type === 'message' && entry.message.role === 'user')?.id ?? null,
       model: sessionModel(session),
       thinkingLevel: session.session?.thinkingLevel ?? session.manager.buildSessionContext().thinkingLevel,
       messages: sessionMessages(session),
@@ -446,7 +507,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
 
   async function attachAgent(session: SessionState, model: any, selectedThinking?: string) {
     session.mcpRuntime = new McpRuntimeView();
-    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'pforge-task', factory: (pi) => {
+    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'forge-memory', factory: memoryStore.extension(session.project, session.manager) }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'pforge-task', factory: (pi) => {
       const taskReaders = () => pi.getAllTools()
         .filter((tool) => ['read', 'grep', 'find', 'ls'].includes(tool.name) && tool.sourceInfo.source === 'builtin')
         .map((tool) => tool.name);
@@ -512,17 +573,12 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     let project = await requireDirectory(projectInput);
     let sessionManager: SessionManager;
     if (sessionFile) {
-      const candidate = resolve(sessionFile);
-      if (!isWithin(candidate, sessionRoot)) throw new HttpError(400, 'Session path is outside the Forge Agent session directory');
-      try {
-        if (!isWithin(await realpath(candidate), await realpath(sessionRoot))) throw new HttpError(400, 'Session path resolves outside the Forge Agent session directory');
-        if (!(await stat(candidate)).isFile()) throw new HttpError(404, 'Session file was not found');
-      } catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(404, 'Session file was not found'); }
+      const candidate = await historyPath(sessionFile, sessionRoot);
       try { sessionManager = SessionManager.open(candidate); } catch { throw new HttpError(404, 'Session file was not found or is invalid'); }
       const sessionProject = await requireDirectory(sessionManager.getCwd());
-      if (resolve(project) !== resolve(sessionProject)) throw new HttpError(409, 'Session belongs to a different project');
+      if (!(await sameDirectory(project, sessionProject))) throw new HttpError(409, 'Session belongs to a different project');
       project = sessionProject;
-      const existing = [...sessions.values()].find((session) => session.manager.getSessionFile() === candidate);
+      const existing = [...sessions.values()].find((session) => sameSessionPath(session.manager.getSessionFile(), candidate));
       if (existing) return existing;
     } else {
       sessionManager = SessionManager.create(project, sessionRoot);
@@ -798,6 +854,37 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         json(response, 200, result);
         return;
       }
+      if (url.pathname === '/api/memory' && request.method === 'GET') {
+        const { project } = await memoryProject(url.searchParams.get('project'));
+        const sessionId = url.searchParams.get('session');
+        let manager: SessionManager | undefined;
+        if (sessionId) {
+          const session = sessions.get(sessionId);
+          if (!session || resolve(session.project) !== resolve(project)) throw new HttpError(404, '会话不存在或不属于当前项目');
+          manager = session.manager;
+        }
+        json(response, 200, await memoryStore.snapshot(project, manager));
+        return;
+      }
+      if (url.pathname === '/api/memory' && request.method === 'POST') {
+        const input = await body(request);
+        const { project } = await memoryProject(input.project);
+        if (!MEMORY_LAYERS.includes(input.layer as MemoryLayer)) throw new MemoryError(400, '记忆层级无效');
+        const layer = input.layer as MemoryLayer;
+        const sessionId = typeof input.session === 'string' ? input.session : undefined;
+        const target = sessionId ? sessions.get(sessionId) : undefined;
+        if (layer === 'session' && !target) throw new MemoryError(404, '当前会话不存在或尚未打开');
+        if (target && resolve(target.project) !== resolve(project)) throw new MemoryError(409, '会话不属于当前项目');
+        if (layer === 'session' && target?.readOnly) throw new MemoryError(409, '当前会话只读，选择可用模型或恢复项目后才能修改会话记忆');
+        assertMemoryIdle(layer, project, layer === 'session' ? sessionId : undefined);
+        memoryMutation = true;
+        try {
+          const document = await memoryStore.replace(layer, input.items, project, target?.manager);
+          emitMemoryChanged(project, layer);
+          json(response, 200, { document, memory: await memoryStore.snapshot(project, target?.manager) });
+        } finally { memoryMutation = false; }
+        return;
+      }
       if (url.pathname === '/api/providers/custom' && request.method === 'GET') { json(response, 200, { providers: await customProviders.list() }); return; }
       if (url.pathname === '/api/providers/custom' && request.method === 'POST') {
         const input = await body(request);
@@ -829,6 +916,19 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       if (url.pathname === '/api/providers/discover' && request.method === 'POST') { json(response, 200, await customProviders.discover(await body(request))); return; }
       if (url.pathname === '/api/providers/test' && request.method === 'POST') { json(response, 200, await customProviders.test(await body(request))); return; }
       if (url.pathname === '/api/config' && request.method === 'GET') { const project = await requireDirectory(url.searchParams.get('project') ?? root); const loaded = project === root ? config : loadConfig(project); json(response, 200, { cwd: project, verify: loaded.config.verify, verifyRetries: loaded.config.verifyRetries, configSources: loaded.sources, piVersion: VERSION }); return; }
+      if (url.pathname === '/api/settings/compaction' && request.method === 'POST') {
+        const input = await body(request);
+        if (typeof input.enabled !== 'boolean') throw new HttpError(400, 'enabled must be boolean');
+        if (openingCount || [...sessions.values()].some((session) => session.running || session.busy || session.task || session.session?.isCompacting)) throw new HttpError(409, '请先等待所有会话空闲，再修改自动压缩设置');
+        await updateSettings(() => settingsManager.setCompactionEnabled(input.enabled));
+        for (const session of sessions.values()) {
+          await session.settingsManager.reload();
+          if (session.session) session.session.setAutoCompactionEnabled(session.settingsManager.getCompactionEnabled());
+          emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+        }
+        json(response, 200, { enabled: settingsManager.getCompactionEnabled() });
+        return;
+      }
       if (url.pathname === '/api/settings' && request.method === 'GET') {
         await settingsWrite;
         await settingsManager.reload();
@@ -836,7 +936,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const global = settingsManager.getGlobalSettings();
         const key = global.defaultProvider && global.defaultModel ? global.defaultProvider + '/' + global.defaultModel : undefined;
         const selected = catalog.models.find((model: any) => model.key === key && model.available) ?? catalog.models.find((model: any) => model.available);
-        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, settingsPath, piVersion: VERSION });
+        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, compaction: settingsManager.getCompactionSettings(selected ? { provider: selected.provider, id: selected.id } : undefined), settingsPath, piVersion: VERSION });
         return;
       }
       if (url.pathname === '/api/settings' && request.method === 'POST') {
@@ -925,37 +1025,72 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       if (url.pathname === '/api/history' && request.method === 'GET') {
         const all = await SessionManager.listAll(sessionRoot);
-        const filter = url.searchParams.get('project');
+        const filterInput = url.searchParams.get('project');
+        const filter = filterInput ? resolve(await requireDirectory(filterInput)) : undefined;
         const groups = new Map<string, any[]>();
         for (const item of all) {
-          const project = item.cwd || root;
-          if (filter && resolve(project) !== resolve(filter)) continue;
-          const list = groups.get(project) ?? [];
-          list.push({ id: item.id, project, title: item.name || item.firstMessage || '未命名对话', updatedAt: item.modified.toISOString(), createdAt: item.created.toISOString(), messageCount: item.messageCount, path: item.path });
-          groups.set(project, list);
+          const itemProject = item.cwd || root;
+          if (filter && !(await sameDirectory(itemProject, filter))) continue;
+          try {
+            const path = await historyPath(item.path, sessionRoot);
+            const manager = [...sessions.values()].find((session) => sameSessionPath(session.manager.getSessionFile(), path))?.manager ?? SessionManager.open(path);
+            const managerProject = resolve(manager.getCwd() || itemProject || root);
+            const displayProject = (await sameDirectory(managerProject, root)) ? root : managerProject;
+            const list = groups.get(displayProject) ?? [];
+            list.push({ id: item.id, project: displayProject, title: sessionTitle(manager), updatedAt: item.modified.toISOString(), createdAt: item.created.toISOString(), messageCount: item.messageCount, path, ...historyState(manager), fork: forkOrigin(manager) });
+            groups.set(displayProject, list);
+          } catch { continue; }
         }
-        for (const list of groups.values()) list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+        for (const list of groups.values()) list.sort((a, b) => Number(b.pinned) - Number(a.pinned) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
         json(response, 200, { projects: [...groups].map(([path, sessionsForProject]) => ({ path, name: basename(path), sessions: sessionsForProject })).sort((a, b) => a.name.localeCompare(b.name)) });
+        return;
+      }
+      if (url.pathname === '/api/history/export' && request.method === 'GET') {
+        const path = await historyPath(url.searchParams.get('path'), sessionRoot);
+        const format = url.searchParams.get('format') === 'json' ? 'json' : 'markdown';
+        const live = [...sessions.values()].find((session) => sameSessionPath(session.manager.getSessionFile(), path));
+        const manager = live?.manager ?? SessionManager.open(path);
+        attachment(response, 200, exportSession(manager, format));
+        return;
+      }
+      if (url.pathname === '/api/history' && request.method === 'POST') {
+        const input = await body(request);
+        if (historyMutation || openingCount || modelMutation || mcpMutation || shuttingDown) throw new HttpError(409, '会话正在打开或更新，请稍后重试');
+        historyMutation = true;
+        try {
+          const path = await historyPath(input.path, sessionRoot);
+          const live = [...sessions.values()].find((session) => sameSessionPath(session.manager.getSessionFile(), path));
+          if (live && (live.running || live.busy || live.task || live.compacting || live.session?.isCompacting)) throw new HttpError(409, '请先等待此会话运行结束或停止，再管理历史');
+          if (live) { lockedSession = live; live.busy = true; }
+          const manager = live?.manager ?? SessionManager.open(path);
+          const history = changeHistory(manager, input.action, input.name);
+          if (live) {
+            live.title = sessionTitle(manager);
+            emit(live, { type: 'pforge_snapshot', snapshot: sessionSnapshot(live) });
+          }
+          for (const current of sessions.values()) if (current !== live) emit(current, { type: 'pforge_history_changed' });
+          json(response, 200, { path, title: sessionTitle(manager), history });
+        } finally { historyMutation = false; }
         return;
       }
       if (url.pathname === '/api/session' && request.method === 'POST') {
         const input = await body(request);
-        if (modelMutation || mcpMutation) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+        if (modelMutation || mcpMutation || historyMutation) throw new ProviderError(409, '服务连接或会话正在更新，请稍后重试');
         openingCount++;
         try {
         const project = typeof input.project === 'string' ? input.project : root;
         const sessionFile = typeof input.sessionFile === 'string' ? input.sessionFile : undefined;
-        const key = sessionFile ? resolve(sessionFile) : undefined;
+        const key = sessionFile ? await historyPath(sessionFile, sessionRoot) : undefined;
         let opening = key ? openingSessions.get(key) : undefined;
         if (!opening) {
           if (input.mode !== undefined && !isWebMode(input.mode)) throw new HttpError(400, 'invalid working mode');
           if (input.workflow !== undefined && !isWebWorkflow(input.workflow)) throw new HttpError(400, 'invalid workflow');
-          opening = createSession(project, sessionFile, typeof input.title === 'string' ? input.title : 'New conversation', typeof input.model === 'string' ? input.model : undefined, typeof input.thinkingLevel === 'string' ? input.thinkingLevel : undefined, input.mode, input.workflow);
+          opening = createSession(project, key, typeof input.title === 'string' ? input.title : 'New conversation', typeof input.model === 'string' ? input.model : undefined, typeof input.thinkingLevel === 'string' ? input.thinkingLevel : undefined, input.mode, input.workflow);
           if (key) openingSessions.set(key, opening);
         }
         let session: SessionState;
         try { session = await opening; } finally { if (key && openingSessions.get(key) === opening) openingSessions.delete(key); }
-        if (resolve(session.project) !== resolve(project)) throw new HttpError(409, 'Session belongs to a different project');
+        if (!(await sameDirectory(session.project, project))) throw new HttpError(409, 'Session belongs to a different project');
         json(response, 201, sessionSnapshot(session));
         return;
         } finally { openingCount--; }
@@ -965,7 +1100,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const session = sessions.get(match[1]!);
         if (!session) { json(response, 404, { error: 'Session not found' }); return; }
         const action = match[2];
-        if (request.method === 'POST' && ['prompt', 'model', 'thinking', 'mode', 'workflow', 'compact', 'name'].includes(action ?? '')) {
+        if (request.method === 'POST' && ['prompt', 'model', 'thinking', 'mode', 'workflow', 'compact', 'name', 'fork'].includes(action ?? '')) {
+          if (historyMutation) throw new HttpError(409, '历史会话正在更新，请稍后重试');
           if (session.running || session.busy || session.task || session.session?.isCompacting) throw new HttpError(409, 'Session is already running or changing settings');
           lockedSession = session;
           session.busy = true;
@@ -987,8 +1123,9 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           return;
         }
         if (action === 'prompt' && request.method === 'POST') {
+          historyWritable(session);
           const input = await body(request);
-          if (mcpMutation || modelMutation) throw new HttpError(409, '服务连接正在更新，请稍后重试');
+          if (mcpMutation || modelMutation || memoryMutation) throw new HttpError(409, '服务或记忆正在更新，请稍后重试');
           if (session.readOnly || !session.session) { json(response, 409, { error: 'This session is read-only until a model is configured' }); return; }
           if (typeof input.message !== 'string' || !input.message.trim()) { json(response, 400, { error: 'message is required' }); return; }
           if (session.running) { json(response, 409, { error: 'Session is already running' }); return; }
@@ -1007,6 +1144,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           return;
         }
         if (action === 'resume-task' && request.method === 'POST') {
+          if (historyMutation) throw new HttpError(409, '历史会话正在更新，请稍后重试');
+          historyWritable(session);
           if (session.running || session.busy || session.task) throw new HttpError(409, 'Session is already running');
           if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请选择可用模型并切换 Agent 模式后继续');
           const previous = session.controller.state;
@@ -1021,6 +1160,12 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
             const baseline = session.controller.state?.baseline ?? { available: false, files: [] };
             json(response, 200, await compareGit(session.project, baseline));
           }
+          return;
+        }
+        if (action === 'export' && request.method === 'GET') {
+          const path = await historyPath(session.manager.getSessionFile(), sessionRoot);
+          const format = url.searchParams.get('format') === 'json' ? 'json' : 'markdown';
+          attachment(response, 200, exportSession(session.manager, format));
           return;
         }
         if (action === 'abort' && request.method === 'POST') { if (!session.session) { json(response, 409, { error: 'This session is read-only' }); return; } session.controller.cancel(); clearUiRequests(session); await session.session.abort(); await session.task; json(response, 200, { ok: true }); return; }
@@ -1087,11 +1232,19 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         }
         if (action === 'name' && request.method === 'POST') {
           const input = await body(request);
-          if (typeof input.name !== 'string' || !input.name.trim()) { json(response, 400, { error: 'name is required' }); return; }
-          session.manager.appendSessionInfo(input.name.trim());
-          session.title = input.name.trim();
+          session.title = renameHistory(session.manager, input.name);
           emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+          for (const current of sessions.values()) if (current !== session) emit(current, { type: 'pforge_history_changed' });
           json(response, 200, { name: session.title });
+          return;
+        }
+        if (action === 'fork' && request.method === 'POST') {
+          const input = await body(request);
+          const path = await historyPath(session.manager.getSessionFile(), sessionRoot);
+          if (!sameSessionPath(session.manager.getSessionFile(), path)) throw new HttpError(409, '会话文件位置已变化，请重新打开');
+          const fork = forkHistory(session.manager, input.entryId);
+          for (const current of sessions.values()) emit(current, { type: 'pforge_history_changed' });
+          json(response, 201, fork);
           return;
         }
         if (action === 'compact' && request.method === 'POST') {
@@ -1127,7 +1280,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       json(response, 404, { error: 'Not found' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError || error instanceof HistoryError || error instanceof MemoryError ? error.status : 500;
       json(response, status, { error: error instanceof Error ? error.message : String(error) });
     } finally { if (lockedSession) { lockedSession.busy = false; void flushMcpReloads(); } }
   });

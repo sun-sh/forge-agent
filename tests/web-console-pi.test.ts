@@ -10,6 +10,9 @@ import { startWebConsole } from "../src/web/server.js";
 const closers: Array<() => Promise<void>> = [];
 beforeEach(async () => {
   const home = await mkdtemp(join(tmpdir(), "pforge-web-home-"));
+  // Keep the canonical Forge variable empty so tests that temporarily change
+  // the legacy PFORGE_HOME alias still exercise the selected isolated home.
+  vi.stubEnv("FORGE_AGENT_HOME", "");
   vi.stubEnv("PFORGE_HOME", home);
   vi.stubEnv("PI_CODING_AGENT_DIR", home);
   vi.stubEnv("PI_CODING_AGENT_SESSION_DIR", join(home, "sessions"));

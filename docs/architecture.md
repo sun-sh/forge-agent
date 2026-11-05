@@ -92,9 +92,15 @@ automatically.
   adapter reports that limitation.
 - API-key setup is available in Web settings. Provider OAuth is still completed
   through Pi's TUI flow. The browser then uses the saved credential through Pi.
-- Pi has additional history capabilities; the Web client currently exposes
-  grouped history, search, reopening, renaming, and compaction. Archive, fork,
-  export, and background task management are not yet exposed.
+- Pi has additional history capabilities; the Web client exposes grouped history,
+  search, reopening, renaming, pinning, archive/trash/restore, compaction, and
+  message-level forks. Web history metadata is stored as Pi custom entries, while
+  names use Pi session-info entries. A fork uses a disposable Pi session manager
+  and `createBranchedSession()` so the live source session is never moved. Saved
+  sessions can be exported as Markdown or structured JSON without changing the
+  source branch. Background task management is not yet exposed as a separate
+  queue; a running session continues in the local gateway while its browser tab
+  is away.
 - Verification reports are persisted as an atomic project latest record and a
   run-specific evidence file, and the corresponding outcome is also appended to
   the Pi session branch. The Web task panel displays the associated evidence.

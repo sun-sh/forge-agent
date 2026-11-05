@@ -13,11 +13,14 @@ answer different questions and must not be combined into a frontier-performance 
 
 Results are written to `.forge-agent/evals/<timestamp>/report.json`, with one evidence
 file per task. Reports distinguish `scripted-smoke` and `real-model` explicitly.
-They include completion state, verification, repairs, tool calls, duration and Pi
-session statistics, plus local paths for reproduction. The workspace is retained
+Each task reports `heldOutPass`, `verificationGate`, `workspaceIntegrity`,
+`taskCompletion`, and `qualityPass`, alongside latency, repairs, tool calls and
+Pi session statistics. The report also includes aggregate rates for these gates.
+The workspace is retained
 in a temporary evaluation folder so failures can be inspected.
 
-The initial suite checks bound handling and strict port parsing. Hidden assertions
+The initial suite checks bound handling, strict port parsing and stable duplicate
+removal. Hidden assertions
 live outside the task workspace. The evaluator also detects edits to the visible
 test and an unrelated user file. These are small public tasks, not private or
 adversarial benchmark cases, and the agent still runs with the launching user's
