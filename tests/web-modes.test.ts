@@ -53,7 +53,10 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   closers.push(() => server.close());
   let base = new URL(server.url).origin;
   const api = (path: string, input?: unknown) => fetch(base + '/api/' + path, { headers: { 'x-pforge-token': server.token, 'content-type': 'application/json' }, ...(input !== undefined ? { method: 'POST', body: JSON.stringify(input) } : {}) });
-  if (!options.untrusted) await api('projects/trust', { path: root, trusted: true });
+  // Make the security fixture independent of Pi's user-level default trust
+  // policy. A test named "untrusted" must carry an explicit false decision;
+  // otherwise the result differs between a developer machine and CI.
+  await api('projects/trust', { path: root, trusted: !options.untrusted });
   const snapshot = async (id: string): Promise<any> => (await api('sessions/' + id)).json();
   const settled = async (id: string) => { let state: any; await vi.waitFor(async () => { state = await snapshot(id); expect(state.running).toBe(false); }, { timeout: 15000 }); return state; };
   return {
