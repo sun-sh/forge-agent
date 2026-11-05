@@ -5,7 +5,7 @@ import { dirname, extname, join, resolve, basename, relative, isAbsolute, sep } 
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createAgentSession, DefaultResourceLoader, hasTrustRequiringProjectResources, ModelRuntime, ProjectTrustStore, SessionManager, SettingsManager, VERSION, type AgentSession, type ExtensionUIContext } from '@earendil-works/pi-coding-agent';
-import { clampThinkingLevel, getSupportedThinkingLevels, type ModelThinkingLevel } from '@earendil-works/pi-ai';
+import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent, type ModelThinkingLevel } from '@earendil-works/pi-ai';
 import { MODEL_THINKING_LEVELS } from '@earendil-works/pi-ai/providers/model-schema';
 import { createPforgeVerification, verificationOutcomeSchema } from '../verification/pi-extension.js';
 import { loadConfig } from '../config.js';
@@ -16,6 +16,7 @@ import { CustomProviders, ProviderError } from './providers.js';
 import { createWebModePolicy, isWebMode, isWebWorkflow, restoredRunMode, restoredWebMode, restoredWebWorkflow, saveWebMode, saveWebWorkflow, type WebMode, type WebWorkflow } from './modes.js';
 import { webBuiltinExtensions } from './pi-extensions.js';
 import { restoreTask, TaskController } from '../task/controller.js';
+import { TaskRegistry, type TaskRecord } from '../task/registry.js';
 import { captureGit, compareGit, readGitDiff } from '../task/git.js';
 import { McpControlPlane, McpError } from './mcp.js';
 import { McpRuntimeView } from './mcp-runtime.js';
@@ -23,6 +24,8 @@ import { isRuntimeCommand, runtimeCommands } from './commands.js';
 import { SkillsControl, SkillError } from './skills.js';
 import { changeHistory, exportSession, forkable, forkHistory, forkOrigin, HistoryError, historyPath, historyState, renameHistory, sessionTitle } from './history.js';
 import { MEMORY_LAYERS, MemoryError, MemoryStore, type MemoryLayer } from './memory.js';
+import { listProjectFiles, preparePromptAttachments, readProjectFile } from './files.js';
+import { CommandExecutionError, executeCommand } from '../tools/command.js';
 
 export interface WebConsoleOptions { cwd: string; host?: string; port?: number; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
@@ -65,7 +68,7 @@ interface SessionState {
   mcpRuntime?: McpRuntimeView;
   mcpReloadPending?: boolean;
 }
-const MAX_BODY = 2_000_000;
+const MAX_BODY = 10_000_000;
 const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_SESSION_EVENTS = 500;
 const MAX_EVENT_BYTES = 2_000_000;
@@ -177,6 +180,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   const port = options.port ?? 4317;
   const home = pforgeHome();
   const token = await loadWebToken(home);
+  const taskRegistry = await TaskRegistry.open(home);
   const sessions = new Map<string, SessionState>();
   const openingSessions = new Map<string, Promise<SessionState>>();
   let shuttingDown = false;
@@ -609,6 +613,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     let current: SessionState | undefined;
     const controller = new TaskController((task) => {
       sessionManager.appendCustomEntry('pforge.task', task);
+      const sessionFile = sessionManager.getSessionFile();
+      if (sessionFile) taskRegistry.save(task, { project, sessionFile, sessionId: current?.id });
       if (current) emit(current, { type: 'pforge_task', task });
     }, restoreTask(sessionManager.getBranch()));
     const effectiveMode = () => controller.readOnly ? 'plan' : current?.mode ?? mode;
@@ -635,6 +641,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       const readOnlySession: SessionState = { id, manager: sessionManager, project, title: sessionManager.getSessionName() ?? title, events: [], sequence: 0, eventBytes: 0, outcome: 'idle', activeTools: new Map(), clients: new Set(), running: false, readOnly: true, mode, workflow, modePolicy, controller, lastActivity: Date.now(), verification, settingsManager: projectSettings, uiRequests: new Map() };
       current = readOnlySession;
       readOnlySession.runMode = restoredRunMode(sessionManager);
+      const restoredFile = sessionManager.getSessionFile();
+      if (controller.state && restoredFile) taskRegistry.save(controller.state, { project, sessionFile: restoredFile, sessionId: id });
       pruneSessions();
       sessions.set(id, readOnlySession);
       return readOnlySession;
@@ -642,6 +650,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const session: SessionState = { id, manager: sessionManager, project, title: sessionManager.getSessionName() ?? title, events: [], clients: new Set(), sequence: 0, eventBytes: 0, outcome: 'idle', activeTools: new Map(), running: false, readOnly: true, mode, workflow, modePolicy, controller, lastActivity: Date.now(), verification, settingsManager: projectSettings, uiRequests: new Map() };
     current = session;
     session.runMode = restoredRunMode(sessionManager);
+    const restoredFile = sessionManager.getSessionFile();
+    if (controller.state && restoredFile) taskRegistry.save(controller.state, { project, sessionFile: restoredFile, sessionId: id });
     pruneSessions();
     session.busy = true;
     sessions.set(id, session);
@@ -649,7 +659,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     return session;
   }
 
-  function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false) {
+  function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false, images: ImageContent[] = []) {
     const agent = session.session!;
     session.running = true; session.runningSince = Date.now(); session.finishedAt = undefined; session.outcome = 'running';
     session.lastError = undefined; session.lastActivity = Date.now(); session.runMode = session.mode;
@@ -658,12 +668,12 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     if (!runtimeCommand) saveWebWorkflow(session.manager, workflow);
     if (workflow !== 'planned') { session.controller.state = undefined; session.manager.appendCustomEntry('pforge.task', { cleared: true }); }
     const work = async () => {
-      if (workflow !== 'planned') { session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent' }); return; }
+      if (workflow !== 'planned') { session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); return; }
       const result = await session.controller.run(message, loadConfig(session.project).config.verifyRetries, {
         async execute(_phase, text, first, signal) {
           signal.throwIfAborted(); if (session.closed) throw new Error('Session is closed');
           session.modePolicy.apply(agent);
-          if (first) { session.verification.beginTurn(session.controller.state!.id); await agent.prompt(text, { expandPromptTemplates: false }); }
+          if (first) { session.verification.beginTurn(session.controller.state!.id); await agent.prompt(text, { expandPromptTemplates: false, ...(images.length ? { images } : {}) }); }
           else await agent.sendCustomMessage({ customType: 'pforge.task_phase', content: text, display: false }, { triggerTurn: true });
           signal.throwIfAborted();
           if (session.lastError) throw new Error(session.lastError);
@@ -698,6 +708,36 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       void flushMcpReloads();
       emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
     });
+  }
+
+  function taskPayload(record: TaskRecord) {
+    return { ...record.state, project: record.project, sessionFile: record.sessionFile, sessionId: record.sessionId ?? null };
+  }
+  function liveTask(record: TaskRecord) {
+    return [...sessions.values()].find((session) => session.controller.state?.id === record.id);
+  }
+  function liveTaskSession(record: TaskRecord) {
+    return [...sessions.values()].find((session) => session.controller.state?.id === record.id || sameSessionPath(session.manager.getSessionFile(), record.sessionFile));
+  }
+  async function openTaskSession(record: TaskRecord) {
+    const live = liveTaskSession(record);
+    if (live) return live;
+    const project = await requireDirectory(record.project);
+    return createSession(project, record.sessionFile, 'Task');
+  }
+  async function runRegisteredTask(record: TaskRecord, action: 'resume' | 'recheck') {
+    const session = await openTaskSession(record);
+    if (session.running || session.busy || session.task) throw new HttpError(409, '任务已经在运行');
+    if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请先配置可用模型并切换 Agent 模式');
+    const previous = session.controller.state;
+    if (!previous || previous.id !== record.id) throw new HttpError(409, '任务记录与会话历史不一致，请从会话中重新检查');
+    const allowed = action === 'resume'
+      ? ['interrupted', 'aborted']
+      : ['interrupted', 'aborted', 'failed', 'needs_attention'];
+    if (!allowed.includes(previous.status)) throw new HttpError(409, action === 'resume' ? '当前任务不需要继续' : '当前任务没有可重新检查的失败状态');
+    session.busy = true;
+    launchPrompt(session, previous.prompt, 'planned', previous.id);
+    return session;
   }
 
   const server = createServer(async (request, response) => {
@@ -735,6 +775,71 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       if (!authenticated) { json(response, 401, { error: 'Local Web authorization required', code: 'LOCAL_AUTH_REQUIRED' }); return; }
       if ((modelMutation || mcpMutation) && request.method === 'POST' && (url.pathname === '/api/session' || url.pathname === '/api/projects/trust' || /^\/api\/sessions\/[^/]+\/(prompt|resume-task|model|thinking|mode|compact)$/.test(url.pathname))) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+      if (url.pathname === '/api/tasks' && request.method === 'GET') {
+        const project = url.searchParams.get('project');
+        if (project) await requireDirectory(project);
+        const records = taskRegistry.list();
+        const filtered = project
+          ? (await Promise.all(records.map(async (record) => await sameDirectory(record.project, project) ? record : undefined))).filter((record): record is TaskRecord => Boolean(record))
+          : records;
+        json(response, 200, { tasks: filtered.map(taskPayload) });
+        return;
+      }
+      const taskRoute = url.pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(stop|resume|recheck))?$/);
+      if (taskRoute) {
+        const record = taskRegistry.get(decodeURIComponent(taskRoute[1]!));
+        if (!record) { json(response, 404, { error: 'Task not found' }); return; }
+        const action = taskRoute[2];
+        if (!action && request.method === 'GET') { json(response, 200, taskPayload(record)); return; }
+        if (request.method !== 'POST' || !action) { json(response, 405, { error: 'Method not allowed' }); return; }
+        if (action === 'stop') {
+          const session = liveTask(record);
+          if (!session?.running || !session.session) throw new HttpError(409, '任务当前没有正在运行的会话');
+          lockedSession = session; session.busy = true;
+          session.controller.cancel(); clearUiRequests(session); await session.session.abort(); await session.task;
+          json(response, 200, { ok: true, task: session.controller.state ?? null }); return;
+        }
+        if (action !== 'resume' && action !== 'recheck') throw new HttpError(400, 'Unsupported task action');
+        const session = await runRegisteredTask(record, action);
+        lockedSession = session;
+        json(response, 202, { accepted: true, sessionId: session.id, task: session.controller.state });
+        return;
+      }
+      if (url.pathname === '/api/files' && request.method === 'GET') {
+        const { project } = await mcpProject(url.searchParams.get('project'));
+        if (!trustView(trustStore, settingsManager, project).trusted) throw new HttpError(403, '请先信任项目后引用项目文件');
+        json(response, 200, { project, files: await listProjectFiles(project, url.searchParams.get('q') ?? '') });
+        return;
+      }
+      if (url.pathname === '/api/files/content' && request.method === 'GET') {
+        const { project } = await mcpProject(url.searchParams.get('project'));
+        if (!trustView(trustStore, settingsManager, project).trusted) throw new HttpError(403, '请先信任项目后查看项目文件');
+        const path = url.searchParams.get('path');
+        if (!path) throw new HttpError(400, 'path is required');
+        const file = await readProjectFile(project, path);
+        if (!file) throw new HttpError(404, '文件不存在、过大、包含二进制内容或不允许预览');
+        json(response, 200, file);
+        return;
+      }
+      if (url.pathname === '/api/terminal' && request.method === 'POST') {
+        const input = await body(request);
+        const { project } = await mcpProject(input.project);
+        if (!trustView(trustStore, settingsManager, project).trusted) throw new HttpError(403, '请先信任项目后使用终端');
+        if (typeof input.command !== 'string' || !input.command.trim() || input.command.length > 10000) throw new HttpError(400, 'command must be 1–10000 characters');
+        for (const session of sessions.values()) {
+          if (await sameDirectory(session.project, project) && (session.running || session.task || session.busy)) throw new HttpError(409, 'Agent 正在使用当前项目，请先停止或等待任务结束');
+        }
+        const timeoutMs = typeof input.timeoutMs === 'number' && Number.isInteger(input.timeoutMs) ? Math.min(120000, Math.max(1000, input.timeoutMs)) : 30000;
+        const outputDir = join(home, 'terminal');
+        try {
+          const result = await executeCommand({ command: input.command, cwd: project, timeoutMs, maxOutputBytes: 256000, signal: new AbortController().signal, outputDir, outputId: randomBytes(12).toString('hex') });
+          json(response, 200, { ok: result.exitCode === 0, result });
+        } catch (error) {
+          if (error instanceof CommandExecutionError) { json(response, 200, { ok: false, result: error.result }); return; }
+          throw error;
+        }
+        return;
+      }
       if (url.pathname === '/api/skills' && request.method === 'GET') {
         const { project } = await mcpProject(url.searchParams.get('project'));
         json(response, 200, await skillsControl.snapshot(project, trustView(trustStore, settingsManager, project).trusted)); return;
@@ -1134,12 +1239,19 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
             if (session.mode !== 'agent') throw new HttpError(409, '技能、模板与扩展命令需要由用户先切换至 Agent 模式');
             if (!isRuntimeCommand(session.session, input.message)) throw new HttpError(400, '命令已不可用，请重新打开命令菜单');
             if (input.workflow === 'planned') throw new HttpError(400, '命令使用运行时直接分派，不能进入规划并执行');
+            if (input.attachments !== undefined) throw new HttpError(400, '命令不能附加文件或图片');
           }
           // Staged orchestration is an explicit opt-in on the prompt. A restored
           // session preference alone must not silently enable extra model turns.
           const workflow = input.workflow ?? 'direct';
           if (workflow === 'planned' && session.mode !== 'agent') throw new HttpError(400, '计划并执行需要用户先切换 Agent 模式');
-          launchPrompt(session, input.message, workflow, undefined, input.command === true);
+          if (Array.isArray(input.attachments) && input.attachments.some((item: any) => item?.type === 'file') && !trustView(trustStore, settingsManager, session.project).trusted) throw new HttpError(403, '请先信任项目后引用项目文件');
+          let attachments: Awaited<ReturnType<typeof preparePromptAttachments>>;
+          try { attachments = await preparePromptAttachments(session.project, input.attachments); }
+          catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '附件格式无效'); }
+          const message = input.message + attachments.text;
+          if (attachments.images.length && !session.session.model?.input?.includes('image')) throw new HttpError(400, '当前模型不支持图片输入，请切换到支持视觉输入的模型');
+          launchPrompt(session, message, workflow, undefined, input.command === true, attachments.images);
           json(response, 202, { accepted: true });
           return;
         }
@@ -1296,6 +1408,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     for (const session of sessions.values()) void disposeSession(session);
     sessions.clear();
     await Promise.allSettled([...retiring, mcpClosing]);
+    await taskRegistry.flush();
     await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
   })(); } };
 }

@@ -29,6 +29,7 @@ flowchart TD
 | Settings and project trust | Pi `SettingsManager`, `ProjectTrustStore`, and resource loading APIs. |
 | Tools, skills, context files, extensions, prompt templates | Pi's tools and `DefaultResourceLoader`, with the Web limitations below. |
 | Web interface and streaming transport | forge-agent `src/web/` and `src/web/ui/`. |
+| Workspace inspection and user attachments | forge-agent `src/web/files.ts`, the right-side workspace, and the shared bounded command executor: trusted project-file search/preview, bounded image/file attachments, and an explicit user-controlled terminal. |
 | Agent / Plan / Ask | forge-agent policy registered as a Pi extension; Plan and Ask allow only built-in read/search tools. |
 | Project verification and bounded repair attempts | forge-agent `src/config.ts`, `src/verification/pi-extension.ts`, `src/verification/verify.ts`, and `src/tools/command.ts`. |
 | Local gateway authorization | forge-agent `src/web/auth.ts` and gateway checks; separate from Pi's provider credentials. |
@@ -104,6 +105,13 @@ automatically.
 - Verification reports are persisted as an atomic project latest record and a
   run-specific evidence file, and the corresponding outcome is also appended to
   the Pi session branch. The Web task panel displays the associated evidence.
+
+- The right-side workspace has independent Git changes, project-file, and terminal
+  views. Project files are checked again at reference time for path containment,
+  symlinks, sensitive names, size, and text content. Images are validated by MIME,
+  file header, and aggregate size before Pi receives them. The terminal is a
+  separate explicit-user API, requires project trust, uses the shared bounded
+  command executor, and refuses to run while an Agent session uses the project.
 
 For planned tasks forge-agent captures a Git baseline and later compares the current
 status. The Web panel shows staged, unstaged, and untracked files, previews

@@ -15,6 +15,9 @@ It builds on the complete [Pi Coding Agent](https://github.com/earendil-works/pi
 ## What you can do
 
 - **Work by project:** expand, search, and reopen project history; retain drafts; inspect changed files and diffs. Session menus support rename, pin, archive, trash, and restore.
+- **Inspect the workspace:** the right-side workspace has Git changes, safe project-file preview, and a controlled terminal. The terminal accepts only explicit user input, requires project trust, and locks while the Agent is using that project.
+- **Attach context:** cite safe text files or attach images below the composer. Sensitive files, symlink escapes, binary files, and oversized attachments are rejected.
+- **Recover tasks:** planned tasks are written to a durable task center. After a gateway restart, interrupted tasks can reopen their conversation and be explicitly re-inspected, continued, or stopped.
 - **Export reusable records:** export the current or historical conversation as Markdown or structured JSON without changing the source session or branch.
 - **Branch a turn:** message actions can edit a user message into a new branch or continue from a complete answer. The original session remains intact, and the branch uses Pi's native session file and context.
 - **Choose how to work:** Agent uses **Adaptive execution** by default. Expand the small arrow beside Agent to opt into **Plan and execute**; Plan investigates and proposes a plan, while Ask reads code to answer questions. Select the project, mode, model, and reasoning effort below the composer.
@@ -221,8 +224,8 @@ Local operation describes where the client, process, and data live. With a remot
 
 The current release is intended for local use, development, and early feedback. The Web interface is in Chinese, and further work includes:
 
-- Advanced provider settings and resource management; some provider sign-in, skill, and extension configuration currently uses Pi's TUI/configuration.
-- An independent background-task queue, plus file references and attachment input; archive, trash, rename, pin, restore, message forks, and session export are already persisted through Pi sessions.
+- Further provider diagnostics, Provider OAuth, and resource management; some provider sign-in, skill, and extension configuration currently uses Pi's TUI/configuration.
+- The task center currently provides durable discovery, recovery, and control; an independent queue, scheduler, and cross-process background executor remain future work. File references, image attachments, archive, trash, rename, pin, restore, message forks, and session export are already connected.
 - Real-model evaluation on larger repositories, comparing direct and staged workflows for quality gates, success rate, latency, and cost.
 - Keyboard accessibility, installation, upgrades, and desktop distribution. No npm package, GitHub Release, or desktop installer has been published.
 

@@ -483,16 +483,23 @@ async function reviewClient(initial = {}) {
     { path: 'src/b.ts', status: '??', fingerprint: 'b1', preexisting: false, observed: true }
   ] };
   const diffs = { 'src/a.ts': '@@ -1 +1 @@\n-old\n+<img src=x onerror=alert(1)>\n', 'src/b.ts': '+second file\n' };
+  const projectFiles = [
+    { path: 'src/a.ts', size: 64, kind: 'text' },
+    { path: 'README.md', size: 28, kind: 'text' }
+  ];
   const fetcher = window.fetch;
   window.fetch = async (url, init) => {
     const parsed = new URL(url, window.location.origin);
+    if (parsed.pathname === '/api/files') { requests.push({ url, ...init }); const query = parsed.searchParams.get('q') || ''; return { ok: true, status: 200, json: async () => ({ files: projectFiles.filter((file) => file.path.includes(query)) }) }; }
+    if (parsed.pathname === '/api/files/content') { requests.push({ url, ...init }); const path = parsed.searchParams.get('path'); return { ok: true, status: 200, json: async () => ({ path, size: 24, text: path === 'README.md' ? '# Forge\n' : 'export const value = 42;\n' }) }; }
+    if (parsed.pathname === '/api/terminal') { requests.push({ url, ...init }); return { ok: true, status: 200, json: async () => ({ ok: true, result: { exitCode: 0, combined: 'tests passed\n', durationMs: 12, truncated: false } }) }; }
     if (!parsed.pathname.endsWith('/changes')) return fetcher(url, init);
     requests.push({ url, ...init });
     const path = parsed.searchParams.get('path');
     return { ok: true, status: 200, json: async () => path ? { path, diff: diffs[path] } : { ...review } };
   };
   await app.createSession(undefined, 'Review');
-  return { ...fixture, review, diffs };
+  return { ...fixture, review, diffs, projectFiles };
 }
 
 describe('Git review workspace', () => {
@@ -630,6 +637,35 @@ describe('Git review workspace', () => {
     reviewMedia.matches = true; reviewMedia.dispatchEvent(new window.Event('change')); find('changes-backdrop').click();
     expect(find('chat-pane').inert).toBe(false); expect(find('sidebar').inert).toBe(false);
     expect(window.document.activeElement).toBe(find('toggle-changes'));
+  });
+
+  it('switches between Git changes, safe project files and the user-controlled terminal', async () => {
+    const { window, app, requests } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click(); await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    find('changes-tabs').querySelector('[data-review-view="files"]').click();
+    await vi.waitFor(() => expect(find('review-file-content').textContent).toContain('export const value = 42'));
+    expect(find('review-file-list').textContent).toContain('src/a.ts');
+    find('review-file-list').querySelector('[data-project-file-path="README.md"]').click();
+    await vi.waitFor(() => expect(find('review-file-content').textContent).toContain('# Forge'));
+    find('review-file-search').value = 'README'; find('review-file-search').dispatchEvent(new window.Event('input', { bubbles: true }));
+    await vi.waitFor(() => expect(find('review-file-list').querySelectorAll('[data-project-file-path]')).toHaveLength(1));
+    find('changes-tabs').querySelector('[data-review-view="terminal"]').click();
+    find('review-terminal-command').value = 'npm test'; find('review-terminal-form').requestSubmit();
+    await vi.waitFor(() => expect(find('review-terminal-output').textContent).toContain('tests passed'));
+    expect(JSON.parse(requests.find((request) => request.url === '/api/terminal').body)).toMatchObject({ project: 'C:\\repo', command: 'npm test', timeoutMs: 30000 });
+    expect(find('review-terminal-output').textContent).toContain('退出码 0');
+  });
+});
+
+describe('Task center scope', () => {
+  it('switches between current-project and all-project task discovery', async () => {
+    const { window, requests } = await client(), find = (id) => window.document.getElementById(id);
+    find('tasks-button').click();
+    await vi.waitFor(() => expect(find('tasks-panel').classList.contains('hidden')).toBe(false));
+    expect(requests.at(-1).url).toContain('/api/tasks?project=');
+    find('tasks-scope').value = 'all'; find('tasks-scope').dispatchEvent(new window.Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(requests.at(-1).url).toBe('/api/tasks'));
+    expect(find('tasks-note').textContent).toContain('还没有持久化任务');
   });
 });
 

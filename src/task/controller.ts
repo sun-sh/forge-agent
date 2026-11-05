@@ -33,7 +33,7 @@ export function parseReview(text: string): TaskReview | undefined {
   try { return reviewSchema.parse(JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))); } catch { return undefined; }
 }
 const fileSchema = z.object({ path: z.string().max(4096), status: z.string().max(2), fingerprint: z.string().max(128) });
-const stateSchema = z.object({
+export const taskStateSchema = z.object({
   version: z.literal(1), id: z.uuid(), prompt: z.string().max(2000000),
   kind: z.enum(TASK_KINDS).optional(),
   status: z.enum(['running', 'completed', 'needs_attention', 'failed', 'aborted', 'interrupted']),
@@ -48,7 +48,7 @@ const stateSchema = z.object({
 export function restoreTask(entries: ReadonlyArray<{ type: string; customType?: string; data?: unknown }>): TaskState | undefined {
   const entry = [...entries].reverse().find((item) => item.type === 'custom' && item.customType === 'pforge.task');
   if (!entry) return undefined;
-  const result = stateSchema.safeParse(entry.data);
+  const result = taskStateSchema.safeParse(entry.data);
   if (!result.success) return undefined;
   const task = result.data;
   if (task.status === 'running') { task.status = 'interrupted'; task.error = '服务已停止。请明确继续，系统将从只读检查重新开始，不重放上次操作。'; }
