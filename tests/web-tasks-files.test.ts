@@ -22,6 +22,11 @@ describe('Web task and project file endpoints', () => {
     const home = process.env['FORGE_AGENT_HOME']!;
     await mkdir(join(home, 'tasks'), { recursive: true });
     await mkdir(join(root, 'src'));
+    // Make this fixture contain a Pi project resource so the test exercises
+    // the real unresolved-trust path on every platform. Projects without
+    // trust-gated resources are intentionally auto-trusted by Pi.
+    await mkdir(join(root, '.pi'));
+    await writeFile(join(root, '.pi', 'settings.json'), '{}');
     await writeFile(join(root, 'src', 'main.ts'), 'export const answer = 42;');
     await writeFile(join(root, '.env'), 'TOKEN=private');
     const id = randomUUID(), now = new Date().toISOString();
