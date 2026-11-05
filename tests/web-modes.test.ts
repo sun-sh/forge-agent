@@ -67,6 +67,40 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
 }
 
 describe('Web working modes with real Pi sessions', () => {
+  it('keeps Forge product identity and truthful runtime attribution across mode changes and history recovery', async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, 'AGENTS.md'), 'PROJECT_IDENTITY_CONTEXT: this repository is a local coding-agent CLI built on Pi.');
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    f.calls([{ name: 'read', arguments: { path: 'readme.txt' } }]);
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Who are you?' });
+    let state = await f.settled(session.id);
+    const system = (index: number) => JSON.stringify(f.requests[index].messages.filter((message: any) => message.role === 'system'));
+    for (const index of [0, 1]) {
+      expect(system(index)).toContain('You are Forge Agent');
+      expect(system(index)).toContain('in the user\'s browser');
+      expect(system(index)).not.toContain('operating inside pi, a coding agent harness');
+      expect(system(index)).toContain('Pi Coding Agent runtime');
+      expect(system(index)).toContain('PROJECT_IDENTITY_CONTEXT');
+      expect(system(index)).toContain('<rules>');
+    }
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name)).toContain('write');
+    await f.api('sessions/' + session.id + '/mode', { mode: 'ask' });
+    await f.api('sessions/' + session.id + '/prompt', { message: 'What runtime does Forge use?' });
+    state = await f.settled(session.id);
+    expect(system(2)).toContain('You are Forge Agent');
+    expect(system(2)).toContain('ASK MODE');
+    expect(system(2)).not.toContain('operating inside pi, a coding agent harness');
+    expect(f.requests[2].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+    await f.restart();
+    const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
+    await f.api('sessions/' + restored.id + '/prompt', { message: 'Remind me who you are.' });
+    await f.settled(restored.id);
+    expect(system(3)).toContain('You are Forge Agent');
+    expect(system(3)).toContain('Pi Coding Agent runtime');
+    expect(system(3)).toContain('in the user\'s browser');
+    expect(system(3)).not.toContain('operating inside pi, a coding agent harness');
+    expect(f.requests[3].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+  });
   it('invokes a service added from the Web through an existing Pi session and removes its tools when disabled', async () => {
     const f = await fixture();
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
@@ -165,6 +199,78 @@ describe('Web working modes with real Pi sessions', () => {
     expect(restored.task.status).toBe('completed'); expect(restored.verification.evidenceId).toBe(state.verification.evidenceId);
     expect(f.requests).toHaveLength(4);
   });
+  it('short-circuits planned answer prompts instead of running the change pipeline', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    expect((await f.api('sessions/' + session.id + '/prompt', { message: 'What can you do?', workflow: 'planned' })).status).toBe(202);
+    const state = await f.settled(session.id);
+    expect(state.task).toMatchObject({ kind: 'answer', status: 'completed', phase: 'complete' });
+    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'complete']);
+    expect(f.requests).toHaveLength(1);
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+    expect(state.verification?.status).not.toBe('passed');
+    await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    expect(state.messages.filter((message: any) => message.role === 'user').at(-1).content).toEqual([{ type: 'text', text: 'What can you do?' }]);
+    await f.restart();
+    const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
+    expect(restored.task).toMatchObject({ kind: 'answer', status: 'completed' });
+    expect(f.requests).toHaveLength(1);
+  });
+  it.each(['What can you do?', 'Explain the project structure without changing files.'] as const)('keeps planned %s read-only even when the model requests a write', async (message) => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    f.calls([{ name: 'write', arguments: { path: 'blocked-by-answer-router', content: 'must not write' } }]);
+    await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+    await expect(access(join(f.root, 'blocked-by-answer-router'))).rejects.toThrow();
+    expect(state.task.kind === 'answer' || state.task.kind === 'explore').toBe(true);
+  });
+  it('keeps adaptive Agent prompts in the native Pi loop without a host task', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    expect(session.workflow).toBe('direct');
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Fix the task' });
+    const state = await f.settled(session.id);
+    expect(state.task).toBeUndefined(); expect(f.requests).toHaveLength(1);
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name)).toContain('write');
+    expect(state.verification.status).toBe('passed');
+  });
+  it('persists the Agent workflow with the session and restores it after a restart', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent', workflow: 'direct' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Hello', workflow: 'direct' });
+    await f.settled(session.id);
+    const switched = await f.api('sessions/' + session.id + '/workflow', { workflow: 'planned' });
+    expect(switched.status).toBe(200);
+    const beforeRestart: any = await switched.json();
+    expect(beforeRestart.workflow).toBe('planned');
+    await f.restart();
+    const restored: any = await (await f.api('session', { project: f.root, sessionFile: beforeRestart.sessionFile })).json();
+    expect(restored.mode).toBe('agent');
+    expect(restored.workflow).toBe('planned');
+    const fresh: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    expect(fresh.workflow).toBe('direct');
+    // Callers that omit workflow still get adaptive execution. The Web client
+    // must explicitly send the manually selected planned strategy on a prompt.
+    await f.api('sessions/' + restored.id + '/prompt', { message: 'Fix the next task' });
+    const adaptive = await f.settled(restored.id);
+    expect(adaptive.workflow).toBe('direct');
+    expect(adaptive.task).toBeUndefined();
+    expect(f.requests).toHaveLength(2);
+  });
+  it.each([false, true])('runs verification-only tasks with fresh evidence and no model turns (untrusted: %s)', async (untrusted) => {
+    const f = await fixture({ untrusted });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Run the configured tests', workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(f.requests).toHaveLength(0);
+    expect(state.task).toMatchObject({ kind: 'verify', status: untrusted ? 'failed' : 'completed' });
+    expect(state.verification.runId).toBe(state.task.id);
+    expect(state.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user').at(-1).message.content).toBe('Run the configured tests');
+    if (untrusted) await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    else expect(state.verification.report.results[0].output).toContain('verified-exact-output');
+  });
   it('rejects planned execution in read-only mode and never advances a cancelled task', async () => {
     const f = await fixture(); const session: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
     expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Do it', workflow: 'planned' })).status).toBe(400);
@@ -178,6 +284,26 @@ describe('Web working modes with real Pi sessions', () => {
     const state = await f.settled(session.id); expect(state.task.status).toBe('aborted');
     f.release(); expect(f.requests).toHaveLength(1);
     await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+  });
+  it('explicitly continues an aborted planned task from inspection with a new run and fresh verification', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    f.pause();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Implement a scoped change', workflow: 'planned' });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1), { timeout: 15000 });
+    expect((await f.api('sessions/' + session.id + '/abort', {})).status).toBe(200);
+    const stopped = await f.settled(session.id);
+    expect(stopped.task.status).toBe('aborted');
+    f.release();
+    expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(202);
+    const resumed = await f.settled(session.id);
+    expect(resumed.task.status).toBe('completed');
+    expect(resumed.task.resumeOf).toBe(stopped.task.id);
+    expect(resumed.task.id).not.toBe(stopped.task.id);
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+    expect(JSON.stringify(f.requests[1].messages.at(-1).content)).toContain('Reinspect the current workspace');
+    expect(resumed.verification.status).toBe('passed');
+    expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(409);
   });
   it.each(['plan', 'ask'] as const)('allows reading in %s but blocks execution and verification, including after reopening', async (mode) => {
     const f = await fixture();
@@ -253,6 +379,28 @@ describe('Web working modes with real Pi sessions', () => {
     expect(restored.mode).toBe('plan');
     expect(restored.runMode).toBe('ask');
     expect(f.requests).toHaveLength(1);
+  });
+
+  it('rejects a planned workflow while the session is in a read-only mode', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
+    expect((await f.api('sessions/' + session.id + '/workflow', { workflow: 'planned' })).status).toBe(400);
+    expect((await f.snapshot(session.id)).workflow).toBe('direct');
+  });
+
+  it('downgrades a planned Agent workflow when switching to read-only mode and restores safely', async () => {
+    const f = await fixture();
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent', workflow: 'planned' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Hello', workflow: 'direct' });
+    await f.settled(session.id);
+    expect((await f.api('sessions/' + session.id + '/workflow', { workflow: 'planned' })).status).toBe(200);
+    const switched: any = await (await f.api('sessions/' + session.id + '/mode', { mode: 'plan' })).json();
+    expect(switched.mode).toBe('plan');
+    expect(switched.workflow).toBe('direct');
+    await f.restart();
+    const restored: any = await (await f.api('session', { project: f.root, sessionFile: switched.sessionFile })).json();
+    expect(restored.mode).toBe('plan');
+    expect(restored.workflow).toBe('direct');
   });
 
   it('fails closed on invalid history metadata and rejects nested calls and custom tools impersonating readers', async () => {

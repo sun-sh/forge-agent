@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile, stat, access } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
-import { DefaultResourceLoader, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
+import { AgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../src/web/server.js';
 import { loadWebToken } from '../src/web/auth.js';
 
@@ -72,6 +72,62 @@ async function stream(url: string, headers: Record<string, string>) {
 }
 
 describe('Web lifecycle regressions', () => {
+  it('authorizes skill management and reloads Pi commands in idle sessions without changing the readonly mode', async () => {
+    const { root, api, base, headers } = await fixture({ model: true });
+    await mkdir(join(root, '.pi', 'skills', 'managed-review'), { recursive: true });
+    await writeFile(join(root, '.pi', 'skills', 'managed-review', 'SKILL.md'), '---\nname: managed-review\ndescription: Managed review\n---\nPrivate instructions');
+    expect((await fetch(base + 'api/skills')).status).toBe(401);
+    expect((await fetch(base + 'api/skills/toggle', { method: 'POST', headers: { ...headers, origin: 'https://example.com' }, body: '{}' })).status).toBe(403);
+    const initial = await (await api('api/skills')).json() as any;
+    expect(initial.skills.some((item: any) => item.name === 'managed-review')).toBe(false);
+    expect((await api('api/skills/sources', { project: root, scope: 'project', path: root, revision: initial.revision })).status).toBe(403);
+    await api('api/projects/trust', { path: root, trusted: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock', mode: 'ask' })).json() as any;
+    const prompt = vi.spyOn(AgentSession.prototype, 'prompt');
+    let catalog = await (await api('api/skills')).json() as any;
+    const skill = catalog.skills.find((item: any) => item.name === 'managed-review');
+    expect((await api('api/skills/content?id=' + skill.id)).status).toBe(200);
+    expect((await api('api/skills/content?id=' + encodeURIComponent(join(root, 'secret.txt')))).status).toBe(400);
+    const result = await api('api/skills/toggle', { project: root, scope: 'project', id: skill.id, enabled: false, revision: catalog.revision });
+    expect(result.status).toBe(200);
+    catalog = (await result.json() as any).snapshot;
+    let session = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(session).toMatchObject({ mode: 'ask', running: false, readOnly: false });
+    expect(session.commands.some((item: any) => item.name === 'skill:managed-review')).toBe(false);
+    const enabled = await api('api/skills/toggle', { project: root, scope: 'project', id: skill.id, enabled: true, revision: catalog.revision });
+    expect(enabled.status).toBe(200);
+    session = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(session.commands.some((item: any) => item.name === 'skill:managed-review')).toBe(true);
+    expect((await api('api/sessions/' + created.id + '/prompt', { command: true, message: '/skill:managed-review test' })).status).toBe(409);
+    expect(prompt).not.toHaveBeenCalled();
+    expect((await fetch(base + 'skills.js', { headers })).status).toBe(200);
+  });
+
+  it('keeps skill persistence unchanged when a session is busy and serializes a resource reload against prompts', async () => {
+    const { root, api, home } = await fixture({ model: true });
+    await mkdir(join(home, 'skills', 'managed-review'), { recursive: true });
+    await writeFile(join(home, 'skills', 'managed-review', 'SKILL.md'), '---\nname: managed-review\ndescription: Managed review\n---\nInstructions');
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    const catalog = await (await api('api/skills')).json() as any, skill = catalog.skills.find((item: any) => item.name === 'managed-review');
+    let release!: () => void, started = false;
+    const pending = new Promise<void>((done) => { release = done; });
+    vi.spyOn(AgentSession.prototype, 'prompt').mockImplementation(async () => { started = true; await pending; });
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'hold' })).status).toBe(202);
+    await vi.waitFor(() => expect(started).toBe(true));
+    expect((await api('api/skills/toggle', { project: root, scope: 'global', id: skill.id, enabled: false, revision: catalog.revision })).status).toBe(409);
+    expect((await (await api('api/skills')).json() as any).revision).toBe(catalog.revision);
+    release();
+    await vi.waitFor(async () => expect((await (await api('api/sessions/' + created.id)).json() as any).running).toBe(false));
+    const original = AgentSession.prototype.reload;
+    let reloadStarted = false, finishReload!: () => void;
+    const waiting = new Promise<void>((done) => { finishReload = done; });
+    vi.spyOn(AgentSession.prototype, 'reload').mockImplementation(async function (this: AgentSession, ...args) { reloadStarted = true; await waiting; return original.apply(this, args); });
+    const toggle = api('api/skills/toggle', { project: root, scope: 'global', id: skill.id, enabled: false, revision: catalog.revision });
+    await vi.waitFor(() => expect(reloadStarted).toBe(true));
+    expect((await api('api/sessions/' + created.id + '/prompt', { message: 'must not race' })).status).toBe(409);
+    finishReload(); expect((await toggle).status).toBe(200);
+  });
+
   it('keeps the gateway credential and browser session valid across service restarts', async () => {
     const { root, server, base } = await fixture();
     const token = server.token;
@@ -136,6 +192,7 @@ describe('Web lifecycle regressions', () => {
     const [first, second] = await Promise.all(responses.map((response) => response.json())) as any[];
     expect(first.id).toBe(second.id);
     expect(first.readOnly).toBe(true);
+    expect(first.title).toBe('historical task');
     expect(first.entries).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'compaction', summary: 'compaction summary kept' }), expect.objectContaining({ type: 'message', message: expect.objectContaining({ role: 'toolResult' }) })]));
     expect(JSON.stringify(first.entries)).toContain('reasoning kept');
     expect((await api('api/sessions/' + first.id + '/prompt', { message: 'continue' })).status).toBe(409);
@@ -173,12 +230,78 @@ describe('Web lifecycle regressions', () => {
     const { root, api, base, headers } = await fixture({ model: true, extension: 'export default (pi) => { pi.registerCommand("web-burst", { description: "test", handler: async (_args, ctx) => { for (let i=0;i<700;i++) ctx.ui.setStatus("burst", String(i)); } }); };' });
     await api('api/projects/trust', { path: root, trusted: true });
     const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    expect(created.context).toMatchObject({ compacting: false, usage: { tokens: 0, percent: 0 }, compactions: 0 });
+    expect(created.commands).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'web-burst', source: 'extension' })]));
     expect((await api('api/sessions/' + created.id + '/prompt', { message: '/web-burst' })).status).toBe(202);
     await vi.waitFor(async () => { expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }); });
     const stale = await stream(base + 'api/sessions/' + created.id + '/events', { ...headers, 'last-event-id': '1' });
     const event = await stale.next();
     expect(event.id).toBeGreaterThan(500);
     expect(event.event.type).toBe('pforge_snapshot');
+  });
+
+  it('keeps runtime commands behind the Web mode boundary and exposes the command asset', async () => {
+    const { root, api, base, headers } = await fixture({ model: true, extension: 'export default (pi) => { pi.registerCommand("web-safe", { description: "test", handler: async () => {} }); };' });
+    await api('api/projects/trust', { path: root, trusted: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    expect(created.commands).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'web-safe', source: 'extension' })]));
+    expect((await api('api/sessions/' + created.id + '/mode', { mode: 'plan' })).status).toBe(200);
+    const blocked = await api('api/sessions/' + created.id + '/prompt', { message: '/web-safe', command: true, workflow: 'direct' });
+    expect(blocked.status).toBe(409);
+    const asset = await fetch(base + 'commands.js', { headers });
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toContain('builtinCommands');
+  });
+
+  it('discovers loaded prompt resources without exposing their content and dispatches known commands without orchestration', async () => {
+    const { root, api } = await fixture({ model: true, extension: 'export default (pi) => { pi.registerCommand("web-safe", { description: "test", handler: async (args) => { pi.appendEntry("command-result", { args }); } }); };' });
+    await mkdir(join(root, '.pi', 'skills', 'review'), { recursive: true });
+    await mkdir(join(root, '.pi', 'prompts'), { recursive: true });
+    await writeFile(join(root, '.pi', 'skills', 'review', 'SKILL.md'), '---\nname: review\ndescription: Review code\n---\nskill-private-body');
+    await writeFile(join(root, '.pi', 'prompts', 'check.md'), '---\ndescription: Check code\n---\ntemplate-private-body $ARGUMENTS');
+    await api('api/projects/trust', { path: root, trusted: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    expect(created.commands).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'skill:review', source: 'skill' }),
+      expect.objectContaining({ name: 'check', source: 'template' })
+    ]));
+    expect(JSON.stringify(created.commands)).not.toMatch(/private-body/);
+    const prompt = 'api/sessions/' + created.id + '/prompt';
+    expect((await api('api/sessions/' + created.id + '/workflow', { workflow: 'planned' })).status).toBe(200);
+    expect((await api(prompt, { message: '/missing', command: true })).status).toBe(400);
+    expect((await api(prompt, { message: '/web-safe\nargs', command: true })).status).toBe(400);
+    expect((await api(prompt, { message: '/web-safe', command: true, workflow: 'planned' })).status).toBe(400);
+    expect((await api(prompt, { message: '/web-safe preserved args', command: true, workflow: 'direct' })).status).toBe(202);
+    await vi.waitFor(async () => {
+      const snapshot = await (await api('api/sessions/' + created.id)).json() as any;
+      expect(snapshot.running).toBe(false);
+      expect(snapshot.workflow).toBe('planned');
+      expect(snapshot.entries).toContainEqual(expect.objectContaining({ type: 'custom', customType: 'command-result', data: { args: 'preserved args' } }));
+      expect(snapshot.finishedAt).toBeGreaterThanOrEqual(snapshot.runningSince);
+    });
+    await api('api/projects/trust', { path: root, trusted: false });
+    expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ commands: [], readOnly: true });
+  });
+
+  it('serializes manual compaction with prompts and settings, propagates errors and unlocks after cancellation', async () => {
+    const { root, api } = await fixture({ model: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    const prefix = 'api/sessions/' + created.id;
+    expect((await api(prefix + '/compact', { instructions: 1 })).status).toBe(400);
+    let cancel!: (error: Error) => void;
+    const compact = vi.spyOn(AgentSession.prototype, 'compact').mockImplementationOnce(async () => await new Promise((_resolve, reject) => { cancel = reject; }));
+    const abort = vi.spyOn(AgentSession.prototype, 'abortCompaction').mockImplementationOnce(() => cancel(new Error('Compaction cancelled')));
+    const pending = api(prefix + '/compact', { instructions: 'keep decisions' });
+    await vi.waitFor(() => expect(compact).toHaveBeenCalledWith('keep decisions'));
+    expect(await (await api(prefix)).json()).toMatchObject({ context: { compacting: true } });
+    for (const [action, input] of [['prompt', { message: 'blocked' }], ['model', { model: 'mock/mock' }], ['mode', { mode: 'ask' }], ['compact', {}]] as const) expect((await api(prefix + '/' + action, input)).status).toBe(409);
+    expect((await api('api/projects/trust', { path: root, trusted: false })).status).toBe(409);
+    expect((await api(prefix + '/abort-compact', {})).status).toBe(200);
+    expect(abort).toHaveBeenCalledOnce();
+    const response = await pending; expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'Compaction cancelled' });
+    expect(await (await api(prefix)).json()).toMatchObject({ running: false, context: { compacting: false, error: 'Compaction cancelled' } });
+    expect((await api(prefix + '/name', { name: 'unlocked' })).status).toBe(200);
   });
 
   it('rejects invalid input with specific HTTP status codes and serves all browser dependencies with a CSP', async () => {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { builtinCommands, filterCommands, parseCommand } from '../src/web/ui/commands.js';
 import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -7,6 +8,7 @@ import { safeMarkdown, sessionOutcome } from '../src/web/ui/render.js';
 import { createSseParser, readEventStream, StreamError } from '../src/web/ui/stream.js';
 import { mountCustomProviders } from '../src/web/ui/providers.js';
 import { mountMcp } from '../src/web/ui/mcp.js';
+import { mountSkills } from '../src/web/ui/skills.js';
 
 const windows = [];
 afterEach(() => { windows.splice(0).forEach((window) => { window.__app?.state.eventSource?.close(); window.close(); }); vi.unstubAllGlobals(); });
@@ -62,13 +64,17 @@ async function client(initial = {}) {
   const source = (await readFile(new URL('../src/web/ui/app.js', import.meta.url), 'utf8')).replace(/^import .+;\r?\n/gm, '');
   const dom = new JSDOM(html, { url: 'http://localhost:4328/?token=bootstrap-secret', runScripts: 'outside-only' });
   const window = dom.window; windows.push(window);
+  const reviewMedia = new window.EventTarget(); reviewMedia.matches = Boolean(initial.narrow);
+  for (const [key, value] of Object.entries(initial.localStorage || {})) window.localStorage.setItem(key, JSON.stringify(value));
   const models = initial.models || [model('a'), model('b')];
   let defaultModel = initial.model || models[0]?.key || null;
   let thinkingLevel = initial.thinkingLevel || 'off';
   const modelThinkingLevels = { ...initial.modelThinkingLevels };
   const streams = [], requests = [];
   Object.assign(window, {
-    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp,
+    matchMedia: () => reviewMedia,
+    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills,
+    builtinCommands, filterCommands, parseCommand,
     safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
     fetch: async (url, init = {}) => {
@@ -88,23 +94,634 @@ async function client(initial = {}) {
       if (url.startsWith('/api/history')) data = { projects: [] };
       if (url.startsWith('/api/config')) data = { cwd: 'C:\\repo', verify: [], piVersion: '1.4.0' };
       if (url.startsWith('/api/mcp')) data = { project: 'C:\\repo', projectTrusted: true, servers: [], errors: [], paths: {} };
+      if (url.startsWith('/api/skills')) data = { project: 'C:\\repo', projectTrusted: true, skills: [], diagnostics: [], sources: [], paths: {}, revision: 'initial' };
       if (url === '/api/credentials') data = { credentials: [] };
-      if (url === '/api/session') { const input = JSON.parse(init.body); data = { id: 'created', project: 'C:\\repo', running: false, model: models.find((item) => item.key === input.model) || models[0], thinkingLevel: input.thinkingLevel || thinkingLevel, messages: [] }; }
+      if (url === '/api/session') { const input = JSON.parse(init.body); data = { id: 'created', project: 'C:\\repo', running: false, mode: input.mode || 'agent', workflow: input.workflow || 'direct', model: models.find((item) => item.key === input.model) || models[0], thinkingLevel: input.thinkingLevel || thinkingLevel, messages: [] }; }
+      if (/\/api\/sessions\/[^/]+\/workflow$/.test(url) && init.method === 'POST') data = { workflow: JSON.parse(init.body).workflow };
+      if (/\/api\/sessions\/[^/]+\/mode$/.test(url) && init.method === 'POST') data = { mode: JSON.parse(init.body).mode, workflow: 'direct' };
+      if (/\/api\/sessions\/[^/]+\/model$/.test(url) && init.method === 'POST') {
+        const selected = models.find((item) => item.key === JSON.parse(init.body).model);
+        data = { snapshot: { model: selected, thinkingLevel: selected.reasoning ? modelThinkingLevels[selected.key] || selected.thinkingLevels[0] : 'off' } };
+      }
+      if (/\/api\/sessions\/[^/]+\/thinking$/.test(url) && init.method === 'POST') data = { thinkingLevel: JSON.parse(init.body).level };
       return { ok: true, status: 200, json: async () => data };
     }
   });
   // Exercise the actual browser entry point against an isolated DOM and API, including all event bindings.
-  window.eval(source + '\nwindow.__app = { state, api, loadConfig, loadModels, resumeActiveSession, recoverAuthorization, openSettings, connect, applySnapshot, renderMessages, setModel, changeMode, changeModel, changeThinking, toggleModelPicker, closeModelPicker, setRunning, createSession, sendPrompt, sendFollowup, newConversation };');
+  window.eval(source + '\nwindow.__app = { state, api, loadConfig, loadModels, resumeActiveSession, recoverAuthorization, openSettings, connect, applySnapshot, renderMessages, setModel, changeMode, changeWorkflow, changeModel, changeThinking, toggleModelPicker, closeModelPicker, setRunning, createSession, sendPrompt, sendFollowup, newConversation, loadChanges, loadChangeDiff, stopExecution, resumeExecution, handleEvent, compactContext, updateElapsed };');
   await vi.waitFor(() => expect(window.document.getElementById('connection-label').textContent).toContain('已连接'));
-  return { window, app: window.__app, requests, streams };
+  return { window, app: window.__app, requests, streams, reviewMedia };
 }
+
+function streamText(app, delta) { app.handleEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } }); }
+
+describe('Composer commands and context', () => {
+  function type(window, value, id = 'prompt') {
+    const input = window.document.getElementById(id); input.value = value; input.focus(); input.setSelectionRange(value.length, value.length); input.dispatchEvent(new window.Event('input', { bubbles: true })); return input;
+  }
+  function key(window, input, value, extra = {}) { input.dispatchEvent(new window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, ...extra })); }
+
+  it('opens skill management from the skills category without adding a peer command or sending the draft', async () => {
+    const { window, app, requests } = await client(), doc = window.document;
+    app.state.sessionId = 'created';
+    type(window, '/', 'followup-prompt'); doc.querySelector('[data-command-category="skill"]').click();
+    expect(doc.getElementById('manage-skills').classList.contains('hidden')).toBe(false);
+    doc.getElementById('manage-skills').click();
+    await vi.waitFor(() => expect(doc.getElementById('skills-settings')).not.toBeNull());
+    expect(doc.querySelector('[data-settings-tab="skills"]').getAttribute('aria-pressed')).toBe('true');
+    expect(doc.getElementById('followup-prompt').value).toBe('/');
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    expect(doc.querySelector('[data-command-name="skills"]')).toBeNull();
+  });
+
+  it('discovers commands, filters, navigates and opens controls without sending model prompts', async () => {
+    const { window, requests } = await client(); const doc = window.document;
+    const input = type(window, '/');
+    expect(doc.getElementById('command-picker').classList.contains('hidden')).toBe(false);
+    key(window, input, 'ArrowDown');
+    expect(doc.getElementById(input.getAttribute('aria-activedescendant')).textContent).toContain('/model');
+    key(window, input, 'Enter');
+    expect(doc.getElementById('model-picker').classList.contains('hidden')).toBe(false);
+    expect(input.value).toBe('');
+    expect(requests.some((request) => request.url === '/api/session' || request.url.endsWith('/prompt'))).toBe(false);
+    const mode = type(window, '/mode'); key(window, mode, 'Tab');
+    expect(mode.value).toBe('/mode ');
+    expect(doc.getElementById('command-picker').classList.contains('hidden')).toBe(true);
+    const help = type(window, '/help'); key(window, help, 'Escape');
+    expect(help.value).toBe('/help');
+    key(window, help, 'Enter');
+    await vi.waitFor(() => expect(doc.getElementById('help-modal').classList.contains('hidden')).toBe(false));
+    key(window, doc.getElementById('help-close'), 'Escape');
+    expect(doc.activeElement).toBe(input);
+  });
+
+  it('keeps drafts and IME input, leaves filesystem paths as text and rejects unknown commands locally', async () => {
+    const { window, requests } = await client(); const doc = window.document;
+    let input = type(window, 'existing draft'); doc.getElementById('commands-button').click(); expect(input.value).toBe('existing draft');
+    input = type(window, '/help'); key(window, input, 'Enter', { isComposing: true });
+    expect(doc.getElementById('help-modal').classList.contains('hidden')).toBe(true);
+    expect(input.value).toBe('/help');
+    input = type(window, '/unknown option'); doc.getElementById('composer').requestSubmit();
+    await vi.waitFor(() => expect(doc.getElementById('toast-root').textContent).toContain('没有 /unknown'));
+    expect(input.value).toBe('/unknown option');
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    expect(parseCommand('/src/app.ts')).toBeNull(); expect(parseCommand('explain /context')).toBeNull();
+  });
+
+  it('keeps mouse-opened model and mode pickers visible, focuses them, and makes an actual model choice', async () => {
+    const { window, app, requests } = await client(); const doc = window.document;
+    const input = type(window, '/model');
+    const modelOption = doc.querySelector('[data-command-name="model"]');
+    expect(doc.querySelectorAll('#command-options [role=option]')).toHaveLength(1);
+    expect(modelOption.textContent).toContain('切换模型');
+    modelOption.click();
+    expect(doc.getElementById('model-picker').classList.contains('hidden')).toBe(false);
+    expect(doc.activeElement).toBe(doc.getElementById('chat-model-search'));
+    expect(input.value).toBe('');
+    const alternate = doc.querySelector('[data-choose-model="mock/b"]');
+    alternate.checked = true; alternate.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(app.state.model.key).toBe('mock/b'));
+    expect(requests.some((request) => request.url === '/api/settings' && request.method === 'POST')).toBe(true);
+    type(window, '/mode');
+    expect(doc.querySelectorAll('#command-options [role=option]')).toHaveLength(1);
+    expect(doc.querySelector('[data-command-name="mode"]').textContent).toContain('工作模式');
+    doc.querySelector('[data-command-name="mode"]').click();
+    expect(doc.getElementById('mode-picker').classList.contains('hidden')).toBe(false);
+    expect(doc.getElementById('model-picker').classList.contains('hidden')).toBe(true);
+    expect(requests.some((request) => request.url === '/api/session' || request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('keeps skills in a category without a peer skills action, deduplicates commands and preserves Pi dispatch', async () => {
+    const { window, app, requests } = await client(); const doc = window.document; app.state.sessionId = 'created';
+    app.applySnapshot({ id: 'created', mode: 'agent', running: false, messages: [], commands: [
+      { name: 'model', source: 'extension', description: 'Conflicting command' },
+      { name: 'skill:review', source: 'skill', description: 'Review changes' },
+      { name: 'skill:review', source: 'skill', description: 'Duplicate skill' },
+      { name: 'check', source: 'template', description: 'Check the project' }
+    ] });
+    const input = type(window, '/', 'followup-prompt');
+    expect(doc.querySelectorAll('[data-command-name="model"]')).toHaveLength(1);
+    expect(doc.querySelector('[data-command-name="skills"]')).toBeNull();
+    expect(doc.querySelectorAll('[data-command-name="skill:review"]')).toHaveLength(1);
+    expect(doc.querySelectorAll('.command-group-title')).toHaveLength(3);
+    doc.querySelector('[data-command-category="skill"]').click();
+    expect(doc.querySelectorAll('#command-options [role=option]')).toHaveLength(1);
+    expect(doc.querySelector('[data-command-category="skill"]').getAttribute('aria-pressed')).toBe('true');
+    expect(doc.getElementById('command-picker-help').textContent).toContain('附加任务后发送');
+    doc.querySelector('[data-command-name="skill:review"]').click();
+    expect(input.value).toBe('/skill:review ');
+    expect(doc.activeElement).toBe(input);
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    input.value += 'src/index.ts'; key(window, input, 'Enter');
+    await vi.waitFor(() => expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(true));
+    expect(JSON.parse(requests.find((request) => request.url.endsWith('/prompt')).body)).toEqual({ message: '/skill:review src/index.ts', command: true, workflow: 'direct' });
+  });
+
+  it('loads the skill category before the first prompt and preserves closing it during discovery', async () => {
+    const { window, app, requests } = await client(); const doc = window.document;
+    const originalFetch = window.fetch; let release;
+    window.fetch = (url, init) => url === '/api/session' ? new Promise((resolve) => { release = () => resolve({ ok: true, status: 201, json: async () => ({ id: 'created', project: 'C:\\repo', mode: 'agent', messages: [], commands: [{ name: 'skill:review', source: 'skill', description: 'Review' }] }) }); }) : originalFetch(url, init);
+    const input = type(window, '/'); doc.querySelector('[data-command-category="skill"]').click();
+    expect(doc.getElementById('command-picker').textContent).toContain('正在加载');
+    expect(app.state.loadingSession).toBe(true);
+    key(window, input, 'Escape'); release();
+    await vi.waitFor(() => expect(app.state.loadingSession).toBe(false));
+    expect(doc.getElementById('command-picker').classList.contains('hidden')).toBe(true);
+    type(window, '/skills', 'followup-prompt'); key(window, doc.getElementById('followup-prompt'), 'Enter');
+    await vi.waitFor(() => expect(doc.querySelector('[data-command-name="skill:review"]')).not.toBeNull());
+    expect(app.state.commandCategory).toBe('skill');
+    expect(doc.querySelector('[data-command-name="skills"]')).toBeNull();
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('keeps the skill category and keyboard focus after loading resources, with an explicit empty state', async () => {
+    const { window, app, requests } = await client(); const doc = window.document;
+    type(window, '/'); doc.querySelector('[data-command-category="skill"]').click();
+    await vi.waitFor(() => expect(app.state.sessionId).toBe('created'));
+    expect(doc.getElementById('command-picker').classList.contains('hidden')).toBe(false);
+    expect(doc.querySelector('[data-command-category="skill"]').getAttribute('aria-pressed')).toBe('true');
+    expect(doc.activeElement).toBe(doc.getElementById('followup-prompt'));
+    expect(doc.getElementById('command-options').textContent).toContain('未加载可用技能');
+    doc.querySelector('[data-command-category="local"]').click();
+    key(window, doc.getElementById('followup-prompt'), 'ArrowDown');
+    key(window, doc.getElementById('followup-prompt'), 'Enter');
+    expect(doc.getElementById('model-picker').classList.contains('hidden')).toBe(false);
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('offers loaded skills and templates, preserves arguments, and dispatches them directly through Pi', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'created';
+    app.applySnapshot({ id: 'created', running: false, mode: 'agent', workflow: 'planned', messages: [], commands: [{ name: 'skill:review', source: 'skill', description: '<script>unsafe</script> Review changes' }, { name: 'custom', source: 'template', description: 'Template' }] });
+    const input = type(window, '/skill:', 'followup-prompt');
+    expect(window.document.querySelector('#command-options script')).toBeNull();
+    key(window, input, 'Enter'); expect(input.value).toBe('/skill:review ');
+    input.value += 'src/index.ts'; window.document.getElementById('followup-form').requestSubmit();
+    await vi.waitFor(() => expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(true));
+    expect(JSON.parse(requests.find((request) => request.url.endsWith('/prompt')).body)).toEqual({ message: '/skill:review src/index.ts', command: true, workflow: 'direct' });
+    expect(app.state.workflow).toBe('planned');
+  });
+
+  it('blocks runtime commands in read-only modes and preserves disabled input while allowing model choices during a run', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'created';
+    app.applySnapshot({ id: 'created', mode: 'plan', running: false, messages: [], commands: [{ name: 'dangerous', source: 'extension', description: 'Test' }] });
+    const input = type(window, '/dangerous ', 'followup-prompt'); window.document.getElementById('followup-form').requestSubmit();
+    await vi.waitFor(() => expect(window.document.getElementById('toast-root').textContent).toContain('需要先切换 Agent'));
+    expect(input.value).toBe('/dangerous '); expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    app.setRunning(true); type(window, '/compact', 'followup-prompt');
+    expect(window.document.querySelector('#command-options [aria-disabled=true]')).toBeTruthy();
+    const choose = type(window, '/model', 'followup-prompt'); key(window, choose, 'Enter');
+    expect(window.document.getElementById('model-picker').classList.contains('hidden')).toBe(false);
+    expect(app.state.mode).toBe('plan');
+  });
+
+  it('shows actual context estimates beneath the composer and clears stale usage after compaction', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'created';
+    const doc = window.document;
+    app.applySnapshot({ id: 'created', running: false, messages: [], context: { usage: { tokens: 1600, contextWindow: 8000, percent: 20 }, autoCompaction: true, compactions: 0, stats: { tokens: { input: 10000, output: 500, cacheRead: 200, cacheWrite: 0 }, cost: 0.012 } } });
+    expect(doc.getElementById('followup-context-button').textContent).toContain('1.6k / 8k · 20%');
+    expect(doc.getElementById('compact-button').closest('form').id).toBe('followup-form');
+    expect(doc.querySelector('.conversation-header #compact-button')).toBeNull();
+    doc.getElementById('followup-context-button').click();
+    expect(doc.getElementById('context-details').textContent).toContain('已开启');
+    expect(doc.getElementById('context-details').textContent).toContain('10,000');
+    app.handleEvent({ type: 'pforge_context', context: { usage: { tokens: null, percent: null, contextWindow: 8000 }, compactions: 1 } });
+    expect(doc.getElementById('followup-context-button').textContent).toContain('— / 8k');
+    expect(doc.getElementById('followup-context-button').textContent).not.toContain('20%');
+    expect(doc.getElementById('context-explanation').textContent).toContain('下一次模型回复');
+    app.handleEvent({ type: 'pforge_context', context: { usage: { tokens: 7400, percent: 92.5, contextWindow: 8000 } } });
+    expect(doc.getElementById('followup-context-button').dataset.level).toBe('high');
+    app.handleEvent({ type: 'pforge_context', context: { usage: { tokens: 2, percent: 0.025, contextWindow: 8000 } } });
+    expect(doc.getElementById('followup-context-button').textContent).toContain('<0.1%');
+    await app.newConversation(); expect(doc.getElementById('context-button').textContent).not.toContain('7.4k');
+  });
+
+  it('locks compaction against sending or duplicate operations, supports cancellation and preserves failed commands', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'created';
+    const doc = window.document, originalFetch = window.fetch; let release;
+    window.fetch = (url, init) => url.endsWith('/compact') ? new Promise((resolve) => { release = resolve; }) : originalFetch(url, init);
+    const input = type(window, '/compact keep decisions', 'followup-prompt'); doc.getElementById('followup-form').requestSubmit();
+    await vi.waitFor(() => expect(app.state.compacting).toBe(true));
+    expect(doc.getElementById('followup-send').disabled).toBe(true);
+    expect(doc.getElementById('followup-model-picker-button').disabled).toBe(true);
+    expect(await app.sendFollowup('do not run')).toBe(false); expect(await app.compactContext()).toBe(false);
+    doc.getElementById('cancel-compact-button').click();
+    await vi.waitFor(() => expect(requests.some((request) => request.url.endsWith('/abort-compact'))).toBe(true));
+    release({ ok: false, status: 400, json: async () => ({ error: 'Compaction cancelled' }) });
+    await vi.waitFor(() => expect(app.state.compacting).toBe(false));
+    expect(input.value).toBe('/compact keep decisions');
+    expect(doc.getElementById('followup-send').disabled).toBe(false);
+    expect(doc.getElementById('context-operation-note').textContent).toContain('原有上下文仍然保留');
+  });
+
+  it('freezes completed elapsed time across snapshots and subsequent renders', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'created';
+    app.applySnapshot({ id: 'created', running: false, messages: [], runningSince: Date.now() - 600000, finishedAt: Date.now() - 593000 });
+    expect(window.document.getElementById('run-elapsed').textContent).toBe('0:07');
+    app.updateElapsed(); expect(window.document.getElementById('run-elapsed').textContent).toBe('0:07');
+    app.applySnapshot({ id: 'created', running: false, messages: [] });
+    expect(window.document.getElementById('run-elapsed').textContent).toBe('');
+  });
+});
+
+describe('Streaming answer rendering', () => {
+  it('formats incomplete Markdown before completion and preserves completed blocks and expanding code controls', async () => {
+    const { window, app } = await client();
+    streamText(app, '## Live answer\n\n**bo');
+    const node = window.document.querySelector('.turn.assistant .turn-text');
+    await vi.waitFor(() => expect(node.querySelector('h2')?.textContent).toBe('Live answer'));
+    expect(node.querySelector('strong')).toBeNull();
+    const heading = node.querySelector('h2');
+    streamText(app, 'ld**\n\n- one\n- two\n\n| Name | State |\n| --- | --- |\n| stream | on |\n\n```diff\n-old\n+new');
+    await vi.waitFor(() => expect(node.querySelector('code.language-diff')?.textContent).toContain('+new'));
+    expect(node.querySelector('strong').textContent).toBe('bold');
+    expect(node.querySelectorAll('li')).toHaveLength(2);
+    expect(node.querySelector('td').textContent).toBe('stream');
+    expect(node.querySelector('.diff-add').textContent).toContain('+new');
+    expect(node.dataset.raw).not.toMatch(/```$/);
+    const table = node.querySelector('table'), pre = node.querySelector('pre'), button = node.querySelector('.copy-code');
+    pre.scrollLeft = 45; pre.scrollTop = 12;
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true });
+    streamText(app, '\n+more\n```\n\n[Docs](https://example.com)');
+    await vi.waitFor(() => expect(node.querySelector('a')?.textContent).toBe('Docs'));
+    expect(node.querySelector('h2')).toBe(heading);
+    expect(node.querySelector('table')).toBe(table);
+    expect(node.querySelector('pre')).toBe(pre);
+    expect(node.querySelector('.copy-code')).toBe(button);
+    expect(pre.scrollLeft).toBe(45); expect(pre.scrollTop).toBe(12);
+    expect(node.querySelector('a').rel).toBe('noopener noreferrer');
+    button.click(); expect(writeText).toHaveBeenCalledWith('-old\n+new\n+more\n');
+    const html = node.innerHTML;
+    app.handleEvent({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: node.dataset.raw }], stopReason: 'stop' } });
+    expect(node.innerHTML).toBe(html);
+    expect(node.querySelector('pre')).toBe(pre);
+    expect(node.querySelectorAll('.copy-code')).toHaveLength(1);
+  });
+
+  it('batches token bursts and immediately gives the authoritative final answer precedence over queued fragments', async () => {
+    const { window, app } = await client();
+    const sanitize = vi.spyOn(window.DOMPurify, 'sanitize');
+    streamText(app, '## ');
+    const initialRenders = sanitize.mock.calls.length;
+    for (const token of ['Live', ' ', 'answer', '\n\n', '**', 'done', '**']) streamText(app, token);
+    expect(sanitize).toHaveBeenCalledTimes(initialRenders);
+    const node = window.document.querySelector('.turn.assistant .turn-text');
+    await vi.waitFor(() => expect(node.querySelector('strong')?.textContent).toBe('done'));
+    expect(sanitize).toHaveBeenCalledTimes(initialRenders + 1);
+    streamText(app, '\n\nstale pending fragment');
+    app.handleEvent({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: '## Final answer\n\n**Authoritative**' }] } });
+    expect(node.querySelector('h2').textContent).toBe('Final answer');
+    const finalRenders = sanitize.mock.calls.length;
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    expect(sanitize).toHaveBeenCalledTimes(finalRenders);
+    expect(node.textContent).not.toContain('stale');
+    expect(node.dataset.raw).toBe('## Final answer\n\n**Authoritative**');
+  });
+
+  it('continues a formatted partial snapshot and cancels queued work when replacing or leaving a conversation', async () => {
+    const { window, app } = await client();
+    app.state.sessionId = 'first';
+    app.applySnapshot({ id: 'first', running: true, messages: [], partialMessage: { role: 'assistant', content: [{ type: 'text', text: '## Reconnected\n\n**first** ' }] } });
+    const node = window.document.querySelector('.turn.assistant .turn-text'), heading = node.querySelector('h2');
+    streamText(app, 'and `next`');
+    await vi.waitFor(() => expect(node.querySelector('code')?.textContent).toBe('next'));
+    expect(node.querySelector('h2')).toBe(heading);
+    expect(node.dataset.raw).toBe('## Reconnected\n\n**first** and `next`');
+    streamText(app, ' stale fragment');
+    app.state.sessionId = 'other';
+    app.applySnapshot({ id: 'other', running: false, messages: [{ role: 'assistant', content: [{ type: 'text', text: '**Fresh session**' }] }] });
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    expect(node.textContent).not.toContain('stale');
+    expect(window.document.querySelector('#timeline .turn-text strong').textContent).toBe('Fresh session');
+    streamText(app, 'pending before new conversation');
+    await app.newConversation();
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    expect(window.document.getElementById('timeline').textContent).toBe('');
+  });
+
+  it('sanitizes every streamed prefix, including split raw HTML, remote images and unsafe links', async () => {
+    const { window, app } = await client();
+    const sanitize = vi.spyOn(window.DOMPurify, 'sanitize');
+    for (const delta of ['## Safe\n\n<script onload=', '"alert(1)">bad</script>\n\n![remote](https://example.com/pixel)\n\n[unsafe](java', 'script:alert(1))\n\n[good](https://example.com)\n\n<p class="modal">fake</p>']) {
+      streamText(app, delta);
+      const renders = sanitize.mock.calls.length;
+      await vi.waitFor(() => expect(sanitize.mock.calls.length).toBeGreaterThan(renders));
+      const node = window.document.querySelector('.turn.assistant .turn-text');
+      expect(node.querySelector('script, img, .modal, [onclick], [onload], [style], a[href^="javascript:"]')).toBeNull();
+    }
+    const node = window.document.querySelector('.turn.assistant .turn-text');
+    expect(node.querySelector('h2').textContent).toBe('Safe');
+    expect([...node.querySelectorAll('a[href]')].map((a) => a.href)).toEqual(['https://example.com/']);
+    expect(node.textContent).toContain('<script');
+  });
+
+  it('follows growing output only while the reader is near the end', async () => {
+    const { window, app } = await client();
+    streamText(app, '## Live\n\nStart\n\n');
+    const node = window.document.querySelector('.turn.assistant .turn-text');
+    await vi.waitFor(() => expect(node.querySelector('h2')).toBeTruthy());
+    const timeline = window.document.getElementById('timeline');
+    Object.defineProperties(timeline, { clientHeight: { value: 200, configurable: true }, scrollHeight: { get: () => 2000 + node.textContent.length, configurable: true } });
+    timeline.scrollTop = 200;
+    streamText(app, '- reading history\n');
+    await vi.waitFor(() => expect(node.querySelector('li')).toBeTruthy());
+    expect(timeline.scrollTop).toBe(200);
+    timeline.scrollTop = timeline.scrollHeight - timeline.clientHeight;
+    streamText(app, '- ' + 'growing '.repeat(50));
+    await vi.waitFor(() => expect(node.querySelectorAll('li')).toHaveLength(2));
+    expect(timeline.scrollTop).toBe(timeline.scrollHeight);
+  });
+});
+
+async function reviewClient(initial = {}) {
+  const fixture = await client(initial), { window, app, requests } = fixture;
+  const review = { available: true, files: [
+    { path: 'src/a.ts', status: ' M', fingerprint: 'a1', preexisting: true, observed: false },
+    { path: 'src/b.ts', status: '??', fingerprint: 'b1', preexisting: false, observed: true }
+  ] };
+  const diffs = { 'src/a.ts': '@@ -1 +1 @@\n-old\n+<img src=x onerror=alert(1)>\n', 'src/b.ts': '+second file\n' };
+  const fetcher = window.fetch;
+  window.fetch = async (url, init) => {
+    const parsed = new URL(url, window.location.origin);
+    if (!parsed.pathname.endsWith('/changes')) return fetcher(url, init);
+    requests.push({ url, ...init });
+    const path = parsed.searchParams.get('path');
+    return { ok: true, status: 200, json: async () => path ? { path, diff: diffs[path] } : { ...review } };
+  };
+  await app.createSession(undefined, 'Review');
+  return { ...fixture, review, diffs };
+}
+
+describe('Git review workspace', () => {
+  it('opens a separate review panel during a run and safely previews the first file', async () => {
+    const { window, app } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    expect(find('changes-panel').closest('#conversation-view')).toBeNull();
+    expect(find('changes-panel').parentElement).toBe(find('workspace-body'));
+    expect(find('changes-panel').classList.contains('hidden')).toBe(true);
+    expect(find('toggle-changes').classList.contains('hidden')).toBe(false);
+    app.setRunning(true);
+    find('toggle-changes').click();
+    await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    expect(find('toggle-changes').getAttribute('aria-expanded')).toBe('true');
+    expect(find('changes-count').textContent).toBe('2');
+    expect(find('changes-file-name').textContent).toBe('src/a.ts');
+    expect(find('changes-diff').textContent).toBe('@@ -1 +1 @@\n-old\n+<img src=x onerror=alert(1)>\n');
+    expect(find('changes-diff').querySelector('img')).toBeNull();
+    expect(find('changes-diff').querySelectorAll('.diff-add')).toHaveLength(1);
+    expect(find('changes-files').textContent).toContain('已有修改');
+    expect(find('changes-files').textContent).toContain('期间变化');
+    expect(find('refresh-changes').disabled).toBe(false);
+    find('changes-close').click();
+    expect(find('changes-panel').classList.contains('hidden')).toBe(true);
+    expect(window.document.activeElement).toBe(find('toggle-changes'));
+    app.setRunning(false);
+  });
+
+  it('preserves the selected file, focus and diff position across snapshots and explicit refreshes', async () => {
+    const { window, app, requests, review, diffs } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click();
+    await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    await app.loadChangeDiff('src/b.ts');
+    const button = window.document.querySelector('[data-change-path="src/b.ts"]'), diff = find('changes-diff');
+    button.focus(); diff.scrollTop = 80; diff.scrollLeft = 24; find('changes-files').scrollTop = 30;
+    const previousDiffRequests = requests.filter((request) => request.url.includes('/changes?')).length;
+    app.applySnapshot({ id: 'created', running: false, messages: [] });
+    await vi.waitFor(() => expect(find('refresh-changes').disabled).toBe(false));
+    expect(requests.filter((request) => request.url.includes('/changes?'))).toHaveLength(previousDiffRequests);
+    expect(window.document.activeElement.dataset.changePath).toBe('src/b.ts');
+    expect(diff.scrollTop).toBe(80); expect(diff.scrollLeft).toBe(24); expect(find('changes-files').scrollTop).toBe(30);
+    expect(diff.textContent).toBe('+second file\n');
+    review.files[1].fingerprint = 'b2'; diffs['src/b.ts'] = '+updated second file\n';
+    find('refresh-changes').click();
+    await vi.waitFor(() => expect(diff.textContent).toBe('+updated second file\n'));
+    expect(window.document.querySelector('.change-file.selected').dataset.changePath).toBe('src/b.ts');
+    expect(diff.scrollTop).toBe(80); expect(diff.scrollLeft).toBe(24);
+  });
+
+  it('ignores late file responses when a newer selection is still loading', async () => {
+    const { window, app } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click(); await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    const fetcher = window.fetch, pending = new Map();
+    window.fetch = (url, init) => url.includes('/changes?') ? new Promise((resolve) => pending.set(new URL(url, window.location.origin).searchParams.get('path'), resolve)) : fetcher(url, init);
+    const second = app.loadChangeDiff('src/b.ts'), first = app.loadChangeDiff('src/a.ts');
+    pending.get('src/b.ts')({ ok: true, json: async () => ({ diff: '+stale second' }) }); await second;
+    expect(find('changes-file-name').textContent).toBe('src/a.ts');
+    expect(find('changes-diff').textContent).toBe('正在读取差异…');
+    expect(find('changes-preview').getAttribute('aria-busy')).toBe('true');
+    pending.get('src/a.ts')({ ok: true, json: async () => ({ diff: '+latest first' }) }); await first;
+    expect(find('changes-diff').textContent).toBe('+latest first');
+    expect(find('changes-preview').getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('invalidates outstanding lists and diffs when switching sessions or starting a new conversation', async () => {
+    const { window, app, review } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click(); await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    const fetcher = window.fetch; let releaseDiff, releaseList;
+    window.fetch = (url, init) => {
+      if (url.startsWith('/api/sessions/created/changes?')) return new Promise((resolve) => { releaseDiff = resolve; });
+      if (url === '/api/sessions/created/changes') return new Promise((resolve) => { releaseList = resolve; });
+      return fetcher(url, init);
+    };
+    const staleDiff = app.loadChangeDiff('src/b.ts'), staleList = app.loadChanges();
+    review.files = [];
+    app.state.sessionId = 'other'; app.applySnapshot({ id: 'other', running: false, messages: [] });
+    await vi.waitFor(() => expect(find('changes-count').textContent).toBe('0'));
+    releaseDiff({ ok: true, json: async () => ({ diff: '+previous session' }) });
+    releaseList({ ok: true, json: async () => ({ available: true, files: [{ path: 'stale.ts', status: ' M' }] }) });
+    await Promise.all([staleDiff, staleList]);
+    expect(find('changes-files').textContent).toContain('工作区没有未提交变更');
+    expect(find('changes-diff').textContent).not.toContain('previous session');
+    expect(find('changes-file-name').textContent).toBe('文件差异');
+    expect(find('refresh-changes').disabled).toBe(false);
+    let releaseOther;
+    window.fetch = (url, init) => url === '/api/sessions/other/changes' ? new Promise((resolve) => { releaseOther = resolve; }) : fetcher(url, init);
+    const pending = app.loadChanges(); await app.newConversation();
+    releaseOther({ ok: true, json: async () => ({ available: true, files: [{ path: 'late.ts', status: ' M' }] }) }); await pending;
+    expect(find('changes-panel').classList.contains('hidden')).toBe(true);
+    expect(find('toggle-changes').classList.contains('hidden')).toBe(true);
+    expect(find('changes-files').textContent).toBe('');
+    expect(app.state.changes.selectedPath).toBeNull();
+  });
+
+  it('clears a removed selection and recovers from unavailable repositories and read errors', async () => {
+    const { window, app, review } = await reviewClient(), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click(); await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    review.files = []; await app.loadChanges();
+    expect(app.state.changes.selectedPath).toBeNull();
+    expect(find('changes-diff').textContent).toContain('工作区没有未提交变更');
+    review.available = false; review.reason = '当前文件夹未初始化 Git'; await app.loadChanges();
+    expect(find('changes-note').textContent).toBe(review.reason);
+    expect(find('changes-count').textContent).toBe('');
+    const fetcher = window.fetch;
+    window.fetch = async (url, init) => url.endsWith('/changes') ? { ok: false, status: 500, json: async () => ({ error: 'git read failed' }) } : fetcher(url, init);
+    await app.loadChanges();
+    expect(find('changes-note').textContent).toContain('git read failed');
+    expect(find('refresh-changes').disabled).toBe(false);
+    review.available = true; review.files = [{ path: 'src/b.ts', status: '??', fingerprint: 'b2' }];
+    window.fetch = async (url, init) => url.includes('/changes?') ? { ok: false, status: 500, json: async () => ({ error: 'diff read failed' }) } : fetcher(url, init);
+    await app.loadChanges();
+    expect(find('changes-diff').textContent).toContain('diff read failed');
+    expect(find('changes-preview').getAttribute('aria-busy')).toBe('false');
+    expect(find('refresh-changes').disabled).toBe(false);
+    window.fetch = fetcher; await app.loadChanges(true);
+    expect(find('changes-diff').textContent).toBe('+second file\n');
+  });
+
+  it('uses a modal drawer on narrow screens, traps focus, and releases the chat when closed or widened', async () => {
+    const { window, app, reviewMedia } = await reviewClient({ narrow: true }), find = (id) => window.document.getElementById(id);
+    find('toggle-changes').click(); await vi.waitFor(() => expect(app.state.changes.diffStatus).toBe('ready'));
+    expect(find('changes-panel').getAttribute('aria-modal')).toBe('true');
+    expect(find('changes-backdrop').classList.contains('hidden')).toBe(false);
+    expect(find('chat-pane').inert).toBe(true); expect(find('workspace-header').inert).toBe(true); expect(find('sidebar').inert).toBe(true);
+    expect(window.document.activeElement).toBe(find('changes-close'));
+    find('changes-diff').focus(); find('changes-diff').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(window.document.activeElement).toBe(find('refresh-changes'));
+    find('refresh-changes').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(window.document.activeElement).toBe(find('changes-diff'));
+    find('changes-diff').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(find('changes-panel').classList.contains('hidden')).toBe(true);
+    expect(find('chat-pane').inert).toBe(false); expect(window.document.activeElement).toBe(find('toggle-changes'));
+    find('toggle-changes').click(); reviewMedia.matches = false; reviewMedia.dispatchEvent(new window.Event('change'));
+    expect(find('changes-panel').getAttribute('aria-modal')).toBeNull();
+    expect(find('chat-pane').inert).toBe(false); expect(find('changes-backdrop').classList.contains('hidden')).toBe(true);
+    reviewMedia.matches = true; reviewMedia.dispatchEvent(new window.Event('change')); find('changes-backdrop').click();
+    expect(find('chat-pane').inert).toBe(false); expect(find('sidebar').inert).toBe(false);
+    expect(window.document.activeElement).toBe(find('toggle-changes'));
+  });
+});
+
+describe('Composer run controls', () => {
+  it('keeps send, stop and continuation in the composer and waits for a confirmed stop', async () => {
+    const { window, app, requests } = await client(), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'Stop');
+    expect(find('stop-button').closest('#followup-form')).not.toBeNull();
+    expect(find('resume-task-button').closest('#followup-form')).not.toBeNull();
+    expect(window.document.querySelector('.conversation-header #stop-button, #task-panel #resume-task-button')).toBeNull();
+    app.applySnapshot({ id: 'created', running: true, outcome: 'running', messages: [] });
+    expect(find('stop-button').classList.contains('hidden')).toBe(false);
+    expect(find('followup-send').classList.contains('hidden')).toBe(true);
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    app.state.sending = true; app.setRunning(true);
+    expect(find('stop-button').disabled).toBe(true);
+    app.state.sending = false; app.setRunning(true);
+    expect(find('stop-button').disabled).toBe(false);
+    find('followup-prompt').value = 'retain my draft';
+    const fetcher = window.fetch; let release;
+    window.fetch = (url, init) => {
+      if (url.endsWith('/abort')) { requests.push({ url, ...init }); return new Promise((resolve) => { release = () => resolve({ ok: true, json: async () => ({ ok: true }) }); }); }
+      if (url.endsWith('/state')) return Promise.resolve({ ok: true, json: async () => ({ id: 'created', running: false, outcome: 'aborted', messages: [] }) });
+      return fetcher(url, init);
+    };
+    const stopping = app.stopExecution();
+    expect(find('stop-button').disabled).toBe(true);
+    expect(find('composer-control-status').textContent).toBe('正在停止…');
+    expect(await app.stopExecution()).toBe(false);
+    app.handleEvent({ type: 'agent_settled', aborted: true, taskRunning: false });
+    expect(find('stop-button').classList.contains('hidden')).toBe(false);
+    expect(await app.resumeExecution()).toBe(false);
+    expect(await app.sendFollowup('competing prompt')).toBe(false);
+    release(); expect(await stopping).toBe(true);
+    expect(requests.filter((request) => request.url.endsWith('/abort'))).toHaveLength(1);
+    expect(find('followup-prompt').value).toBe('retain my draft');
+    expect(find('followup-send').classList.contains('hidden')).toBe(false);
+    find('followup-prompt').value = ''; find('followup-prompt').dispatchEvent(new window.Event('input'));
+    expect(find('stop-button').classList.contains('hidden')).toBe(true);
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(false);
+    expect(find('resume-task-button').disabled).toBe(false);
+    expect(find('composer-control-status').classList.contains('hidden')).toBe(true);
+  });
+
+  it('continues an interrupted ordinary turn in the same conversation and applies staged model settings first', async () => {
+    const first = model('a', { reasoning: true, thinkingLevels: ['low', 'high'] }), second = model('b', { reasoning: true, thinkingLevels: ['low', 'high'] });
+    const { window, app, requests } = await client({ models: [first, second], thinkingLevel: 'low' }), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'Resume');
+    app.applySnapshot({ id: 'created', running: true, outcome: 'running', model: first, thinkingLevel: 'low', messages: [] });
+    await app.changeModel('mock/b'); await app.changeThinking('high');
+    app.handleEvent({ type: 'agent_settled', aborted: true, taskRunning: false });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(false);
+    const fetcher = window.fetch; let release;
+    window.fetch = (url, init) => {
+      if (url.endsWith('/prompt')) { requests.push({ url, ...init }); return new Promise((resolve) => { release = () => resolve({ ok: true, json: async () => ({ accepted: true }) }); }); }
+      if (url.endsWith('/state')) return Promise.resolve({ ok: true, json: async () => ({ id: 'created', running: true, outcome: 'running', messages: [] }) });
+      return fetcher(url, init);
+    };
+    const resuming = app.resumeExecution();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(find('resume-task-label').textContent).toBe('继续中…');
+    expect(await app.resumeExecution()).toBe(false);
+    expect(await app.sendFollowup('duplicate')).toBe(false);
+    release(); expect(await resuming).toBe(true);
+    const changes = requests.filter((request) => request.method === 'POST' && request.url.startsWith('/api/sessions/'));
+    expect(changes.map((request) => request.url)).toEqual(['/api/sessions/created/model', '/api/sessions/created/thinking', '/api/sessions/created/prompt']);
+    expect(JSON.parse(changes.at(-1).body)).toMatchObject({ workflow: 'direct', message: expect.stringContaining('继续刚才中断') });
+    expect(requests.some((request) => request.url.endsWith('/resume-task'))).toBe(false);
+    expect(find('stop-button').classList.contains('hidden')).toBe(false);
+    app.setRunning(false);
+  });
+
+  it('uses explicit task continuation for interrupted workflows while new text remains an ordinary prompt', async () => {
+    const { window, app, requests } = await client(), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'Planned');
+    const interrupted = { id: 'task-1', kind: 'change', status: 'interrupted', phase: 'implement', repairs: 0, phases: [] };
+    app.applySnapshot({ id: 'created', running: false, outcome: 'idle', workflow: 'planned', task: interrupted, messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(false);
+    expect(find('resume-task-button').title).toContain('重新检查');
+    find('followup-prompt').value = 'new instructions'; find('followup-prompt').dispatchEvent(new window.Event('input'));
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    expect(find('followup-send').classList.contains('hidden')).toBe(false);
+    const fetcher = window.fetch;
+    window.fetch = (url, init) => url.endsWith('/state') ? Promise.resolve({ ok: true, json: async () => ({ id: 'created', running: true, task: { ...interrupted, status: 'running', phase: 'inspect' }, messages: [] }) }) : fetcher(url, init);
+    find('followup-prompt').value = ''; find('followup-prompt').dispatchEvent(new window.Event('input'));
+    find('followup-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(requests.filter((request) => request.url.endsWith('/resume-task'))).toHaveLength(1));
+    await vi.waitFor(() => expect(app.state.runControl).toBeNull());
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    expect(app.state.running).toBe(true);
+    app.setRunning(false);
+  });
+
+  it('does not show continuation for completed, read-only or incompatible task modes', async () => {
+    const { window, app } = await client(), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'States');
+    const task = { kind: 'change', phase: 'implement', status: 'aborted', phases: [] };
+    app.applySnapshot({ id: 'created', running: false, outcome: 'completed', messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    expect(await app.resumeExecution()).toBe(false);
+    app.applySnapshot({ id: 'created', running: false, outcome: 'aborted', readOnly: true, messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    app.applySnapshot({ id: 'created', running: false, outcome: 'aborted', readOnly: false, mode: 'plan', task, messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    app.applySnapshot({ id: 'created', running: false, mode: 'agent', task, messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(false);
+    app.applySnapshot({ id: 'created', running: true, outcome: 'running', task: { ...task, status: 'running' }, messages: [] });
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    app.setRunning(false);
+  });
+
+  it('recovers button states on stop or continuation errors without losing the draft or replaying a request', async () => {
+    const { window, app, requests } = await client(), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'Errors');
+    app.applySnapshot({ id: 'created', running: true, outcome: 'running', messages: [] });
+    const fetcher = window.fetch;
+    window.fetch = (url, init) => url.endsWith('/abort') || url.endsWith('/prompt') ? Promise.resolve({ ok: false, status: 409, json: async () => ({ error: 'still busy' }) }) : url.endsWith('/state') ? Promise.resolve({ ok: true, json: async () => ({ id: 'created', running: false, outcome: 'aborted', messages: [] }) }) : fetcher(url, init);
+    expect(await app.stopExecution()).toBe(false);
+    expect(app.state.running).toBe(true); expect(find('stop-button').disabled).toBe(false);
+    app.applySnapshot({ id: 'created', running: false, outcome: 'aborted', messages: [] });
+    find('followup-prompt').value = 'retain this draft';
+    expect(await app.resumeExecution()).toBe(false);
+    expect(find('followup-prompt').value).toBe('retain this draft');
+    expect(app.state.runControl).toBeNull(); expect(app.state.sending).toBe(false);
+    expect(window.document.getElementById('toast-root').textContent).toContain('继续失败');
+    expect(requests.filter((request) => request.url === '/api/session')).toHaveLength(1);
+  });
+});
 
 describe('Web client integration', () => {
   it('opens the MCP settings entry and preserves a configuration draft across change notifications', async () => {
     const { window, app, streams } = await client();
     app.state.sessionId = 'mcp-session'; app.connect('mcp-session');
     await app.openSettings('mcp');
-    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(5);
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(6);
     const root = window.document.getElementById('mcp-settings');
     root.querySelector('[data-action="add"]').click();
     const name = root.querySelector('[name="name"]'); name.value = 'unsaved-service';
@@ -169,6 +786,74 @@ describe('Web client integration', () => {
     expect(app.state.mode).toBe('ask');
   });
 
+  it('restores an explicitly chosen session workflow without expanding the strategy menu or carrying it into a new conversation', async () => {
+    const { window, app } = await client();
+    app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', mode: 'agent', workflow: 'planned', messages: [], running: false });
+    expect(app.state.workflow).toBe('planned');
+    expect(window.document.getElementById('mode-select').value).toBe('agent:planned');
+    expect(window.document.querySelector('[data-choose-mode="agent:planned"] .mode-check').textContent).toBe('✓');
+    expect(window.document.querySelector('#followup-mode-picker-button [data-mode-label]').textContent).toBe('Agent');
+    expect(window.document.querySelector('#followup-mode-picker-button [data-workflow-label]').classList.contains('hidden')).toBe(false);
+    window.document.getElementById('followup-mode-picker-button').click();
+    expect(window.document.getElementById('agent-strategies').classList.contains('hidden')).toBe(true);
+    await app.newConversation();
+    expect(app.state.workflow).toBe('direct');
+    expect(window.document.getElementById('mode-select').value).toBe('agent:direct');
+    expect(window.document.querySelector('#mode-picker-button [data-workflow-label]').classList.contains('hidden')).toBe(true);
+    expect(window.document.getElementById('mode-picker').classList.contains('hidden')).toBe(true);
+  });
+
+  it('defaults to adaptive despite a legacy planned preference and opts into staged execution only after selecting it', async () => {
+    const { window, app, requests } = await client({ localStorage: { 'pforge.workflow': 'planned' } });
+    const find = (id) => window.document.getElementById(id);
+    expect(app.state.workflow).toBe('direct');
+    expect(find('mode-description').classList.contains('hidden')).toBe(true);
+    expect(find('mode-picker-button').getAttribute('aria-label')).toContain('自适应（默认）');
+    find('mode-picker-button').click();
+    expect(find('mode-agent-toggle').getAttribute('aria-expanded')).toBe('false');
+    find('mode-agent-toggle').click();
+    expect(find('agent-strategies').classList.contains('hidden')).toBe(false);
+    expect(app.state.workflow).toBe('direct');
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
+    window.document.querySelector('[data-choose-mode="agent:planned"]').click();
+    await vi.waitFor(() => expect(app.state.workflow).toBe('planned'));
+    expect(find('mode-picker').classList.contains('hidden')).toBe(true);
+    expect(find('mode-agent-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(await app.sendPrompt('Implement this change')).toBe(true);
+    expect(JSON.parse(requests.find((request) => request.url === '/api/session').body).workflow).toBe('planned');
+    expect(JSON.parse(requests.find((request) => request.url.endsWith('/prompt')).body).workflow).toBe('planned');
+    app.setRunning(false);
+    await app.newConversation();
+    expect(app.state.workflow).toBe('direct');
+    expect(await app.sendPrompt('Implement another change')).toBe(true);
+    expect(JSON.parse(requests.filter((request) => request.url.endsWith('/prompt')).at(-1).body).workflow).toBe('direct');
+  });
+
+  it('returns to adaptive from the primary Agent option and keeps strategy keyboard navigation separate from selection', async () => {
+    const { window, app, requests } = await client();
+    const find = (id) => window.document.getElementById(id);
+    app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', mode: 'agent', workflow: 'planned', messages: [], running: false });
+    find('followup-mode-picker-button').click();
+    const agent = window.document.querySelector('[data-choose-mode="agent"]');
+    agent.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(window.document.activeElement.dataset.chooseMode).toBe('agent:planned');
+    window.document.activeElement.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(find('agent-strategies').classList.contains('hidden')).toBe(true);
+    expect(find('mode-picker').classList.contains('hidden')).toBe(false);
+    expect(app.state.workflow).toBe('planned');
+    agent.click();
+    await vi.waitFor(() => expect(JSON.parse(requests.find((request) => request.url.endsWith('/workflow')).body)).toEqual({ workflow: 'direct' }));
+    expect(app.state.workflow).toBe('direct');
+    expect(find('followup-mode-picker-button').getAttribute('aria-label')).toContain('自适应（默认）');
+    find('followup-mode-picker-button').click();
+    expect(find('agent-strategies').classList.contains('hidden')).toBe(true);
+    window.document.activeElement.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(find('mode-picker').classList.contains('hidden')).toBe(true);
+    expect(window.document.activeElement).toBe(find('followup-mode-picker-button'));
+  });
+
   it('saves per-model effort, restores it when switching back and prevents sending or competing changes while saving', async () => {
     const reasoning = model('a', { reasoning: true, thinkingLevels: ['off', 'low', 'medium', 'high'] });
     const { window, app, requests } = await client({ models: [reasoning, model('b')], thinkingLevel: 'medium' });
@@ -193,6 +878,134 @@ describe('Web client integration', () => {
     expect(find('prompt').value).toBe('keep draft'); expect(find('followup-prompt').value).toBe('keep followup');
     expect(await app.sendPrompt('run with high effort')).toBe(true);
     expect(JSON.parse(requests.find((request) => request.url === '/api/session').body)).toMatchObject({ model: 'mock/a', thinkingLevel: 'high', mode: 'agent' });
+  });
+
+  it('uses nested Agent strategies and stages model and effort changes while a run is active', async () => {
+    const first = model('a', { reasoning: true, thinkingLevels: ['off', 'low', 'high'] });
+    const second = model('b', { reasoning: true, thinkingLevels: ['off', 'low', 'high'] });
+    const { window, app, requests } = await client({ models: [first, second] });
+    const mode = window.document.getElementById('mode-select');
+    expect([...mode.options].map((option) => option.value)).toEqual(['agent:direct', 'agent:planned', 'plan', 'ask']);
+    mode.value = 'agent:planned'; mode.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(app.state.mode).toBe('agent');
+    expect(app.state.workflow).toBe('planned');
+    expect(window.document.getElementById('mode-description').textContent).toContain('复杂修改先规划');
+
+    app.state.sessionId = 'live'; app.state.activeModelKey = first.key; app.state.activeThinkingLevel = 'off'; app.state.model = first;
+    app.setRunning(true);
+    expect(window.document.getElementById('mode-select').disabled).toBe(true);
+    expect(window.document.getElementById('model-picker-button').disabled).toBe(false);
+    window.document.getElementById('model-picker-button').click();
+    window.document.querySelector('[data-choose-model="mock/b"]').click();
+    expect(app.state.pendingModelKey).toBe('mock/b');
+    expect(requests.some((request) => request.url.endsWith('/model') || request.url.endsWith('/settings') && request.method === 'POST')).toBe(false);
+    const effort = window.document.getElementById('thinking-select');
+    effort.value = 'high'; effort.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(app.state.pendingThinkingLevel).toBe('high');
+    expect(window.document.getElementById('model-save-status').textContent).toContain('下一条消息');
+    app.setRunning(false);
+  });
+
+  it('folds execution details while keeping the implementation answer prominent', async () => {
+    const { window, app } = await client();
+    app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', running: false, task: { kind: 'change', status: 'completed', phase: 'complete', repairs: 0, phases: [] }, messages: [
+      { role: 'user', content: 'Implement the change' },
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'internal reasoning' }, { type: 'text', text: 'Implementation finished.' }, { type: 'toolCall', id: 'tool-1', name: 'read', arguments: { path: 'a.ts' } }] },
+      { role: 'toolResult', toolCallId: 'tool-1', toolName: 'read', content: [{ type: 'text', text: 'file content' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Final answer.' }] }
+    ] });
+    const process = window.document.querySelector('.execution-details');
+    expect(process).not.toBeNull();
+    expect(process.open).toBe(false);
+    expect(window.document.querySelectorAll('#timeline > .turn.assistant')).toHaveLength(1);
+    expect(window.document.querySelector('#timeline > .turn.assistant').textContent).toContain('Final answer.');
+    expect(window.document.querySelector('.thinking-block').closest('.execution-details')).not.toBeNull();
+    expect(window.document.querySelector('.tool-row').closest('.execution-details')).not.toBeNull();
+  });
+
+  it('applies staged model and reasoning before exactly one next prompt and retains them across snapshots', async () => {
+    const first = model('a', { reasoning: true, thinkingLevels: ['low', 'high'] });
+    const second = model('b', { reasoning: true, thinkingLevels: ['low', 'high'] });
+    const { window, app, requests } = await client({ models: [first, second], thinkingLevel: 'high' });
+    app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', model: first, thinkingLevel: 'high', running: true, messages: [] });
+    await app.changeModel('mock/b'); await app.changeThinking('high');
+    app.applySnapshot({ id: 'live', model: first, thinkingLevel: 'high', running: false, messages: [] });
+    expect(app.state.model.key).toBe('mock/b'); expect(app.state.thinkingLevel).toBe('high');
+    expect(window.document.getElementById('followup-model-picker-button').title).toContain('下一条消息');
+    // Editing the staged model after settling must not send a reasoning request
+    // against the still-active model on the server.
+    await app.changeThinking('low');
+    expect(requests.some((request) => request.url.endsWith('/thinking'))).toBe(false);
+    const fetcher = window.fetch; let release;
+    window.fetch = (url, init) => url.endsWith('/model') ? new Promise((resolve) => { release = () => resolve(fetcher(url, init)); }) : fetcher(url, init);
+    const sent = app.sendFollowup('next turn');
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(await app.sendFollowup('duplicate')).toBe(false);
+    release(); expect(await sent).toBe(true);
+    const mutations = requests.filter((request) => request.method === 'POST' && request.url.startsWith('/api/sessions/'));
+    expect(mutations.map((request) => request.url)).toEqual(['/api/sessions/live/model', '/api/sessions/live/prompt']);
+    expect(app.state.activeModelKey).toBe('mock/b'); expect(app.state.thinkingLevel).toBe('low');
+    expect(app.state.pendingModelKey).toBeNull(); expect(app.state.pendingThinkingLevel).toBeNull();
+    expect(window.document.getElementById('followup-model-picker-button').title).not.toContain('下一条消息');
+    app.setRunning(false);
+  });
+
+  it('retains a failed staged save and draft without sending a prompt', async () => {
+    const { window, app, requests } = await client();
+    app.state.sessionId = 'live'; app.applySnapshot({ id: 'live', model: model('a'), thinkingLevel: 'off', running: true, messages: [] });
+    await app.changeModel('mock/b'); app.setRunning(false);
+    const fetcher = window.fetch;
+    window.fetch = (url, init) => url.endsWith('/model') ? Promise.resolve({ ok: false, status: 409, json: async () => ({ error: 'busy model' }) }) : fetcher(url, init);
+    window.document.getElementById('followup-prompt').value = 'keep draft';
+    expect(await app.sendFollowup('keep draft')).toBe(false);
+    expect(app.state.pendingModelKey).toBe('mock/b');
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    expect(window.document.getElementById('followup-prompt').value).toBe('keep draft');
+  });
+
+  it('cancels staged choices when selecting the active model again', async () => {
+    const reasoning = model('a', { reasoning: true, thinkingLevels: ['low', 'high'] });
+    const { app, requests } = await client({ models: [reasoning, model('b')], thinkingLevel: 'high' });
+    app.state.sessionId = 'live'; app.applySnapshot({ id: 'live', model: reasoning, thinkingLevel: 'high', running: true, messages: [] });
+    await app.changeModel('mock/b'); expect(app.state.thinkingLevel).toBe('off');
+    await app.changeModel('mock/a');
+    expect(app.state.pendingModelKey).toBeNull(); expect(app.state.pendingThinkingLevel).toBeNull();
+    expect(app.state.thinkingLevel).toBe('high');
+    expect(requests.some((request) => request.method === 'POST')).toBe(false); app.setRunning(false);
+  });
+
+  it('restores per-turn process folds and task kinds in mixed historical conversations', async () => {
+    const { window, app } = await client();
+    app.state.sessionId = 'live';
+    const assistant = (text, thinking) => ({ type: 'message', message: { role: 'assistant', content: [...(thinking ? [{ type: 'thinking', thinking }] : []), { type: 'text', text }] } });
+    const user = (content) => ({ type: 'message', message: { role: 'user', content } });
+    const task = (kind, phase) => ({ type: 'custom', customType: 'pforge.task', data: { kind, phase } });
+    app.applySnapshot({ id: 'live', running: false, task: { kind: 'answer', phase: 'complete', status: 'completed' }, entries: [
+      { type: 'custom', customType: 'pforge.task', data: { cleared: true } }, user('first'), assistant('reading', 'first thoughts'), assistant('first result'),
+      task('change', 'inspect'), user('fix it'), assistant('inspection'), task('change', 'plan'), assistant('plan'),
+      task('change', 'implement'), assistant('implementation result'), task('change', 'review'), assistant('{"summary":"reviewed","issues":[]}'),
+      task('answer', 'inspect'), user('What can you do?'), assistant('capability answer', 'third thoughts')
+    ] });
+    expect([...window.document.querySelectorAll('#timeline > .turn.assistant .turn-text')].map((node) => node.textContent.trim())).toEqual(['first result', 'implementation result', 'capability answer']);
+    const folds = [...window.document.querySelectorAll('.execution-details')];
+    expect(folds).toHaveLength(3); expect(folds.every((node) => !node.open)).toBe(true);
+    expect(folds[0].textContent).toContain('first thoughts'); expect(folds[1].textContent).toContain('inspection');
+    expect(folds[2].textContent).toContain('third thoughts');
+  });
+
+  it('sends on Enter and preserves a newline on Shift+Enter', async () => {
+    const { window, app } = await client();
+    const prompt = window.document.getElementById('prompt');
+    const submit = vi.spyOn(window.HTMLFormElement.prototype, 'requestSubmit').mockImplementation(() => {});
+    app.state.running = true;
+    prompt.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(submit).toHaveBeenCalledTimes(1);
+    submit.mockClear();
+    prompt.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(submit).not.toHaveBeenCalled();
+    submit.mockRestore();
   });
 
   it('rolls back failed effort saves without discarding drafts or mode, then applies the session response after success', async () => {
@@ -480,17 +1293,82 @@ describe('Web client integration', () => {
     const delta = { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'hello' } };
     streams[0].onEvent({ id: '2', data: JSON.stringify(delta) });
     streams[0].onEvent({ id: '2', data: JSON.stringify(delta) });
-    expect(window.document.querySelector('.assistant.turn-text').textContent).toBe('hello');
-    const snapshot = { id: 'abc', title: 'Restored', running: false, readOnly: true, outcome: 'completed', model: null, messages: [ { role: 'user', content: 'task' }, { role: 'assistant', content: [{ type: 'thinking', thinking: 'reason' }, { type: 'text', text: '**hello**' }, { type: 'toolCall', id: 't1', name: 'read', arguments: { path: 'a.ts' } }] }, { role: 'toolResult', toolCallId: 't1', toolName: 'read', content: [{ type: 'text', text: 'file content' }] } ], verification: { status: 'failed', report: { results: [{ command: 'test', exitCode: 1, passed: false, output: 'failure details', durationMs: 5 }] } } };
+    await vi.waitFor(() => expect(window.document.querySelector('.assistant.turn-text').textContent.trim()).toBe('hello'));
+    expect(window.document.querySelector('.assistant.turn-text').dataset.raw).toBe('hello');
+    const snapshot = { id: 'abc', title: 'Restored', running: false, readOnly: true, outcome: 'completed', model: null, messages: [ { role: 'user', content: 'task' }, { role: 'assistant', content: [{ type: 'thinking', thinking: 'reason' }, { type: 'text', text: 'Reading the file.' }, { type: 'toolCall', id: 't1', name: 'read', arguments: { path: 'a.ts' } }] }, { role: 'toolResult', toolCallId: 't1', toolName: 'read', content: [{ type: 'text', text: 'file content' }] }, { role: 'assistant', content: [{ type: 'text', text: '**hello**' }] } ], verification: { status: 'failed', report: { results: [{ command: 'test', exitCode: 1, passed: false, output: 'failure details', durationMs: 5 }] } } };
     streams[0].onEvent({ id: '3', data: JSON.stringify({ type: 'pforge_snapshot', snapshot }) });
-    expect(window.document.querySelectorAll('.turn.assistant')).toHaveLength(1);
-    expect(window.document.querySelector('.turn.assistant strong').textContent).toBe('Forge');
-    expect(window.document.querySelector('.turn.assistant .turn-text strong').textContent).toBe('hello');
+    expect(window.document.querySelectorAll('#timeline > .turn.assistant')).toHaveLength(1);
+    expect(window.document.querySelector('#timeline > .turn.assistant strong').textContent).toBe('Forge');
+    expect(window.document.querySelector('#timeline > .turn.assistant .turn-text strong').textContent).toBe('hello');
     expect(window.document.querySelector('.thinking-block').textContent).toContain('reason');
     expect(window.document.querySelector('.tool-output').textContent).toBe('file content');
     expect(window.document.getElementById('run-status-label').textContent).toContain('验证失败');
     expect(window.document.getElementById('verification-output').textContent).toContain('FAIL test');
     expect(window.document.getElementById('followup-send').disabled).toBe(true);
+  });
+});
+
+function skillsEditor(initial = {}, onChanged = () => {}) {
+  const dom = new JSDOM('<div id="skills-root"></div>', { url: 'http://localhost/' }); windows.push(dom.window);
+  const root = dom.window.document.getElementById('skills-root'), requests = [];
+  const snapshot = { project: 'C:\\repo', projectTrusted: true, revision: 'rev-1', skills: [
+    { id: 'review', name: 'review', description: 'Review changes', filePath: 'C:\\skills\\review\\SKILL.md', scope: 'global', source: 'auto', enabled: true, effective: true, valid: true, manualOnly: false },
+    { id: 'manual', name: 'manual', description: 'Explicit use only', filePath: 'C:\\repo\\.pi\\skills\\manual\\SKILL.md', scope: 'project', source: 'auto', enabled: true, effective: true, valid: true, manualOnly: true }
+  ], paths: { global: 'C:\\skills' }, sources: [], diagnostics: [], ...initial };
+  let failure;
+  const api = vi.fn(async (url, init = {}) => {
+    const input = init.body ? JSON.parse(init.body) : undefined; requests.push({ url, input });
+    if (failure) throw new Error(failure);
+    if (url.startsWith('/api/skills/content')) return { content: '<script>window.skillExecuted=true</script>\n## Instructions', filePath: 'C:\\skills\\review\\SKILL.md' };
+    if (url.endsWith('/toggle')) { const target = snapshot.skills.find((skill) => skill.id === input.id); target.enabled = input.enabled; target.effective = input.enabled; snapshot.revision = 'rev-2'; }
+    return init.method ? { snapshot } : snapshot;
+  });
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (value) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[value]);
+  const controller = mountSkills(root, { api, esc, projectPath: snapshot.project, onChanged });
+  return { root, window: dom.window, controller, requests, api, snapshot, fail(value) { failure = value; } };
+}
+
+describe('Skills settings interactions', () => {
+  it('searches by scope, distinguishes manual invocation, previews untrusted instructions as text and persists a real toggle', async () => {
+    const changed = vi.fn(); const f = skillsEditor({}, changed);
+    await vi.waitFor(() => expect(f.root.querySelectorAll('.skill-card')).toHaveLength(2));
+    expect(f.root.textContent).toContain('仅手动调用');
+    f.root.querySelector('[data-skill-id="review"] [data-skill-action="detail"]').click();
+    await vi.waitFor(() => expect(f.root.querySelector('#skill-detail pre').textContent).toContain('<script>'));
+    expect(f.root.querySelector('#skill-detail script')).toBeNull(); expect(f.window.skillExecuted).toBeUndefined();
+    f.root.querySelector('[data-skill-id="review"] [role="switch"]').click();
+    await vi.waitFor(() => expect(f.root.querySelector('[data-skill-id="review"] [role="switch"]').getAttribute('aria-checked')).toBe('false'));
+    expect(f.requests.find((request) => request.url.endsWith('/toggle')).input).toEqual({ project: 'C:\\repo', revision: 'rev-1', id: 'review', enabled: false, scope: 'global' });
+    expect(changed).toHaveBeenCalledOnce();
+    const filter = f.root.querySelector('#skills-scope'); filter.value = 'project'; filter.dispatchEvent(new f.window.Event('change', { bubbles: true }));
+    expect(f.root.querySelectorAll('.skill-card')).toHaveLength(1);
+    const search = f.root.querySelector('#skills-search'); search.value = 'missing'; search.dispatchEvent(new f.window.Event('input', { bubbles: true }));
+    expect(f.root.textContent).toContain('没有匹配的技能');
+  });
+
+  it('preserves import drafts on conflicts, recovers controls and can retry a failed initial load', async () => {
+    const f = skillsEditor(); await vi.waitFor(() => expect(f.root.querySelectorAll('.skill-card')).toHaveLength(2));
+    f.root.querySelector('#skills-import').open = true;
+    const form = f.root.querySelector('#skills-source-form'); form.elements.path.value = 'C:\\extra-skills'; f.fail('配置已变更，请刷新');
+    form.dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(f.root.querySelector('#skills-feedback').textContent).toContain('请刷新'));
+    expect(form.elements.path.value).toBe('C:\\extra-skills'); expect(form.elements.path.disabled).toBe(false);
+    expect(f.root.querySelector('[data-skill-id="review"] [role="switch"]').getAttribute('aria-checked')).toBe('true');
+    expect(f.root.querySelector('[data-skill-action="refresh"]').disabled).toBe(false);
+    f.fail(null); form.dispatchEvent(new f.window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(form.elements.path.value).toBe(''));
+    expect(f.requests.filter((request) => request.url.endsWith('/sources'))).toHaveLength(2);
+  });
+
+  it('keeps project imports unavailable before trust and ignores late content after disposal', async () => {
+    const f = skillsEditor({ projectTrusted: false }); await vi.waitFor(() => expect(f.root.querySelectorAll('.skill-card')).toHaveLength(2));
+    expect(f.root.querySelector('#skills-source-form [value="project"]').disabled).toBe(true);
+    expect(f.root.querySelector('[data-skill-id="manual"] [role="switch"]').disabled).toBe(true);
+    let release;
+    f.api.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ content: 'late' }); }));
+    f.root.querySelector('[data-skill-id="review"] [data-skill-action="detail"]').click();
+    f.controller.dispose(); release(); await Promise.resolve();
+    expect(f.root.querySelector('#skill-detail pre').textContent).toContain('正在读取');
   });
 });
 

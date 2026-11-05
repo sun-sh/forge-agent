@@ -2,7 +2,8 @@
 
 ## Product boundary
 
-- `forge-agent` is a local coding-agent CLI built on `@earendil-works/pi-coding-agent` 1.4.0.
+- `forge-agent` (Forge Agent) is a local coding agent with a Web client and a terminal client, built on `@earendil-works/pi-coding-agent` 1.4.0.
+- These instructions describe the repository and implementation. The host-provided product identity and current interface describe the assistant; do not infer that a Web conversation is a CLI from the repository's terminal entry point.
 - `src/pi-cli.ts` is the CLI entry point and `src/web/server.ts` is the local Web gateway. Both use Pi as the runtime; do not recreate Pi's agent loop.
 - Pi is authoritative for authentication, models, TUI, sessions, compaction, built-in tools,
   extensions, MCP, skills, prompt templates, and resource discovery.

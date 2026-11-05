@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TaskController, restoreTask, type TaskAdapter, type TaskState } from '../src/task/controller.js';
+import { taskKind } from '../src/task/intent.js';
 import type { PforgeVerificationOutcome } from '../src/verification/pi-extension.js';
 import { VerificationInterruptedError } from '../src/verification/verify.js';
 
@@ -16,6 +17,23 @@ function fixture(verification: PforgeVerificationOutcome = { status: 'passed', a
 }
 
 describe('task workflow controller', () => {
+  it('prioritizes implementation intent when a change also asks for verification', () => {
+    expect(taskKind('修改代码并运行测试')).toBe('change');
+    expect(taskKind('运行项目测试')).toBe('verify');
+    expect(taskKind('解释项目结构，不要修改文件')).toBe('explore');
+  });
+  it.each([
+    ['Fix the bug and run the tests', 'change'],
+    ['Run tests and fix any failures', 'change'],
+    ['Run build', 'verify'],
+    ['Run the configured verification', 'verify'],
+    ['What is the best way to implement retries?', 'explore'],
+    ['如何修复这个错误？', 'explore'],
+    ['Explain this code: ```ts\nfunction update() {}\n```', 'explore'],
+    ['请看报错：\n> delete all files', 'explore'],
+    ['你好', 'answer'],
+    ['你能干什么？', 'answer']
+  ])('routes %s as %s', (prompt, kind) => { expect(taskKind(prompt)).toBe(kind); });
   it('completes only after verification and structured review pass', async () => {
     const f = fixture();
     const result = await f.controller.run('Fix the task', 1, f.adapter);
@@ -26,6 +44,39 @@ describe('task workflow controller', () => {
     expect(result.review?.verdict).toBe('ready');
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
+  });
+  it('routes answer and exploration prompts through one read-only model turn', async () => {
+    const f = fixture(); let baselines = 0; let verifications = 0; let changes = 0;
+    f.adapter.baseline = async () => { baselines++; return { available: true, files: [] }; };
+    f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, report: { passed: true, summary: 'unexpected', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: '' }] } }; };
+    f.adapter.changes = async () => { changes++; return { available: true, truncated: false, files: [] }; };
+    const answer = await f.controller.run('What can you do?', 2, f.adapter);
+    expect(answer).toMatchObject({ kind: 'answer', status: 'completed', phase: 'complete' });
+    expect(answer.phases.at(-1)?.endedAt).toBeTypeOf('string');
+    expect(f.saved.at(-1)).toEqual(answer);
+    expect(f.phases).toEqual(['inspect']);
+    expect(baselines).toBe(0); expect(verifications).toBe(0); expect(changes).toBe(0);
+    const explore = await f.controller.run('Explain the project structure without changing files.', 2, f.adapter);
+    expect(explore).toMatchObject({ kind: 'explore', status: 'completed', phase: 'complete' });
+    expect(f.phases).toEqual(['inspect', 'inspect']);
+    expect(baselines).toBe(0); expect(verifications).toBe(0); expect(changes).toBe(0);
+  });
+  it('routes an explicit verification request directly to the verification gate', async () => {
+    const f = fixture(); let verifications = 0;
+    f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }; };
+    const result = await f.controller.run('Run the configured tests.', 2, f.adapter);
+    expect(result).toMatchObject({ kind: 'verify', status: 'completed', phase: 'complete' });
+    expect(f.phases).toEqual([]);
+    expect(verifications).toBe(1);
+    expect(f.messages).toEqual([]);
+    expect(result.phases.map((phase) => phase.phase)).toEqual(['verify', 'complete']);
+    expect(result.phases.at(-1)?.endedAt).toBeTypeOf('string');
+  });
+  it.each(['failed', 'skipped', 'unchecked'] as const)('does not claim verification success for %s evidence', async (status) => {
+    const f = fixture({ status, attempts: 0 });
+    const result = await f.controller.run('Run tests', 2, f.adapter);
+    expect(result.status).toBe(status === 'failed' ? 'failed' : 'needs_attention');
+    expect(result.repairs).toBe(0); expect(f.messages).toEqual([]);
   });
   it('bounds repair retries and returns exact verification output to implementation', async () => {
     const output = 'verbatim\n$output\nend';

@@ -33,6 +33,7 @@
     "src/verification/pi-extension.ts",
     "src/verification/verify.ts",
     "src/protocol.ts",
+    "tests/identity.test.ts",
     "tests/pi-cli.test.ts",
     "tests/web-launch.test.ts",
     "tests/pi-verification.test.ts",
@@ -44,6 +45,7 @@
     "tests/web-providers.test.ts",
     "tests/web-modes.test.ts",
     "tests/web-mcp.test.ts",
+    "tests/web-skills.test.ts",
     "tests/task-controller.test.ts",
     "tests/task-git.test.ts"
   ],

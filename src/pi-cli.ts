@@ -8,6 +8,7 @@ import { pforgeHome, configurePforgeEnvironment } from "./pforge-home.js";
 import { loadConfig } from "./config.js";
 import { createPforgeVerification } from "./verification/pi-extension.js";
 import { runVerification, verificationMessage } from "./verification/verify.js";
+import { createForgeIdentityExtension } from "./identity.js";
 
 export interface ParsedPforgeArgs {
   cwd: string;
@@ -189,7 +190,7 @@ export async function runPforge(args = process.argv.slice(2)): Promise<void> {
   }
   try {
     await main(parsed.args, {
-      extensionFactories: [{ name: "pforge-verification", factory: verification.extension }]
+      extensionFactories: [{ name: "forge-identity", factory: createForgeIdentityExtension('cli') }, { name: "pforge-verification", factory: verification.extension }]
     });
     if (verification.outcome.status === "failed") process.exitCode = 1;
   } catch (error) {

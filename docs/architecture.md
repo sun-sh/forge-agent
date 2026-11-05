@@ -40,11 +40,24 @@ The CLI's TUI remains Pi's interface. The Web interface is forge-agent's own
 implementation. Using the Pi SDK does not automatically expose every Pi CLI
 feature in the browser.
 
+Both entry points add a shared `forge_identity` prompt section and explicit Web
+or terminal interface context through Pi's `before_agent_start` extension hook.
+Greetings and capability introductions focus on Forge Agent and the current
+interface; architecture questions retain accurate attribution to the Pi runtime.
+A narrow `context_with_system` projection replaces only the pinned SDK's exact
+default identity preamble, including when replaying older sessions. It preserves
+custom system prompts, tool declarations, rules, project context, skills and mode
+policies, and leaves the stored transcript unchanged. Repository descriptions and
+earlier assistant introductions do not determine the current product interface.
+
 ## Product-owned task controller
 
-Direct conversation remains a low ceremony path. The Web composer also exposes
-**计划并执行** for tasks where completion needs evidence. The product-owned
-controller coordinates:
+Adaptive Agent execution is the default path. The Web composer also exposes
+**规划并执行** behind a collapsed second-level control for explicit staged execution.
+The selected workflow is persisted with the current Pi session; new conversations
+always start adaptive and ignore legacy global workflow preferences. Web prompts
+send the selected workflow explicitly; API prompts that omit it use `direct`, even
+when the session previously selected `planned`. The product-owned controller coordinates:
 
 `Inspect → Plan → Implement → Verify → Review → Complete`
 

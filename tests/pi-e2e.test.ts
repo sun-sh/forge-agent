@@ -9,11 +9,13 @@ import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it } from "vitest";
 
 async function run(verify: string) {
+  const requests: any[] = [];
   const server = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     if (!req.url?.includes("/chat/completions")) { res.writeHead(404).end(); return; }
     const payload = JSON.parse(body || "{}");
+    requests.push(payload);
     const hasVerification = JSON.stringify(payload.messages || []).includes("run_verification");
     const message = { role: "assistant", content: hasVerification ? "Done." : "Done." };
     res.writeHead(200, { "content-type": "text/event-stream" });
@@ -36,7 +38,7 @@ async function run(verify: string) {
   const status = await new Promise((resolve) => child.on("close", resolve));
   clearTimeout(timer);
   await close();
-  return { status, stdout, stderr };
+  return { status, stdout, stderr, requests };
 }
 
 describe("pforge end-to-end", () => {
@@ -63,6 +65,11 @@ describe("pforge end-to-end", () => {
     const result = await run("node --version");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Done.");
+    const system = JSON.stringify(result.requests[0].messages.filter((message: any) => message.role === 'system'));
+    expect(system).toContain('You are Forge Agent');
+    expect(system).toContain('Pi Coding Agent runtime');
+    expect(system).toContain('terminal client (interactive TUI or single-shot CLI)');
+    expect(system).not.toContain('operating inside pi, a coding agent harness');
   }, 30000);
 
   it("exits nonzero when verification fails", async () => {

@@ -15,8 +15,9 @@ It builds on the complete [Pi Coding Agent](https://github.com/earendil-works/pi
 ## What you can do
 
 - **Work by project:** expand, search, and reopen project history; retain drafts; inspect changed files and diffs.
-- **Choose how to work:** Agent implements changes, Plan investigates and proposes a plan, and Ask reads code to answer questions. Select the project, mode, model, and reasoning effort below the composer.
+- **Choose how to work:** Agent uses **Adaptive execution** by default. Expand the small arrow beside Agent to opt into **Plan and execute**; Plan investigates and proposes a plan, while Ask reads code to answer questions. Select the project, mode, model, and reasoning effort below the composer.
 - **Connect your models:** add a compatible provider in settings, discover models with a searchable multi-select, or enter model IDs manually. Test an actual model invocation before using it.
+- **Manage skills:** search global and project skills, preview instructions, enable or disable them, and import local skill directories. Saved changes update idle sessions and their command menus.
 - **Connect external tools:** add local or HTTP services in MCP settings, import configuration, complete browser OAuth, configure individual tools, and inspect each session's connection state.
 - **Inspect completion evidence:** use the planned workflow for complex tasks, with visible investigation, planning, implementation, verification, and review stages.
 
@@ -41,7 +42,7 @@ For your first task:
 3. Select a project, model, and supported reasoning effort below the composer. Saving a service and switching the active conversation's model are separate actions.
 4. Inspect the project and its verification commands, then confirm project trust in settings. Configure `forge-agent.json` as described below to use the verification gate.
 5. If you need external tools, add a service under **Settings → MCP** and test the connection. HTTP services requiring OAuth have a **Sign In** (`登录授权`) action.
-6. Choose a working mode, describe the task, and send it. For a complex change, select **Plan and execute** (`计划并执行`) in Agent mode.
+6. Describe the task and send it. Agent defaults to **Adaptive execution**, letting the model choose the steps it needs. The host's staged workflow runs only when you manually select **Plan and execute** (`规划并执行`).
 
 The provider editor supports APIs compatible with **OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages**. Services such as Ollama and LM Studio need to expose a compatible endpoint. Capabilities come from the catalog or explicit configuration; reasoning levels are not inferred from model names. The Web interface is currently in Chinese.
 
@@ -55,12 +56,14 @@ The working mode controls which tools may run:
 | **Plan** | Read the project and propose an implementation plan | Built-in read/search tools only |
 | **Ask** | Understand code, explain behavior, and answer questions | Built-in read/search tools only |
 
-Plan and Ask enforce restrictions on actual tool calls, blocking shell, writes, MCP/custom tools, slash-command dispatch, and automatic verification. Modes persist with the session and cannot change during a run. These policies restrict model-driven operations; trusted extension code still has the launching user's permissions.
+Plan and Ask enforce restrictions on actual tool calls, blocking shell, writes, MCP/custom tools, extension/skill/template command dispatch, and automatic verification. Local interface commands for viewing context, choosing models, and opening settings remain available. Modes persist with the session and cannot change during a run. These policies restrict model-driven operations; trusted extension code still has the launching user's permissions.
 
 Agent mode offers two workflows:
 
-- **Direct conversation** (`直接对话`): use Pi's interaction loop for everyday questions and changes, with configured verification.
-- **Plan and execute** (`计划并执行`): a Forge Agent controller advances through the stages below, while Pi executes every model and tool turn.
+- **Adaptive execution (default)** (`自适应`): use Pi's interaction loop for everyday questions and changes, letting the model choose its steps, with configured verification.
+- **Plan and execute (opt-in)** (`规划并执行`): a Forge Agent controller advances through the stages below, while Pi executes every model and tool turn.
+
+The toolbar normally shows just **Agent**. Its workflow options sit behind a small arrow that stays collapsed until opened; a small planning badge appears only after opting in. The selection persists within the current session, including history recovery, while every new conversation starts adaptive. Web prompts explicitly include the selected workflow; API prompts that omit `workflow` default to adaptive. Planned execution also routes by request intent: capability questions and read-only analysis use one restricted read turn, explicit verification requests go straight to the verification gate, and only code-changing requests enter the full staged pipeline.
 
 ```mermaid
 flowchart LR
@@ -74,6 +77,33 @@ flowchart LR
 The planned workflow's completion gate requires passing configured verification, a structured `ready` review with no unresolved issues, and no detected changes during review within the available Git evidence. Verification failures receive at most `verifyRetries` automatic repairs. Review findings, missing checks, invalid review output, or stale evidence leave the task needing attention.
 
 Stopping a task prevents later stages. After a service restart, unfinished work is marked interrupted. **Re-inspect and continue** (`重新检查并继续`) explicitly starts a fresh inspection of the current workspace. The model review is a second pass and can still miss defects.
+
+Model and reasoning changes remain available while a run is active. They are staged locally and applied immediately before the next message, so the current turn keeps its configuration. Project, working mode, workflow, settings, and new-chat actions are locked during execution. Thinking, tool calls, and phase output are grouped under a collapsed **Execution process** section while the final answer remains prominent. Press `Enter` to send and `Shift+Enter` for a newline.
+
+## Composer commands and context
+
+Type `/` in the composer or select **Commands** (`命令`) below it to search for an action. Use `↑` / `↓` to select, `Enter` to execute, `Tab` to complete, and `Esc` to close.
+
+| Command | Purpose |
+| --- | --- |
+| `/new`, `/rename` | Start a conversation or rename the current one |
+| `/model`, `/mode` | Open model/reasoning selection or working-mode selection |
+| `/context` | Inspect the current context estimate, capacity, cumulative usage, and automatic compaction status |
+| `/compact [instructions]` | Compact earlier content, optionally specifying what the summary should retain |
+| `/changes` | Open the Git changes panel on the right |
+| `/mcp`, `/settings`, `/help` | Open MCP settings, general settings, or command and keyboard help |
+
+The menu separates actions, skills, and templates; extensions appear when loaded. Chinese titles distinguish model selection (`/model`) from working modes (`/mode`), and a fully typed command shows only its exact match. Select the **Skills** (`技能`) category to load the current project's skill list. Choosing a skill fills `/skill:name` into the composer so you can add the task before sending. Browsing and selecting skills do not request a model; Pi handles execution. The model can also read suitable skills on demand. Unavailable actions explain why, and unknown commands stay in the composer for editing. Model and reasoning changes selected during a run still apply to the next message.
+
+Context usage and **Compact** (`压缩`) stay below the composer. Open the context details for cumulative input/output, cache usage, catalog-estimated cost, and compaction count; cumulative usage is shown separately from current window usage. Manual compaction calls the current model, requires an idle session, and can be cancelled. Conversation history is retained. After compaction, the old usage estimate is hidden until the next model response updates it.
+
+## Manage skills
+
+Open **Settings → Skills** (`设置 → 技能`), or select **Manage skills** from the command menu's Skills category. Search by name, description, or source; filter by global/project scope; inspect instructions and diagnostics. Automatic invocation, manual-only skills, disabled skills, and name collisions have distinct statuses.
+
+Expand **Add local skills** to reference a directory containing `SKILL.md` or an existing Markdown skill file. Choose global or project scope. Removing an imported reference preserves local files; switches disable resources in automatically discovered directories. Project resources still require project trust. Saving or refreshing reloads idle sessions and updates their `/` menus without restarting the service.
+
+Discovery, name precedence, filtering, and persistence use Pi's native mechanisms. Browsing and previewing do not call a model, load project extensions, or install missing packages for the management view.
 
 ## Agent design and ownership
 

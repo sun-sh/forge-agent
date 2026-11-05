@@ -3,6 +3,9 @@ import type { AgentSession, ExtensionFactory, SessionManager } from '@earendil-w
 export const WEB_MODES = ['agent', 'plan', 'ask'] as const;
 export type WebMode = typeof WEB_MODES[number];
 const MODE_ENTRY = 'pforge.web.mode';
+export const WEB_WORKFLOWS = ['direct', 'planned'] as const;
+export type WebWorkflow = typeof WEB_WORKFLOWS[number];
+const WORKFLOW_ENTRY = 'pforge.web.workflow';
 const READ_TOOLS = new Set(['read', 'grep', 'find', 'ls']);
 
 export function isWebMode(value: unknown): value is WebMode {
@@ -21,6 +24,23 @@ export function restoredWebMode(manager: SessionManager): WebMode {
 
 export function saveWebMode(manager: SessionManager, mode: WebMode): void {
   manager.appendCustomEntry(MODE_ENTRY, { mode });
+}
+
+export function isWebWorkflow(value: unknown): value is WebWorkflow {
+  return typeof value === 'string' && WEB_WORKFLOWS.includes(value as WebWorkflow);
+}
+
+export function restoredWebWorkflow(manager: SessionManager): WebWorkflow {
+  for (const entry of [...manager.getBranch()].reverse()) {
+    if (entry.type !== 'custom' || entry.customType !== WORKFLOW_ENTRY) continue;
+    const workflow = (entry.data as { workflow?: unknown } | undefined)?.workflow;
+    return isWebWorkflow(workflow) ? workflow : 'direct';
+  }
+  return 'direct';
+}
+
+export function saveWebWorkflow(manager: SessionManager, workflow: WebWorkflow): void {
+  manager.appendCustomEntry(WORKFLOW_ENTRY, { workflow });
 }
 
 export function restoredRunMode(manager: SessionManager): WebMode | undefined {
