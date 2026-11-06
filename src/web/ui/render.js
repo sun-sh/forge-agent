@@ -30,6 +30,7 @@ export function sessionOutcome(data) {
       if (data.task.status === 'completed') return { label: '回答结束 · 未执行修改', kind: 'done' };
     }
     if (data.running) return { label: '正在' + (labels[data.task.phase] || '运行'), kind: 'running' };
+    if (data.task.status === 'budget_exceeded') return { label: '执行预算已用尽 · 可重新检查', kind: 'failed' };
     if (data.task.status === 'interrupted') return { label: '任务中断 · 等待明确继续', kind: 'failed' };
     if (data.task.status === 'needs_attention') return { label: '需要检查 · 尚未通过完成门槛', kind: 'failed' };
     if (data.task.status === 'failed') return { label: data.task.verification?.status === 'failed' ? '验证失败 · 任务未通过' : '任务失败', kind: 'failed' };

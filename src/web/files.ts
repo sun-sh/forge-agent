@@ -52,8 +52,8 @@ async function secureTarget(root: string, path: string) {
   if (info.isSymbolicLink() || !info.isFile()) return undefined;
   let canonicalTarget: string;
   try { canonicalTarget = await realpath(target); } catch { return undefined; }
-  if (!within(canonicalTarget, canonicalRoot)) return undefined;
-  return { canonicalRoot, target, info };
+  if (!within(canonicalTarget, canonicalRoot) || sensitive(relative(canonicalRoot, canonicalTarget))) return undefined;
+  return { canonicalRoot, target: canonicalTarget, info };
 }
 
 export async function readProjectFile(root: string, path: string): Promise<ProjectFileContent | undefined> {

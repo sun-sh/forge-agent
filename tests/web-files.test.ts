@@ -38,6 +38,23 @@ describe('safe Web project file references', () => {
     await expect(preparePromptAttachments(root, [{ type: 'file', path: '.env' }])).rejects.toThrow();
   });
 
+  it.each(['.git', '.forge-agent'])('rejects references into %s through an in-project directory alias', async (directory) => {
+    const root = await mkdtemp(join(tmpdir(), 'forge-web-files-sensitive-alias-'));
+    await mkdir(join(root, directory));
+    await writeFile(join(root, directory, 'config'), 'private fixture content');
+    await symlink(join(root, directory), join(root, 'docs'), process.platform === 'win32' ? 'junction' : 'dir');
+    expect(await readProjectFile(root, 'docs/config')).toBeUndefined();
+    await expect(preparePromptAttachments(root, [{ type: 'file', path: 'docs/config' }])).rejects.toThrow('无法安全读取');
+  });
+
+  it('allows an in-project directory alias to ordinary text files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forge-web-files-safe-alias-'));
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'src', 'main.ts'), 'export const ok = true;');
+    await symlink(join(root, 'src'), join(root, 'docs'), process.platform === 'win32' ? 'junction' : 'dir');
+    expect(await readProjectFile(root, 'docs/main.ts')).toMatchObject({ path: 'docs/main.ts', text: 'export const ok = true;' });
+  });
+
   it('bounds the combined attachment context instead of multiplying per-file limits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'forge-web-files-total-'));
     const content = Buffer.alloc(1_500_000, 'x');

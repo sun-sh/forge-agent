@@ -26,6 +26,9 @@ import { changeHistory, exportSession, forkable, forkHistory, forkOrigin, Histor
 import { MEMORY_LAYERS, MemoryError, MemoryStore, type MemoryLayer } from './memory.js';
 import { listProjectFiles, preparePromptAttachments, readProjectFile } from './files.js';
 import { CommandExecutionError, executeCommand } from '../tools/command.js';
+import { sameDirectory } from '../project-identity.js';
+import { ProjectBusyError, ProjectExecutions } from './executions.js';
+import { BudgetExceededError, BudgetRuntime, budgetLimitsSchema, loadAgentSettings, saveAgentSettings, type AgentSettings } from '../task/budget.js';
 
 export interface WebConsoleOptions { cwd: string; host?: string; port?: number; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
@@ -67,6 +70,7 @@ interface SessionState {
   disposing?: Promise<void>;
   mcpRuntime?: McpRuntimeView;
   mcpReloadPending?: boolean;
+  budget?: BudgetRuntime;
 }
 const MAX_BODY = 10_000_000;
 const MAX_DIRECTORY_ENTRIES = 500;
@@ -99,12 +103,6 @@ async function requireDirectory(path: string) {
   try { info = await stat(target); } catch { throw new HttpError(400, 'Project path does not exist'); }
   if (!info.isDirectory()) throw new HttpError(400, 'Project path is not a directory');
   return target;
-}
-async function sameDirectory(left: string, right: string) {
-  try {
-    const [a, b] = await Promise.all([realpath(left), realpath(right)]);
-    return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
-  } catch { return process.platform === 'win32' ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right); }
 }
 async function projectList(root: string) { const entries = await readdir(root, { withFileTypes: true }); const projects = [{ path: root, name: basename(root) }]; for (const entry of entries) { if (!entry.isDirectory() || entry.name.startsWith('.')) continue; const path = join(root, entry.name); if (existsSync(join(path, '.git')) || existsSync(join(path, 'package.json'))) projects.push({ path, name: entry.name }); } return projects; }
 function modelKey(model: any) { return model.provider + '/' + model.id; }
@@ -181,6 +179,12 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   const home = pforgeHome();
   const token = await loadWebToken(home);
   const taskRegistry = await TaskRegistry.open(home);
+  const executions = new ProjectExecutions();
+  const releaseStartup = async () => {
+    await executions.close().catch(() => {});
+    await taskRegistry.close().catch(() => {});
+  };
+  let agentSettings: AgentSettings = await loadAgentSettings(home);
   const sessions = new Map<string, SessionState>();
   const openingSessions = new Map<string, Promise<SessionState>>();
   let shuttingDown = false;
@@ -191,7 +195,9 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   process.env['PI_CODING_AGENT_DIR'] = pforgeHome();
   process.env['PI_CODING_AGENT_SESSION_DIR'] = join(pforgeHome(), 'sessions');
   const config = loadConfig(root);
-  const modelRuntime = await ModelRuntime.create({ authPath: join(home, 'auth.json'), modelsPath: join(home, 'models.json') });
+  let modelRuntime: ModelRuntime;
+  try { modelRuntime = await ModelRuntime.create({ authPath: join(home, 'auth.json'), modelsPath: join(home, 'models.json') }); }
+  catch (error) { await releaseStartup(); throw error; }
   const customProviders = new CustomProviders(home, modelRuntime);
   const mcpControl = new McpControlPlane(home);
   const skillsControl = new SkillsControl(home);
@@ -297,11 +303,14 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     return { snapshot: await mcpSnapshot(project) };
   }
   const sessionRootPath = resolve(join(home, 'sessions'));
-  await mkdir(sessionRootPath, { recursive: true });
+  let sessionRoot: string;
+  try { await mkdir(sessionRootPath, { recursive: true }); }
+  catch (error) { await releaseStartup(); throw error; }
   // SessionManager must receive one canonical directory so a Windows long
   // path, short path, or junction alias cannot create a second live runtime
   // for the same Pi session file.
-  const sessionRoot = await realpath(sessionRootPath);
+  try { sessionRoot = await realpath(sessionRootPath); }
+  catch (error) { await releaseStartup(); throw error; }
   let historyMutation = false;
   const sameSessionPath = (left: string | undefined, right: string) => Boolean(left && (process.platform === 'win32' ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right)));
   function historyWritable(session: SessionState) {
@@ -452,7 +461,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       activeTools: [...session.activeTools.values()],
       pendingUiRequests: [...session.uiRequests.values()].map((pending) => pending.event),
       eventId: session.sequence,
-      trust: trustView(trustStore, settingsManager, session.project)
+      trust: trustView(trustStore, settingsManager, session.project),
+      budget: session.budget?.snapshot()
     };
   }
 
@@ -511,7 +521,13 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
 
   async function attachAgent(session: SessionState, model: any, selectedThinking?: string) {
     session.mcpRuntime = new McpRuntimeView();
-    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'forge-memory', factory: memoryStore.extension(session.project, session.manager) }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'pforge-task', factory: (pi) => {
+    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'forge-memory', factory: memoryStore.extension(session.project, session.manager) }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'forge-budget', factory: (pi) => {
+      pi.on('before_agent_start', (_event, ctx) => { const budget = session.budget; if (!budget) return; budget.setAbort(ctx.abort); try { budget.check(); } catch { ctx.abort(); } });
+      pi.on('turn_start', (_event, ctx) => { const budget = session.budget; if (!budget || budget.recordModelTurn()) return; ctx.abort(); });
+      pi.on('tool_call', (_event, ctx) => { const budget = session.budget; if (!budget || budget.recordToolCall()) return; return { block: true, terminate: true, reason: budget.exceededReason ?? '任务预算已用尽' }; });
+      pi.on('message_end', (event, ctx) => { const budget = session.budget; const message = event.message as any; if (!budget || message.role !== 'assistant' || !message.usage) return; if (!budget.recordUsage(message.usage)) ctx.abort(); });
+      pi.on('agent_settled', () => session.budget?.setAbort(undefined));
+    } }, { name: 'pforge-task', factory: (pi) => {
       const taskReaders = () => pi.getAllTools()
         .filter((tool) => ['read', 'grep', 'find', 'ls'].includes(tool.name) && tool.sourceInfo.source === 'builtin')
         .map((tool) => tool.name);
@@ -659,17 +675,24 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     return session;
   }
 
-  function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false, images: ImageContent[] = []) {
-    const agent = session.session!;
-    session.running = true; session.runningSince = Date.now(); session.finishedAt = undefined; session.outcome = 'running';
-    session.lastError = undefined; session.lastActivity = Date.now(); session.runMode = session.mode;
-    if (!runtimeCommand) session.workflow = workflow;
-    session.manager.appendCustomEntry('pforge.web.run-mode', { mode: session.mode });
-    if (!runtimeCommand) saveWebWorkflow(session.manager, workflow);
-    if (workflow !== 'planned') { session.controller.state = undefined; session.manager.appendCustomEntry('pforge.task', { cleared: true }); }
-    const work = async () => {
-      if (workflow !== 'planned') { session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); return; }
-      const result = await session.controller.run(message, loadConfig(session.project).config.verifyRetries, {
+  async function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false, images: ImageContent[] = []) {
+    // Reserve the project before changing session state or returning 202. This
+    // makes a competing terminal/session request fail synchronously with 409,
+    // instead of accepting work that will only fail in a detached promise.
+    const lease = await executions.acquire(session.project, 'agent');
+    try {
+      const agent = session.session!;
+      session.running = true; session.runningSince = Date.now(); session.finishedAt = undefined; session.outcome = 'running';
+      session.lastError = undefined; session.lastActivity = Date.now(); session.runMode = session.mode;
+      if (!runtimeCommand) session.workflow = workflow;
+      session.manager.appendCustomEntry('pforge.web.run-mode', { mode: session.mode });
+      if (!runtimeCommand) saveWebWorkflow(session.manager, workflow);
+      if (workflow !== 'planned') { session.controller.state = undefined; session.manager.appendCustomEntry('pforge.task', { cleared: true }); }
+      const budget = new BudgetRuntime(agentSettings.budget);
+      session.budget = budget;
+      const work = async () => {
+        if (workflow !== 'planned') { budget.start(); session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); budget.check(); budget.finish(session.outcome === 'aborted' ? 'aborted' : 'completed'); return; }
+        const result = await session.controller.run(message, loadConfig(session.project).config.verifyRetries, {
         async execute(_phase, text, first, signal) {
           signal.throwIfAborted(); if (session.closed) throw new Error('Session is closed');
           session.modePolicy.apply(agent);
@@ -692,22 +715,32 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         },
         baseline: (signal) => captureGit(session.project, signal),
         changes: (baseline, signal) => compareGit(session.project, baseline, signal)
-      }, resumeOf);
-      session.outcome = result.status === 'aborted' ? 'aborted' : result.status === 'failed' ? 'failed' : 'completed';
-      if (result.status === 'failed') session.lastError = result.error;
-    };
-    session.task = work().catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      session.lastError = message; session.outcome = 'failed'; emit(session, { type: 'pforge_error', error: message });
-    }).finally(() => {
-      session.running = false;
-      session.finishedAt = Date.now();
-      if (session.outcome === 'running') session.outcome = 'idle';
-      if (!session.closed) session.modePolicy.apply(agent);
-      session.task = undefined; session.lastActivity = Date.now();
-      void flushMcpReloads();
-      emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
-    });
+        }, resumeOf, budget);
+        session.outcome = result.status === 'aborted' ? 'aborted' : result.status === 'failed' || result.status === 'budget_exceeded' ? 'failed' : 'completed';
+        if (result.status === 'failed' || result.status === 'budget_exceeded') session.lastError = result.error;
+      };
+      session.task = (async () => {
+        try { await work(); }
+        catch (error) { if (error instanceof BudgetExceededError || budget.exceededReason) throw new BudgetExceededError(budget.exceededReason ?? (error instanceof Error ? error.message : String(error))); throw error; }
+        finally { lease.release(); }
+      })().catch((error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        session.lastError = errorMessage; session.outcome = 'failed'; emit(session, { type: 'pforge_error', error: errorMessage });
+      }).finally(() => {
+        const budgetStatus = budget.snapshot().status;
+        if (budgetStatus === 'running') budget.finish(session.outcome === 'completed' ? 'completed' : 'aborted');
+        session.running = false;
+        session.finishedAt = Date.now();
+        if (session.outcome === 'running') session.outcome = 'idle';
+        if (!session.closed) session.modePolicy.apply(agent);
+        session.task = undefined; session.lastActivity = Date.now();
+        void flushMcpReloads();
+        emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+      });
+    } catch (error) {
+      lease.release();
+      throw error;
+    }
   }
 
   function taskPayload(record: TaskRecord) {
@@ -732,11 +765,12 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const previous = session.controller.state;
     if (!previous || previous.id !== record.id) throw new HttpError(409, '任务记录与会话历史不一致，请从会话中重新检查');
     const allowed = action === 'resume'
-      ? ['interrupted', 'aborted']
-      : ['interrupted', 'aborted', 'failed', 'needs_attention'];
+      ? ['interrupted', 'aborted', 'budget_exceeded']
+      : ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'];
     if (!allowed.includes(previous.status)) throw new HttpError(409, action === 'resume' ? '当前任务不需要继续' : '当前任务没有可重新检查的失败状态');
     session.busy = true;
-    launchPrompt(session, previous.prompt, 'planned', previous.id);
+    try { await launchPrompt(session, previous.prompt, 'planned', previous.id); }
+    catch (error) { session.busy = false; throw error; }
     return session;
   }
 
@@ -782,7 +816,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const filtered = project
           ? (await Promise.all(records.map(async (record) => await sameDirectory(record.project, project) ? record : undefined))).filter((record): record is TaskRecord => Boolean(record))
           : records;
-        json(response, 200, { tasks: filtered.map(taskPayload) });
+        json(response, 200, { tasks: filtered.map(taskPayload), diagnostic: taskRegistry.diagnostic });
         return;
       }
       const taskRoute = url.pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(stop|resume|recheck))?$/);
@@ -790,7 +824,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const record = taskRegistry.get(decodeURIComponent(taskRoute[1]!));
         if (!record) { json(response, 404, { error: 'Task not found' }); return; }
         const action = taskRoute[2];
-        if (!action && request.method === 'GET') { json(response, 200, taskPayload(record)); return; }
+        if (!action && request.method === 'GET') { json(response, 200, { ...taskPayload(record), diagnostic: taskRegistry.diagnostic }); return; }
         if (request.method !== 'POST' || !action) { json(response, 405, { error: 'Method not allowed' }); return; }
         if (action === 'stop') {
           const session = liveTask(record);
@@ -826,18 +860,16 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const { project } = await mcpProject(input.project);
         if (!trustView(trustStore, settingsManager, project).trusted) throw new HttpError(403, '请先信任项目后使用终端');
         if (typeof input.command !== 'string' || !input.command.trim() || input.command.length > 10000) throw new HttpError(400, 'command must be 1–10000 characters');
-        for (const session of sessions.values()) {
-          if (await sameDirectory(session.project, project) && (session.running || session.task || session.busy)) throw new HttpError(409, 'Agent 正在使用当前项目，请先停止或等待任务结束');
-        }
+        const lease = await executions.acquire(project, 'terminal');
         const timeoutMs = typeof input.timeoutMs === 'number' && Number.isInteger(input.timeoutMs) ? Math.min(120000, Math.max(1000, input.timeoutMs)) : 30000;
         const outputDir = join(home, 'terminal');
         try {
-          const result = await executeCommand({ command: input.command, cwd: project, timeoutMs, maxOutputBytes: 256000, signal: new AbortController().signal, outputDir, outputId: randomBytes(12).toString('hex') });
+          const result = await executeCommand({ command: input.command, cwd: project, timeoutMs, maxOutputBytes: 256000, signal: lease.signal, outputDir, outputId: randomBytes(12).toString('hex') });
           json(response, 200, { ok: result.exitCode === 0, result });
         } catch (error) {
           if (error instanceof CommandExecutionError) { json(response, 200, { ok: false, result: error.result }); return; }
           throw error;
-        }
+        } finally { lease.release(); }
         return;
       }
       if (url.pathname === '/api/skills' && request.method === 'GET') {
@@ -1041,7 +1073,17 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const global = settingsManager.getGlobalSettings();
         const key = global.defaultProvider && global.defaultModel ? global.defaultProvider + '/' + global.defaultModel : undefined;
         const selected = catalog.models.find((model: any) => model.key === key && model.available) ?? catalog.models.find((model: any) => model.available);
-        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, compaction: settingsManager.getCompactionSettings(selected ? { provider: selected.provider, id: selected.id } : undefined), settingsPath, piVersion: VERSION });
+        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, compaction: settingsManager.getCompactionSettings(selected ? { provider: selected.provider, id: selected.id } : undefined), budget: agentSettings.budget, settingsPath, piVersion: VERSION });
+        return;
+      }
+      if (url.pathname === '/api/settings/budget' && request.method === 'POST') {
+        const input = await body(request);
+        assertModelsIdle();
+        const parsed = budgetLimitsSchema.safeParse(input.budget);
+        if (!parsed.success) throw new HttpError(400, '执行预算参数无效');
+        agentSettings = { budget: parsed.data };
+        await saveAgentSettings(home, agentSettings);
+        json(response, 200, agentSettings);
         return;
       }
       if (url.pathname === '/api/settings' && request.method === 'POST') {
@@ -1101,7 +1143,9 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const input = await body(request);
         const project = await requireDirectory(typeof input.path === 'string' ? input.path : root);
         if (typeof input.trusted !== 'boolean') { json(response, 400, { error: 'trusted must be boolean' }); return; }
-        const affected = [...sessions.values()].filter((session) => resolve(session.project) === resolve(project));
+        const affected = (await Promise.all([...sessions.values()].map(async (session) => await sameDirectory(session.project, project) ? session : undefined))).filter((session): session is SessionState => Boolean(session));
+        const lease = await executions.acquire(project, 'trust');
+        try {
         if (mcpMutation || mcpOperations || openingCount || affected.some((session) => session.running || session.busy || session.task)) throw new HttpError(409, 'Stop the active session before changing project trust');
         trustStore.set(project, input.trusted);
         // Already-loaded extensions retain executable code. Dispose them when the trust decision changes.
@@ -1118,6 +1162,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
         }
         json(response, 200, { project, trust: trustView(trustStore, settingsManager, project) });
+        } finally { lease.release(); }
         return;
       }
       if (url.pathname === '/api/directories' && request.method === 'GET') {
@@ -1251,7 +1296,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '附件格式无效'); }
           const message = input.message + attachments.text;
           if (attachments.images.length && !session.session.model?.input?.includes('image')) throw new HttpError(400, '当前模型不支持图片输入，请切换到支持视觉输入的模型');
-          launchPrompt(session, message, workflow, undefined, input.command === true, attachments.images);
+          await launchPrompt(session, message, workflow, undefined, input.command === true, attachments.images);
           json(response, 202, { accepted: true });
           return;
         }
@@ -1261,8 +1306,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           if (session.running || session.busy || session.task) throw new HttpError(409, 'Session is already running');
           if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请选择可用模型并切换 Agent 模式后继续');
           const previous = session.controller.state;
-          if (!previous || !['interrupted', 'aborted', 'failed', 'needs_attention'].includes(previous.status)) throw new HttpError(409, 'No interrupted task to continue');
-          launchPrompt(session, previous.prompt, 'planned', previous.id);
+          if (!previous || !['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(previous.status)) throw new HttpError(409, 'No interrupted task to continue');
+          await launchPrompt(session, previous.prompt, 'planned', previous.id);
           json(response, 202, { accepted: true }); return;
         }
         if (action === 'changes' && request.method === 'GET') {
@@ -1392,23 +1437,38 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       json(response, 404, { error: 'Not found' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError || error instanceof HistoryError || error instanceof MemoryError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError || error instanceof HistoryError || error instanceof MemoryError || error instanceof ProjectBusyError ? error.status : 500;
       json(response, status, { error: error instanceof Error ? error.message : String(error) });
     } finally { if (lockedSession) { lockedSession.busy = false; void flushMcpReloads(); } }
   });
 
-  await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(port, host, () => resolveListen()); });
+  const closeListeningServer = async () => {
+    if (!server.listening) return;
+    await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
+  };
+  try { await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(port, host, () => resolveListen()); }); }
+  catch (error) { await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
-  return { url: 'http://' + host + ':' + actualPort + '/?token=' + encodeURIComponent(token), token, close() { return closing ??= (async () => {
+  const url = 'http://' + host + ':' + actualPort + '/?token=' + encodeURIComponent(token);
+  try { await taskRegistry.setAddress(url); }
+  catch (error) { await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
+  const shutdown = async () => {
     shuttingDown = true;
-    const mcpClosing = mcpControl.close();
+    const failures: unknown[] = [];
+    const capture = async (operation: Promise<unknown>) => { try { await operation; } catch (error) { failures.push(error); } };
     // A reload can attach fresh transports. Finish it before disposing the sessions.
-    await mcpWrite;
+    const mcpClosing = Promise.resolve().then(() => mcpControl.close());
+    await capture(mcpWrite);
+    await capture(mcpClosing);
     for (const session of sessions.values()) void disposeSession(session);
     sessions.clear();
-    await Promise.allSettled([...retiring, mcpClosing]);
-    await taskRegistry.flush();
-    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-  })(); } };
+    const disposals = await Promise.allSettled([...retiring]);
+    for (const result of disposals) if (result.status === 'rejected') failures.push(result.reason);
+    await capture(executions.close());
+    await capture(taskRegistry.close());
+    await capture(closeListeningServer());
+    if (failures.length) throw failures[0];
+  };
+  return { url, token, close() { return closing ??= shutdown(); } };
 }

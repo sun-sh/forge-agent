@@ -15,13 +15,15 @@ function task(status: TaskState['status'] = 'running'): TaskState {
 }
 
 describe('durable task registry', () => {
-  it('persists task metadata and marks live tasks interrupted after restart', async () => {
+  it('persists task metadata, rejects a second owner, and marks live tasks interrupted after restart', async () => {
     const home = await mkdtemp(join(tmpdir(), 'forge-task-registry-')); temporary.push(home);
     const first = await TaskRegistry.open(home), running = task();
     first.save(running, { project: 'C:/project', sessionFile: 'C:/home/sessions/task.json', sessionId: 'live-session' });
     await first.flush();
     expect(JSON.parse(await readFile(join(home, 'tasks', 'index.json'), 'utf8')).tasks).toHaveLength(1);
 
+    await expect(TaskRegistry.open(home)).rejects.toThrow('已有 Web 服务');
+    await first.close();
     const second = await TaskRegistry.open(home);
     const restored = second.get(running.id)!;
     expect(restored.state.status).toBe('interrupted');
@@ -30,6 +32,7 @@ describe('durable task registry', () => {
     await second.flush();
     const persisted = JSON.parse(await readFile(join(home, 'tasks', 'index.json'), 'utf8'));
     expect(persisted.tasks[0].state.status).toBe('interrupted');
+    await second.close();
   });
 
   it('ignores malformed registry data and keeps the newest records first', async () => {
@@ -41,6 +44,11 @@ describe('durable task registry', () => {
     expect(registry.list().map((item) => item.id)).toEqual([newer.id, old.id]);
     await registry.flush();
     await import('node:fs/promises').then(({ writeFile }) => writeFile(join(home, 'tasks', 'index.json'), '{broken'));
-    expect((await TaskRegistry.open(home)).list()).toEqual([]);
+    await registry.close();
+    const recovered = await TaskRegistry.open(home);
+    expect(recovered.list()).toEqual([]);
+    const files = await (await import('node:fs/promises')).readdir(join(home, 'tasks'));
+    expect(files).toEqual(expect.arrayContaining([expect.stringMatching(/^index\.json\.invalid-/)]));
+    await recovered.close();
   });
 });

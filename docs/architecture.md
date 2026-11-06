@@ -1,6 +1,6 @@
 # Forge Agent architecture and current scope
 
-Reviewed against the local implementation on 2026-11-04. The current package is
+Reviewed against the local implementation on 2026-11-06. The current package is
 `forge-agent` 0.1.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
 
 forge-agent is a product layer built on the Pi Coding Agent SDK. It does not fork Pi
@@ -35,6 +35,9 @@ flowchart TD
 | Local gateway authorization | forge-agent `src/web/auth.ts` and gateway checks; separate from Pi's provider credentials. |
 | Web MCP management | forge-agent `src/web/mcp.ts`, `src/web/mcp-runtime.ts` and `src/web/ui/mcp.js`: scoped editing, probes, browser authorization, per-tool controls and session connection views. Pi owns validation, protocol, OAuth and execution. |
 | Planned task orchestration | forge-agent `src/task/controller.ts`; Pi still executes every model/tool turn. |
+| Home ownership and task index | forge-agent `src/task/registry.ts`; a `proper-lockfile` lease gives one Web gateway ownership of a Forge home, preserves an owner-free recovery path after a stale process, and surfaces index write diagnostics. |
+| Project execution ownership | forge-agent `src/web/executions.ts` and `src/project-identity.ts`; Agent prompts, terminal commands, project-trust changes, and shutdown share one canonical-directory reservation. |
+| Execution budgets | forge-agent `src/task/budget.ts` and Web hooks; each execution observes duration, model turns, tool calls, provider-reported tokens and cost, then aborts Pi and records `budget_exceeded`. |
 | Git change evidence and bounded diff preview | forge-agent `src/task/git.ts` and the Web changes panel; pre-existing dirty files are marked. |
 
 The CLI's TUI remains Pi's interface. The Web interface is forge-agent's own
@@ -75,6 +78,14 @@ evidence, and review. On process restart a running snapshot becomes
 current workspace and does not replay the previous prompt or side effects
 automatically.
 
+The budget runtime is attached to the host execution rather than to one phase.
+It therefore covers planned inspection, implementation, verification repairs,
+review, automatic Pi recovery, and explicit continuation within that execution.
+The same runtime also guards adaptive prompts. Provider usage is observed when
+Pi emits a completed assistant message, so the limits are protective host
+guards rather than exact billing cutoffs. Changing the configured limits affects
+the next execution; it does not rewrite an existing snapshot.
+
 ## Web integration limits
 
 - Pi's CLI loads its built-in MCP, codemode, and tool-search extensions. The Web
@@ -111,13 +122,26 @@ automatically.
   symlinks, sensitive names, size, and text content. Images are validated by MIME,
   file header, and aggregate size before Pi receives them. The terminal is a
   separate explicit-user API, requires project trust, uses the shared bounded
-  command executor, and refuses to run while an Agent session uses the project.
+  command executor. The terminal, Agent, trust changes, and service shutdown
+  use the same project reservation, so aliases such as junctions cannot bypass
+  the exclusion. Closing the service aborts an active terminal through the same
+  signal and waits for the reservation to release.
 
 For planned tasks forge-agent captures a Git baseline and later compares the current
 status. The Web panel shows staged, unstaged, and untracked files, previews
 bounded text diffs, refuses symlink escapes and sensitive credential files, and
 marks files already dirty before the task. It reports Git, unborn-repository,
 and non-Git limits instead of attributing every workspace change to the agent.
+
+Current lifecycle limits matter when interpreting these controls: a Forge home is
+intentionally single-owner, so a second gateway sharing it is rejected rather
+than merged. There is no independent background queue; a running session remains
+owned by the local gateway while its browser tab is away. Scoped memory is
+user-maintained reference injection, not automatic learning or retrieval. Global
+and project memory are stored under the Forge home, and project memory uses the
+canonical real directory with validated legacy migration; Pi owns automatic
+compaction.
+The [product review](product-audit.md) records reproduced cases and acceptance criteria.
 
 ## Active and legacy code
 

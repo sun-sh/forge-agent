@@ -5,10 +5,11 @@ import { verificationOutcomeSchema } from '../verification/pi-extension.js';
 import { verificationMessage, VerificationInterruptedError } from '../verification/verify.js';
 import type { GitBaseline, GitChanges } from './git.js';
 import { TASK_KINDS, taskKind, type TaskKind } from './intent.js';
+import { BudgetExceededError, BudgetRuntime, budgetSnapshotSchema, type BudgetSnapshot } from './budget.js';
 
 export const TASK_PHASES = ['inspect', 'plan', 'implement', 'verify', 'review', 'complete'] as const;
 export type TaskPhase = typeof TASK_PHASES[number];
-export type TaskStatus = 'running' | 'completed' | 'needs_attention' | 'failed' | 'aborted' | 'interrupted';
+export type TaskStatus = 'running' | 'completed' | 'needs_attention' | 'failed' | 'aborted' | 'interrupted' | 'budget_exceeded';
 export interface TaskReview { verdict: 'ready' | 'changes_requested'; summary: string; issues: string[]; }
 export interface TaskState {
   version: 1;
@@ -26,6 +27,7 @@ export interface TaskState {
   changes?: GitChanges;
   verification?: PforgeVerificationOutcome;
   review?: TaskReview;
+  budget?: BudgetSnapshot;
   error?: string;
 }
 const reviewSchema = z.object({ verdict: z.enum(['ready', 'changes_requested']), summary: z.string().min(1).max(8000), issues: z.array(z.string().min(1).max(4000)).max(50) }).strict();
@@ -36,14 +38,14 @@ const fileSchema = z.object({ path: z.string().max(4096), status: z.string().max
 export const taskStateSchema = z.object({
   version: z.literal(1), id: z.uuid(), prompt: z.string().max(2000000),
   kind: z.enum(TASK_KINDS).optional(),
-  status: z.enum(['running', 'completed', 'needs_attention', 'failed', 'aborted', 'interrupted']),
+  status: z.enum(['running', 'completed', 'needs_attention', 'failed', 'aborted', 'interrupted', 'budget_exceeded']),
   phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
   resumeOf: z.uuid().optional(), repairs: z.number().int().min(0).max(20),
   phases: z.array(z.object({ phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(), summary: z.string().max(12000).optional() })).max(100),
   // Evidence is display data. It never controls whether resumed code runs or what tools are allowed.
   baseline: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), truncated: z.boolean().optional(), files: z.array(fileSchema).max(200) }).optional(),
   changes: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), headChanged: z.boolean().optional(), truncated: z.boolean(), files: z.array(fileSchema.extend({ preexisting: z.boolean(), observed: z.boolean() })).max(200) }).optional(),
-  verification: verificationOutcomeSchema.optional(), review: reviewSchema.optional(), error: z.string().optional()
+  verification: verificationOutcomeSchema.optional(), review: reviewSchema.optional(), budget: budgetSnapshotSchema.optional(), error: z.string().optional()
 });
 export function restoreTask(entries: ReadonlyArray<{ type: string; customType?: string; data?: unknown }>): TaskState | undefined {
   const entry = [...entries].reverse().find((item) => item.type === 'custom' && item.customType === 'pforge.task');
@@ -74,13 +76,14 @@ export class TaskController {
   get active() { return Boolean(this.cancellation); }
   get readOnly() { return this.active && !['implement', 'verify'].includes(this.state!.phase); }
   cancel(reason = '任务已由用户停止。') { if (this.state && this.active) { this.state.error = reason; this.cancellation!.abort(); } }
+  recordBudget(snapshot: BudgetSnapshot) { if (this.state) { this.state.budget = structuredClone(snapshot); this.commit(); } }
   private commit() { if (!this.state) return; this.state.updatedAt = new Date().toISOString(); this.save(structuredClone(this.state)); }
   private phase(phase: TaskPhase) {
     const task = this.state!, now = new Date().toISOString();
     const previous = task.phases.at(-1); if (previous && !previous.endedAt) previous.endedAt = now;
     task.phase = phase; task.phases.push({ phase, startedAt: now }); this.commit();
   }
-  async run(prompt: string, retries: number, adapter: TaskAdapter, resumeOf?: string): Promise<TaskState> {
+  async run(prompt: string, retries: number, adapter: TaskAdapter, resumeOf?: string, budget?: BudgetRuntime): Promise<TaskState> {
     if (this.active) throw new Error('Task is already running');
     if (!Number.isInteger(retries) || retries < 0 || retries > 20) throw new Error('Invalid repair budget');
     const cancellation = new AbortController(); this.cancellation = cancellation;
@@ -88,7 +91,9 @@ export class TaskController {
     const kind = taskKind(prompt);
     this.state = { version: 1, id: randomUUID(), prompt, kind, status: 'running', phase: 'inspect', startedAt: now, updatedAt: now, resumeOf, repairs: 0, phases: [] };
     const task = this.state;
-    const check = () => signal.throwIfAborted();
+    budget?.setOnChange((snapshot) => { task.budget = structuredClone(snapshot); this.commit(); });
+    budget?.start(); task.budget = budget?.snapshot(); this.commit();
+    const check = () => { signal.throwIfAborted(); budget?.check(); };
     const execute = async (phase: Exclude<TaskPhase, 'verify' | 'complete'>, message: string, first = false) => {
       check(); if (!first) this.phase(phase); const text = await adapter.execute(phase, message, first, signal); check();
       task.phases.at(-1)!.summary = text.slice(0, 12000); this.commit(); return text;
@@ -134,11 +139,11 @@ export class TaskController {
       }
     } catch (error) {
       if (error instanceof VerificationInterruptedError) task.verification = { status: 'failed', attempts: task.repairs, runId: task.id, checkedAt: new Date().toISOString(), report: error.report, error: error.message };
-      task.status = signal.aborted ? 'aborted' : 'failed';
-      task.error = signal.aborted ? task.error ?? '任务已停止。' : error instanceof Error ? error.message : String(error);
+      if (budget?.exceededReason || error instanceof BudgetExceededError) { task.status = 'budget_exceeded'; task.error = budget?.exceededReason ?? (error instanceof Error ? error.message : String(error)); }
+      else { task.status = signal.aborted ? 'aborted' : 'failed'; task.error = signal.aborted ? task.error ?? '任务已停止。' : error instanceof Error ? error.message : String(error); }
     } finally {
       const last = task.phases.at(-1); if (last && !last.endedAt) last.endedAt = new Date().toISOString();
-      try { this.commit(); } finally { this.cancellation = undefined; }
+      try { budget?.finish(task.status === 'budget_exceeded' ? 'exceeded' : task.status === 'aborted' ? 'aborted' : 'completed'); this.commit(); } finally { this.cancellation = undefined; budget?.setOnChange(undefined); }
     }
     return structuredClone(task);
   }

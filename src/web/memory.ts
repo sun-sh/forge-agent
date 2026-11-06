@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { SessionManager, type ExtensionFactory } from '@earendil-works/pi-coding-agent';
+import { directoryKey, sameDirectory } from '../project-identity.js';
 
 export const MEMORY_ENTRY = 'forge.memory';
 export const MEMORY_VERSION = 1 as const;
@@ -44,7 +45,8 @@ const kindSet = new Set<MemoryKind>(['fact', 'preference', 'decision', 'constrai
 const sourceSet = new Set<MemoryItem['source']>(['user', 'compaction']);
 
 function now() { return new Date().toISOString(); }
-function projectKey(project: string) { return createHash('sha256').update(resolve(project).toLowerCase()).digest('hex'); }
+function legacyProjectKey(project: string) { return createHash('sha256').update(resolve(project).toLowerCase()).digest('hex'); }
+function projectKey(project: string) { return createHash('sha256').update(directoryKey(project)).digest('hex'); }
 function empty(layer: MemoryLayer, scope: string): MemoryDocument {
   return { version: MEMORY_VERSION, layer, scope, updatedAt: now(), items: [] };
 }
@@ -88,7 +90,8 @@ export class MemoryStore {
   constructor(home: string) { this.root = join(home, 'memory'); this.projects = join(this.root, 'projects'); }
 
   private globalPath() { return join(this.root, 'global.json'); }
-  private projectPath(project: string) { return join(this.projects, projectKey(project) + '.json'); }
+  private projectPath(project: string) { return join(this.projects, 'v2-' + projectKey(project) + '.json'); }
+  private legacyProjectPath(project: string) { return join(this.projects, legacyProjectKey(project) + '.json'); }
 
   private async readFileDocument(path: string, layer: MemoryLayer, scope: string) {
     try { return normalizeDocument(JSON.parse(await readFile(path, 'utf8')), layer, scope); }
@@ -98,15 +101,48 @@ export class MemoryStore {
     }
   }
 
+  private async projectDocument(project: string): Promise<MemoryDocument> {
+    const canonical = await this.canonical(project);
+    const current = this.projectPath(canonical);
+    try {
+      const raw = JSON.parse(await readFile(current, 'utf8')) as Partial<MemoryDocument>;
+      if (typeof raw.scope !== 'string' || !(await sameDirectory(raw.scope, canonical))) throw new MemoryError(409, '项目记忆的作用域与当前项目不一致，已拒绝注入');
+      return normalizeDocument(raw, 'project', canonical);
+    } catch (error) {
+      if (error instanceof MemoryError) throw error;
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw new MemoryError(500, '无法读取项目记忆，请检查记忆文件格式');
+    }
+    const legacy = this.legacyProjectPath(project);
+    if (legacy === current) return empty('project', canonical);
+    try {
+      const raw = JSON.parse(await readFile(legacy, 'utf8')) as Partial<MemoryDocument>;
+      if (typeof raw.scope !== 'string' || !(await sameDirectory(raw.scope, canonical))) {
+        throw new MemoryError(409, '发现路径别名对应的旧项目记忆，但其作用域不属于当前项目；已拒绝迁移');
+      }
+      const document = normalizeDocument(raw, 'project', canonical);
+      await this.writeFileDocument(current, document);
+      return document;
+    } catch (error) {
+      if (error instanceof MemoryError) throw error;
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return empty('project', canonical);
+      throw new MemoryError(500, '无法读取项目记忆，请检查记忆文件格式');
+    }
+  }
+
+  private async canonical(project: string) {
+    try { return await realpath(resolve(project)); }
+    catch { return resolve(project); }
+  }
+
   private async writeFileDocument(path: string, document: MemoryDocument) {
     await mkdir(resolve(path, '..'), { recursive: true });
     const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify(document, null, 2) + '\n', { encoding: 'utf8' });
+    await writeFile(temporary, JSON.stringify(document, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     await rename(temporary, path);
   }
 
   async global() { return this.readFileDocument(this.globalPath(), 'global', 'global'); }
-  async project(project: string) { return this.readFileDocument(this.projectPath(project), 'project', resolve(project)); }
+  async project(project: string) { return this.projectDocument(project); }
 
   session(manager: SessionManager) {
     const entry = [...manager.getBranch()].reverse().find((item) => item.type === 'custom' && item.customType === MEMORY_ENTRY);
@@ -125,9 +161,9 @@ export class MemoryStore {
 
   async replace(layer: MemoryLayer, itemsValue: unknown, project: string, manager?: SessionManager) {
     const items = validateItems(itemsValue);
-    const document = { version: MEMORY_VERSION, layer, scope: layer === 'global' ? 'global' : layer === 'project' ? resolve(project) : manager?.getSessionId() ?? '', updatedAt: now(), items } satisfies MemoryDocument;
+    const document = { version: MEMORY_VERSION, layer, scope: layer === 'global' ? 'global' : layer === 'project' ? await this.canonical(project) : manager?.getSessionId() ?? '', updatedAt: now(), items } satisfies MemoryDocument;
     if (layer === 'global') await this.writeFileDocument(this.globalPath(), document);
-    else if (layer === 'project') await this.writeFileDocument(this.projectPath(project), document);
+    else if (layer === 'project') await this.writeFileDocument(this.projectPath(document.scope), document);
     else {
       if (!manager) throw new MemoryError(400, '当前没有可编辑的会话记忆');
       manager.appendCustomEntry(MEMORY_ENTRY, document);

@@ -161,20 +161,20 @@ async function addImageAttachment(file) {
   if (typeof data !== 'string' || !data) return;
   state.attachments.push({ type: 'image', name: file.name, mimeType: file.type, data }); renderAttachments(); rememberDraft();
 }
-const TASK_STATUS_LABELS = { running: '运行中', interrupted: '服务重启后中断', aborted: '已停止', failed: '失败', needs_attention: '需要检查', completed: '已完成' };
+const TASK_STATUS_LABELS = { running: '运行中', interrupted: '服务重启后中断', aborted: '已停止', failed: '失败', needs_attention: '需要检查', budget_exceeded: '达到执行预算', completed: '已完成' };
 function renderTasks() {
   const list = $('tasks-list'); if (!list) return;
   const tasks = state.tasks || [];
   $('tasks-note').textContent = tasks.length ? '共 ' + tasks.length + ' 个' + (state.taskScope === 'project' ? '当前项目' : '跨项目') + '任务，状态独立于当前浏览器标签页保存。' : (state.taskScope === 'project' ? '当前项目还没有持久化任务。' : '还没有持久化任务。') + '使用“规划并执行”或验证任务后会显示在这里。';
   list.innerHTML = tasks.map((task) => {
     const running = task.status === 'running';
-    const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention'].includes(task.status);
-    const action = task.status === 'failed' || task.status === 'needs_attention' ? 'recheck' : 'resume';
+    const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(task.status);
+    const action = task.status === 'failed' || task.status === 'needs_attention' || task.status === 'budget_exceeded' ? 'recheck' : 'resume';
     return '<article class="task-card"><button type="button" class="task-card-main" data-open-task="' + esc(task.id) + '"><strong>' + esc(task.prompt || '未命名任务').slice(0, 180) + '</strong><small>' + esc(shortPath(task.project)) + ' · ' + esc(TASK_STATUS_LABELS[task.status] || task.status) + ' · ' + esc(formatTime(task.updatedAt)) + '</small><span>' + esc(task.error || (task.phase ? '当前阶段：' + (TASK_LABELS[task.phase] || task.phase) : '')) + '</span></button><div class="task-card-actions">' + (running ? '<button type="button" class="button quiet small" data-task-action="stop" data-task-id="' + esc(task.id) + '">停止</button>' : retryable ? '<button type="button" class="button quiet small" data-task-action="' + action + '" data-task-id="' + esc(task.id) + '">' + (action === 'recheck' ? '重新检查' : '继续') + '</button>' : '') + '</div></article>';
   }).join('') || '<p class="settings-note">暂无任务。</p>';
 }
 async function loadTasks() {
-  try { const query = state.taskScope === 'project' && state.project?.path ? '?project=' + encodeURIComponent(state.project.path) : ''; state.tasks = (await api('/api/tasks' + query)).tasks || []; renderTasks(); } catch (error) { if (error.status !== 401) $('tasks-note').textContent = '任务中心暂不可用：' + error.message; }
+  try { const query = state.taskScope === 'project' && state.project?.path ? '?project=' + encodeURIComponent(state.project.path) : ''; const result = await api('/api/tasks' + query); state.tasks = result.tasks || []; renderTasks(); if (result.diagnostic) $('tasks-note').textContent = result.diagnostic; } catch (error) { if (error.status !== 401) $('tasks-note').textContent = '任务中心暂不可用：' + error.message; }
 }
 function openTasks() { closeFilePicker(); closeModelPicker(); closeModePicker(); closeCommandPicker(); $('tasks-panel').classList.remove('hidden'); void loadTasks(); $('tasks-close').focus(); }
 function closeTasks() { $('tasks-panel').classList.add('hidden'); }
@@ -192,7 +192,7 @@ function showStart() { toggleChanges(false); syncChangesSession(); $('toggle-cha
 function showChat() { $('toggle-changes').classList.remove('hidden'); $('start-state').classList.add('hidden'); $('conversation-view').classList.remove('hidden'); }
 function continuationKind() {
   if (!state.sessionId || state.running || state.readOnly || historyReadOnly()) return null;
-  if (state.task) return ['interrupted', 'aborted', 'failed', 'needs_attention'].includes(state.task.status) && state.mode === 'agent' ? 'task' : null;
+  if (state.task) return ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status) && state.mode === 'agent' ? 'task' : null;
   return state.outcome === 'aborted' ? 'conversation' : null;
 }
 function renderComposerControl() {
@@ -200,7 +200,7 @@ function renderComposerControl() {
   const continuation = continuationKind(), draft = Boolean($('followup-prompt').value.trim());
   const compactLocked = state.compacting || state.compactRequest;
   const showStop = state.running || stopping, showResume = !showStop && (resuming || Boolean(continuation && !draft));
-  const canEditRetry = !showStop && !state.readOnly && !historyReadOnly() && Boolean(state.lastUserEntryId && state.forkableEntries.has(state.lastUserEntryId)) && (state.outcome === 'failed' || state.outcome === 'aborted' || ['interrupted', 'aborted', 'failed', 'needs_attention'].includes(state.task?.status));
+  const canEditRetry = !showStop && !state.readOnly && !historyReadOnly() && Boolean(state.lastUserEntryId && state.forkableEntries.has(state.lastUserEntryId)) && (state.outcome === 'failed' || state.outcome === 'aborted' || ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task?.status));
   $('stop-button').classList.toggle('hidden', !showStop); $('stop-button').disabled = !state.running || state.sending || state.loadingSession || Boolean(state.runControl);
   $('stop-button').setAttribute('aria-busy', String(stopping));
   $('stop-button').setAttribute('aria-label', stopping ? '正在停止当前执行' : '停止当前执行');
@@ -1009,7 +1009,7 @@ function renderTask(task) {
   if (!task) { renderComposerControl(); return; }
   const phases = task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  $('task-note').textContent = task.status === 'running' ? '正在' + TASK_LABELS[task.phase] + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'completed' ? task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
+  $('task-note').textContent = task.status === 'running' ? '正在' + TASK_LABELS[task.phase] + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'budget_exceeded' ? '执行预算已用尽，可以调整设置后重新检查。' : task.status === 'completed' ? task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
   $('task-review').textContent = task.review ? '模型审阅：' + task.review.summary + (task.review.issues?.length ? '\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '') : '审阅尚未完成。';
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
   setRunning(state.running);
@@ -1459,6 +1459,7 @@ async function openSettings(tab, editModel) {
     state.providers = settings.providers || [];
     state.models = settings.models || [];
     const models = settings.models || [];
+    const budget = settings.budget || { maxDurationMs: 900000, maxModelTurns: 50, maxToolCalls: 300, maxTotalTokens: 750000, maxCostUsd: 25 };
     const credentialRows = (credentials.credentials || []).map((item) => '<div class="credential-row"><span>' + esc(item.provider) + '</span><small>' + esc(item.type) + '</small><button class="text-button" data-remove-provider="' + esc(item.provider) + '">移除</button></div>').join('');
     const currentDefault = models.find((model) => model.key === settings.model);
     $('drawer-body').innerHTML =
@@ -1469,7 +1470,7 @@ async function openSettings(tab, editModel) {
       '<div data-settings-panel="mcp"><div id="mcp-settings"></div></div>' +
       '<div data-settings-panel="skills"><div id="skills-settings"></div></div>' +
       '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify 与 verifyRetries。</p><pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
-      '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section></div>';
+      '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section><section class="settings-block" id="execution-budget"><div class="settings-heading"><div><h3>执行预算</h3><p>限制单次 Agent 执行的时长、模型回合、工具调用、token 和费用。只影响下一次执行，运行中的任务不会被静默改写。</p></div></div><div class="budget-grid"><label>最长时长（分钟）<input id="budget-duration" type="number" min="1" max="1440" value="' + esc(Math.round((budget.maxDurationMs || 900000) / 60000)) + '"></label><label>模型回合<input id="budget-turns" type="number" min="1" max="1000" value="' + esc(budget.maxModelTurns) + '"></label><label>工具调用<input id="budget-tools" type="number" min="1" max="10000" value="' + esc(budget.maxToolCalls) + '"></label><label>累计 token<input id="budget-tokens" type="number" min="1000" max="100000000" value="' + esc(budget.maxTotalTokens) + '"></label><label>费用上限（美元）<input id="budget-cost" type="number" min="0" max="100000" step="0.01" value="' + esc(budget.maxCostUsd) + '"></label></div><p class="settings-note">token 和费用以模型服务返回的 usage 为准；单次请求可能略微超过上限。超限后 Pi 会停止后续回合，并在任务中心显示原因。</p><button class="button primary small" id="save-agent-budget">保存执行预算</button></section></div>';
     const activateTab = (name) => {
       state.settingsTab = name;
       document.querySelectorAll('[data-settings-panel]').forEach((node) => node.classList.toggle('hidden', node.dataset.settingsPanel !== name));
@@ -1477,6 +1478,14 @@ async function openSettings(tab, editModel) {
     };
     $('drawer-body').querySelectorAll('[data-settings-tab]').forEach((button) => { button.onclick = () => activateTab(button.dataset.settingsTab); });
     activateTab(state.settingsTab);
+    const saveBudget = $('save-agent-budget');
+    if (saveBudget) saveBudget.onclick = async () => {
+      const value = { maxDurationMs: Number($('budget-duration').value) * 60000, maxModelTurns: Number($('budget-turns').value), maxToolCalls: Number($('budget-tools').value), maxTotalTokens: Number($('budget-tokens').value), maxCostUsd: Number($('budget-cost').value) };
+      setBusy(saveBudget, true, '保存中…');
+      try { const result = await api('/api/settings/budget', { method: 'POST', body: JSON.stringify({ budget: value }) }); settings.budget = result.budget; toast('执行预算已保存，新任务会使用新限制'); }
+      catch (error) { toast(error.message, 'error'); }
+      finally { setBusy(saveBudget, false); }
+    };
     const memoryDocuments = {
       global: memory?.global || emptyMemoryDocument('global', 'global'),
       project: memory?.project || emptyMemoryDocument('project', state.project?.path || ''),

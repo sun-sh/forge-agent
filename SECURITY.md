@@ -47,10 +47,25 @@ make arbitrary repository content safe.
 - Planned tasks restrict research, planning and review to built-in readers,
   and the host controls phase transitions and final completion. Restarted work
   requires an explicit user action; prior side effects are not replayed.
+- Each `FORGE_AGENT_HOME` has one Web owner lease. A second gateway is refused,
+  stale ownership can recover after the lease interval, and task-index write
+  failures are exposed as diagnostics rather than silently treated as durable.
+- Agent execution, terminal commands, project-trust changes, and service
+  shutdown share a canonical real-directory reservation. This prevents the
+  supported Web entry points from intentionally overlapping work in one
+  project; it does not coordinate unrelated processes launched outside Forge.
+- Web executions have host budgets for duration, model turns, tool calls,
+  provider-reported tokens, and provider-reported cost. A budget aborts the Pi
+  session and records a recoverable state, but provider reporting happens at
+  response boundaries and is not a billing or OS resource limit.
 - Git previews use argument arrays rather than shell interpolation, disable
   external diff/textconv helpers, limit preview size, reject path traversal and
   symlink escapes, and exclude known credential filenames. This is a preview
   boundary, not a filesystem sandbox for the agent.
+- Project-file references and previews check both the requested path and its
+  resolved path for known sensitive locations. An in-project directory alias
+  cannot bypass filtering for `.git` or Forge data directories. These checks
+  do not isolate agent tools or prevent every concurrent filesystem mutation.
 
 ## Limits
 
