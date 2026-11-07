@@ -1,6 +1,6 @@
 {
   "name": "forge-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local coding agent with a Web client, planned task orchestration and verification.",
   "private": false,
   "type": "module",
@@ -18,6 +18,9 @@
     "test:web": "npm run build && node scripts/check-web-ui.mjs",
     "eval:smoke": "npm run build && node scripts/evaluate-agent.mjs",
     "eval:agent": "npm run build && node scripts/evaluate-agent.mjs --real",
+    "eval:repo": "npm run build && node scripts/evaluate-repository.mjs",
+    "pack:check": "npm run build && node scripts/check-package.mjs",
+    "prepack": "npm run build",
     "check": "node scripts/check.mjs",
     "start": "node dist/pi-cli.js web",
     "check:agent": "node dist/pi-cli.js --version"
@@ -50,6 +53,10 @@
     "dist",
     "README.md",
     "README.en.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "AGENTS.md",
+    "docs",
     "LICENSE",
     "forge-agent.schema.json"
   ]

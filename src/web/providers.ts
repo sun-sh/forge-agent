@@ -6,6 +6,7 @@ import lockfile from 'proper-lockfile';
 import { ModelRuntime, readStoredCredential } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { MODEL_THINKING_LEVELS } from '@earendil-works/pi-ai/providers/model-schema';
+import { Type } from 'typebox';
 
 // This edits Pi's configuration. Pi still owns authentication and all model requests.
 export const CUSTOM_APIS = ['openai-completions', 'openai-responses', 'anthropic-messages'] as const;
@@ -285,6 +286,52 @@ export class CustomProviders {
     } finally { if (staged) await rm(staged, { force: true }); if (release) await release(); }
   }
 
+  async remove(value: unknown, expectedRevision: unknown, assertIdle: () => void = () => {}) {
+    const id = providerId(value);
+    if (typeof expectedRevision !== 'string' || !expectedRevision) throw new ProviderError(400, '删除服务需要最新的配置版本');
+    await mkdir(this.home, { recursive: true });
+    let release: (() => Promise<void>) | undefined;
+    let staged: string | undefined;
+    let authRemoved = false;
+    let committed = false;
+    let oldCredential: ReturnType<typeof readStoredCredential> | undefined;
+    try {
+      try { release = await lockfile.lock(this.path, { realpath: false, retries: { retries: 20, minTimeout: 50, maxTimeout: 200 } }); }
+      catch { throw new ProviderError(409, '模型配置正在保存，请稍后重试'); }
+      assertIdle();
+      oldCredential = readStoredCredential(id, this.authPath);
+      if (oldCredential?.type === 'oauth') throw new ProviderError(409, '此服务使用 OAuth，请先在 Pi 中完成登出');
+      const { source, config } = await this.read();
+      const previous: JsonObject | undefined = Object.hasOwn(config['providers'], id) ? config['providers'][id] : undefined;
+      if (!previous) throw new ProviderError(404, '自定义服务不存在或已经删除');
+      if (expectedRevision !== revision(previous)) throw new ProviderError(409, '服务已被其他窗口修改，请重新打开设置');
+      if (previous['oauth'] || !CUSTOM_APIS.includes(previous['api'])) throw new ProviderError(409, '此服务由高级配置管理，不能从 Web 设置删除');
+      const candidate = applyEdits(source, modify(source, ['providers', id], undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
+      staged = await this.stage(candidate);
+      const validation = await ModelRuntime.create({ authPath: this.authPath, modelsPath: staged, refreshOnCreate: false });
+      if (validation.getError() || validation.getProvider(id)) throw new ProviderError(400, '删除后的 models.json 未通过 Pi 验证，原配置未改变');
+      const latest = await this.read();
+      if (latest.source !== source) throw new ProviderError(409, 'models.json 已被外部程序修改，请重新打开设置');
+      assertIdle();
+      if (oldCredential || this.runtime.hasConfiguredAuth(id)) { authRemoved = true; await this.runtime.logout(id); }
+      assertIdle();
+      await rename(staged, this.path); staged = undefined; committed = true;
+      let diagnostic: string | undefined;
+      try { await this.runtime.refresh({ allowNetwork: false, providers: [id], signal: AbortSignal.timeout(15_000) }); }
+      catch { diagnostic = '服务配置和凭据已删除，但模型目录刷新失败；请重启本地服务后重新检查。'; }
+      return { id, removed: true, diagnostic };
+    } catch (error) {
+      const previousKey = oldCredential?.type === 'api_key' && typeof oldCredential.key === 'string' ? oldCredential.key : undefined;
+      if (!committed && authRemoved && previousKey) {
+        try { await this.runtime.login(id, 'api_key', { prompt: async () => previousKey, notify: () => {} }); }
+        catch { throw new ProviderError(500, '删除失败，凭据回退未完成；请重新保存此服务的 API Key'); }
+      }
+      if (error instanceof ProviderError) throw error;
+      if (committed) throw new ProviderError(500, '服务配置和凭据已删除，但运行时刷新失败；请重启本地服务后重新检查');
+      throw new ProviderError(500, '删除服务失败，请检查本机文件权限后重试');
+    } finally { if (staged) await rm(staged, { force: true }); if (release) await release(); }
+  }
+
   async test(value: unknown) {
     const input = connectionInput(value);
     if (!object(value)) throw new ProviderError(400, '服务配置格式不正确');
@@ -306,7 +353,25 @@ export class CustomProviders {
       });
       if (signal.aborted) throw new ProviderError(502, '模型测试超时，请检查服务状态或稍后重试');
       if (result.stopReason === 'error' || result.stopReason === 'aborted' || !result.content.some((part) => part.type === 'text' && part.text.trim())) throw new ProviderError(502, '模型未返回有效文本' + (status ? '（HTTP ' + status + '）' : '') + '，请检查模型 ID、协议和 Key');
-      return { ok: true, model: model['id'], latencyMs: Date.now() - started };
+      const checks: Array<{ name: string; status: 'passed' | 'failed' | 'skipped'; message?: string }> = [{ name: 'streaming-text', status: 'passed' }];
+      if (value['capabilities'] === true) {
+        const nonce = randomBytes(8).toString('hex');
+        const user = { role: 'user' as const, content: 'Call forge_probe with value ' + nonce + '. This is a harmless compatibility test; the tool has no side effects.', timestamp: Date.now() };
+        const tools = [{ name: 'forge_probe', description: 'Return the probe value supplied by the caller.', parameters: Type.Object({ value: Type.String() }) }];
+        const options = { maxTokens: Math.min(256, selected.maxTokens), maxRetries: 0, timeoutMs: 20_000, signal,
+          fetch: async (request: string | URL | Request, init?: RequestInit) => { const response = await fetch(request, { ...init, redirect: 'error', signal }); status = response.status; return response; } };
+        const called = await runtime.completeSimple(selected, { messages: [user], tools }, { ...options, toolChoice: 'auto' });
+        const call = called.content.find((part) => part.type === 'toolCall' && part.name === 'forge_probe');
+        if (called.stopReason === 'error' || !call || call.type !== 'toolCall' || call.arguments['value'] !== nonce) {
+          checks.push({ name: 'tool-call', status: 'failed', message: '服务未返回符合工具定义的调用；请检查协议和模型的工具能力。' }, { name: 'tool-result', status: 'skipped' });
+        } else {
+          checks.push({ name: 'tool-call', status: 'passed' });
+          const final = await runtime.completeSimple(selected, { tools, messages: [user, called,
+            { role: 'toolResult', toolCallId: call.id, toolName: call.name, content: [{ type: 'text', text: 'Probe completed. Reply with the exact value: ' + nonce }], isError: false, timestamp: Date.now() }] }, { ...options, toolChoice: 'none' });
+          checks.push({ name: 'tool-result', status: final.stopReason !== 'error' && final.stopReason !== 'aborted' && final.content.some((part) => part.type === 'text' && part.text.includes(nonce)) ? 'passed' : 'failed', message: '检查服务能否接收工具结果并继续生成文本。' });
+        }
+      }
+      return { ok: true, model: model['id'], latencyMs: Date.now() - started, checks, codingCompatible: value['capabilities'] === true ? checks.every((check) => check.status === 'passed') : undefined };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError(502, signal.aborted ? '模型测试超时，请检查服务状态或稍后重试' : '模型调用失败' + (status ? '（HTTP ' + status + '）' : '') + '，请核对 Base URL、协议、模型 ID 和 API Key');

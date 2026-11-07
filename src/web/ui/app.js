@@ -6,6 +6,7 @@ import { mountCustomProviders } from './providers.js';
 import { mountMcp } from './mcp.js';
 import { mountSkills } from './skills.js';
 import { builtinCommands, filterCommands, parseCommand } from './commands.js';
+import { lifecycleUI } from './lifecycle.js';
 
 function stored(key, fallback, storage = localStorage) { try { return JSON.parse(storage.getItem(key)) ?? fallback; } catch { return fallback; } }
 function saveStored(key, value, storage = localStorage) { try { value === null ? storage.removeItem(key) : storage.setItem(key, JSON.stringify(value)); } catch {} }
@@ -36,6 +37,9 @@ const changesMedia = window.matchMedia?.('(max-width: 1180px)');
 let projectsRequest = 0;
 
 const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+const lifecycle = lifecycleUI({ api, esc, toast, currentSession: () => state.sessionId, running: () => state.running,
+  readOnly: () => state.readOnly || state.mode !== 'agent' || historyReadOnly(), changed: () => loadChanges(true) });
+let tasksTimer, tasksRequest = 0;
 const ICON_PATHS = {
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/>',
   folderPlus: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/><path d="M12 10v6m-3-3h6"/>',
@@ -205,10 +209,25 @@ function renderTasks() {
   }).join('') || '<p class="settings-note">暂无任务。</p>';
 }
 async function loadTasks() {
-  try { const query = state.taskScope === 'project' && state.project?.path ? '?project=' + encodeURIComponent(state.project.path) : ''; const result = await api('/api/tasks' + query); state.tasks = result.tasks || []; renderTasks(); if (result.diagnostic) $('tasks-note').textContent = result.diagnostic; } catch (error) { if (error.status !== 401) $('tasks-note').textContent = '任务中心暂不可用：' + error.message; }
+  const request = ++tasksRequest, project = state.project?.path, scope = state.taskScope;
+  try {
+    const query = state.taskScope === 'project' && state.project?.path ? '?project=' + encodeURIComponent(state.project.path) : '';
+    const [result, queue] = await Promise.all([api('/api/tasks' + query), api('/api/jobs' + query)]);
+    if (request !== tasksRequest || project !== state.project?.path || scope !== state.taskScope) return;
+    state.tasks = result.tasks || []; renderTasks(); if (result.diagnostic) $('tasks-note').textContent = result.diagnostic;
+    const labels = { queued: '排队中', running: '后台执行中', completed: '已完成', failed: '失败', interrupted: '进程退出后中断', cancelled: '已取消' };
+    $('queue-list').innerHTML = (queue.jobs || []).slice().reverse().map((job) => '<article class="task-card"><div class="task-card-main"><strong>' + esc(job.title || '排队任务') + '</strong><small>' + esc(shortPath(job.project)) + ' · ' + esc(labels[job.status]) + ' · ' + esc(job.model) + '</small><span>' + esc(job.error || formatTime(job.createdAt)) + '</span></div><div class="task-card-actions">' + (['queued', 'interrupted'].includes(job.status) ? '<button type="button" class="button quiet small" data-cancel-job="' + esc(job.id) + '">取消</button>' : '') + '<button type="button" class="button quiet small" data-open-job="' + esc(job.id) + '">打开会话</button></div></article>').join('') || '<p class="settings-note">使用 /queue 任务内容 排队。独立后台进程可通过 forge-agent service start 启动。</p>';
+    state.jobs = queue.jobs || [];
+    if (queue.diagnostic) $('queue-list').textContent = queue.diagnostic;
+    $('queue-list').querySelectorAll('[data-open-job]').forEach((button) => {
+      const job = state.jobs.find((item) => item.id === button.dataset.openJob);
+      if (!['failed', 'interrupted', 'cancelled'].includes(job?.status)) return;
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'button quiet small'; retry.dataset.retryJob = job.id; retry.textContent = '重新排队'; button.before(retry);
+    });
+  } catch (error) { if (request === tasksRequest && error.status !== 401) $('tasks-note').textContent = '任务中心暂不可用：' + error.message; }
 }
-function openTasks() { closeFilePicker(); closeModelPicker(); closeModePicker(); closeCommandPicker(); $('tasks-panel').classList.remove('hidden'); void loadTasks(); $('tasks-close').focus(); }
-function closeTasks() { $('tasks-panel').classList.add('hidden'); }
+function openTasks() { closeFilePicker(); closeModelPicker(); closeModePicker(); closeCommandPicker(); $('tasks-panel').classList.remove('hidden'); void loadTasks(); clearInterval(tasksTimer); tasksTimer = setInterval(() => void loadTasks(), 3000); $('tasks-close').focus(); }
+function closeTasks() { $('tasks-panel').classList.add('hidden'); clearInterval(tasksTimer); ++tasksRequest; }
 async function activateTaskSession(id) {
   const data = await api('/api/sessions/' + id); state.sessionId = data.id; state.sessionPath = data.sessionFile || null; applySnapshot(data); connect(data.id); showChat(); renderProjects(); closeTasks();
 }
@@ -847,7 +866,7 @@ function renderSubagents(agents) {
   $('subagents-count').textContent = running ? running + ' / ' + state.subagents.length : String(state.subagents.length);
   button.title = '子任务 ' + state.subagents.length + ' · ' + running + ' 个运行中';
   const list = $('subagent-list'), focusId = document.activeElement?.dataset.subagentOpen;
-  list.innerHTML = state.subagents.map((agent) => '<button type="button" class="subagent-row" data-subagent-open="' + esc(agent.id) + '"><span class="subagent-dot ' + esc(agent.status) + '" aria-hidden="true"></span><span class="subagent-row-label"><strong>' + esc(agent.title) + '</strong><small>' + (agent.role === 'reviewer' ? '审阅' : '探索') + ' · ' + esc(SUBAGENT_STATUS[agent.status] || agent.status) + '</small></span><span class="subagent-row-usage"><span>' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens</span><span data-subagent-time="' + esc(agent.id) + '">' + subagentTime(agent) + '</span></span><span aria-hidden="true">↗</span></button>').join('');
+  list.innerHTML = state.subagents.map((agent) => '<button type="button" class="subagent-row" data-subagent-open="' + esc(agent.id) + '"><span class="subagent-dot ' + esc(agent.status) + '" aria-hidden="true"></span><span class="subagent-row-label"><strong>' + esc(agent.title) + '</strong><small>' + (agent.role === 'worker' ? '实现' : agent.role === 'reviewer' ? '审阅' : '探索') + ' · ' + esc(SUBAGENT_STATUS[agent.status] || agent.status) + '</small></span><span class="subagent-row-usage"><span>' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens</span><span data-subagent-time="' + esc(agent.id) + '">' + subagentTime(agent) + '</span></span><span aria-hidden="true">↗</span></button>').join('');
   if (focusId) [...list.querySelectorAll('[data-subagent-open]')].find((node) => node.dataset.subagentOpen === focusId)?.focus();
   if (!state.subagents.length) { closeSubagentMenu(); closeSubagent(); }
   if (state.subagentSelected) {
@@ -860,7 +879,7 @@ function renderSubagents(agents) {
 function renderSubagentStatus(agent) {
   $('subagent-heading').textContent = agent.title;
   $('subagent-status').textContent = SUBAGENT_STATUS[agent.status] || agent.status;
-  $('subagent-meta').textContent = (agent.role === 'reviewer' ? '审阅' : '探索') + ' · 只读 · ' + agent.model + ' · ' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens';
+  $('subagent-meta').textContent = (agent.role === 'worker' ? '实现 · 独立 worktree' : (agent.role === 'reviewer' ? '审阅' : '探索') + ' · 只读') + ' · ' + agent.model + ' · ' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens';
   $('subagent-activity').textContent = subagentRunning(agent) ? agent.activity || '正在处理子任务…' : agent.error || '结果已返回主 Agent';
   $('subagent-stop').classList.toggle('hidden', !subagentRunning(agent));
 }
@@ -912,6 +931,7 @@ async function loadSubagent() {
     }
     if (data.partialText) { const partial = document.createElement('div'); partial.className = 'subagent-response markdown'; renderMarkdown(partial, data.partialText); container.append(partial); }
     if (data.historyError) { const note = document.createElement('p'); note.textContent = data.historyError; container.append(note); }
+    lifecycle.proposal(container, data.proposal, sessionId, id, loadSubagent, data.agent?.status === 'completed', Boolean(data.agent?.worktreeRemoved));
     container.querySelectorAll('details').forEach((node) => { node.open = expanded.has(node.dataset.key); });
     container.scrollTop = nearEnd ? container.scrollHeight : scroll;
     if (!subagentRunning(data.agent)) { clearInterval(state.subagentTimer); state.subagentTimer = null; }
@@ -990,6 +1010,7 @@ function commandDisabled(command) {
   if (state.compacting || state.compactRequest) return '上下文正在压缩';
   if (state.loadingSession || state.changingConfig || state.changingMode || state.sending || state.runControl) return '请等待当前操作完成';
   if (command.name === 'model') return '';
+  if (command.name === 'queue') return !state.sessionId ? '开始对话后可用' : state.mode !== 'agent' || state.readOnly ? '需要可用的 Agent 会话' : '';
   if (state.running && command.name !== 'changes') return '本轮结束后可用';
   if (['compact', 'rename', 'changes'].includes(command.name) && !state.sessionId) return '开始对话后可用';
   if (command.name === 'compact' && state.readOnly) return '请先选择可用模型';
@@ -1082,6 +1103,11 @@ async function executeCommand(input, command, args = '') {
       case 'context': openContext(anchor); break;
       case 'compact': ok = await compactContext(args); break;
       case 'changes': toggleChanges(true); break;
+      case 'queue':
+        if (!args.trim()) { openTasks(); break; }
+        if (state.attachments.length) { toast('排队暂支持文本任务，请先发送或移除附件', 'warning'); return false; }
+        await api('/api/jobs', { method: 'POST', body: JSON.stringify({ session: state.sessionId, message: args, workflow: state.workflow, model: state.pendingModelKey || state.model?.key, thinkingLevel: state.pendingThinkingLevel || state.thinkingLevel }) });
+        toast('已加入后台队列'); openTasks(); break;
       case 'rename': openRename(); break;
       case 'settings': await openSettings(); break;
       case 'mcp': await openSettings('mcp'); break;
@@ -1250,6 +1276,7 @@ function syncChangesSession() {
   const changes = state.changes;
   if (changes.sessionId === state.sessionId) return;
   changes.sessionId = state.sessionId; changes.files = []; changes.selectedPath = null; changes.fingerprint = null; changes.diffStatus = 'idle';
+  $('checkpoint-panel').open = false; $('checkpoint-panel').innerHTML = '<summary>执行检查点</summary>'; delete $('checkpoint-panel').dataset.selectedId;
   changes.projectFiles = []; changes.selectedProjectFile = null; ++changes.projectFilesRequest; ++changes.projectFileRequest;
   ++changes.listRequest; ++changes.diffRequest;
   $('changes-count').textContent = ''; $('changes-files').textContent = '';
@@ -1336,6 +1363,7 @@ async function loadChanges(forceDiff = false) {
   try {
     const data = await api('/api/sessions/' + sessionId + '/changes');
     if (!current()) return;
+    if ($('checkpoint-panel')?.open && !state.running) void lifecycle.loadCheckpoints($('checkpoint-panel'));
     changes.files = data.available ? data.files || [] : [];
     $('changes-count').textContent = data.available ? changes.files.length + (data.truncated ? '+' : '') : '';
     $('changes-note').textContent = !data.available ? data.reason || '无法读取 Git 状态。' : (state.task ? '“已有修改”表示任务开始前已存在；“期间变化”仅表示观察到变化，不代表全部由 Agent 产生。' : '当前工作区与暂存区的 Git 变更。') + (data.headChanged ? ' · HEAD 已变化' : '') + (data.truncated ? ' · 文件列表已截断' : '');
@@ -1686,7 +1714,7 @@ function memoryKindOptions(selected = 'fact') {
 }
 function memoryItemMarkup(item, editable) {
   const id = typeof item?.id === 'string' && item.id ? item.id : 'memory-' + Math.random().toString(36).slice(2);
-  const source = item?.source === 'compaction' ? '来自压缩摘要' : '用户维护';
+  const source = item?.source === 'compaction' ? '来自压缩摘要' : item?.source === 'agent' ? '审阅后接受 · ' + (item.provenance?.evidence || '') : '用户维护';
   return '<div class="memory-item" data-memory-item-id="' + esc(id) + '"><div class="memory-item-head"><label class="memory-enabled"><input type="checkbox" data-memory-enabled ' + (item?.enabled !== false ? 'checked ' : '') + (!editable ? 'disabled ' : '') + '>启用</label><select data-memory-item-kind aria-label="记忆类型" ' + (!editable ? 'disabled ' : '') + '>' + memoryKindOptions(item?.kind || 'fact') + '</select><small>' + esc(source) + '</small><button type="button" data-memory-delete aria-label="删除记忆" title="删除记忆" ' + (!editable ? 'disabled ' : '') + '>×</button></div><textarea data-memory-text rows="2" maxlength="4000" ' + (!editable ? 'disabled ' : '') + '>' + esc(item?.text || '') + '</textarea></div>';
 }
 function memoryLayerMarkup(layer, documentValue, editable) {
@@ -1751,12 +1779,19 @@ async function openSettings(tab, editModel) {
       project: memory?.project || emptyMemoryDocument('project', state.project?.path || ''),
       session: memory?.session || emptyMemoryDocument('session', state.sessionId || '')
     };
+    const memoryRevisions = { ...memory?.revisions };
     const memoryBudget = Array.isArray(memory?.promptBudget) ? memory.promptBudget : [];
     const memoryBudgetMarkup = memoryBudget.length ? '<div class="memory-budget">本轮注入预算：' + memoryBudget.map((item) => esc(item.layer) + ' ' + esc(String(item.chars)) + '/' + esc(String(item.budget)) + (item.truncated ? '（已截断）' : '')).join(' · ') + '</div>' : '';
     const sessionMemoryEditable = Boolean(state.sessionId && !state.readOnly && !historyReadOnly());
     const renderMemory = () => {
       const compaction = settings.compaction || { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 };
       $('memory-settings').innerHTML = '<section class="memory-section"><div class="memory-summary"><strong>三层记忆 + Pi 原生上下文</strong><br>全局记忆跨项目复用，项目记忆按文件夹隔离，会话记忆跟随 Pi 会话树和分支。记忆只作为用户参考资料注入，不会获得工具权限。Pi 负责自动压缩，压缩摘要会保留在会话历史中。' + memoryBudgetMarkup + '</div><section class="settings-block memory-compaction"><div class="settings-heading"><div><h3>自动上下文压缩</h3><p>上下文接近窗口上限时由 Pi 自动整理较早内容；原始历史仍可在会话树中查看。</p></div><label class="switch-label"><input type="checkbox" id="memory-auto-compaction" ' + (compaction.enabled !== false ? 'checked' : '') + '> <span>自动压缩</span></label></div><div class="memory-compaction-facts"><span>预留阈值 <strong>' + formatNumber(compaction.reserveTokens) + '</strong> tokens</span><span>保留最近 <strong>' + formatNumber(compaction.keepRecentTokens) + '</strong> tokens</span><span>本会话已压缩 <strong>' + formatNumber(memory?.compaction?.count || 0) + '</strong> 次</span></div><p class="settings-note">关闭后不会触发新的自动压缩，但仍可以在聊天框下方手动压缩。修改设置需要所有会话空闲。</p></section>' + memoryLayerMarkup('global', memoryDocuments.global, true) + (state.project ? memoryLayerMarkup('project', memoryDocuments.project, true) : '<p class="settings-note">选择项目后可管理项目记忆。</p>') + memoryLayerMarkup('session', memoryDocuments.session, sessionMemoryEditable) + '</section>';
+      const candidates = document.createElement('section'); candidates.className = 'settings-block'; candidates.id = 'memory-candidates';
+      $('memory-settings').prepend(candidates);
+      lifecycle.candidates(candidates, memory?.candidates || [], async () => {
+        if ($('memory-settings').querySelector('[data-memory-dirty]:not(.hidden)')) { toast('候选已处理，请先保存下方未保存内容，再重新打开记忆设置'); return; }
+        await openSettings('memory');
+      });
       const toggle = $('memory-auto-compaction');
       toggle.onchange = async () => {
         toggle.disabled = true;
@@ -1783,11 +1818,12 @@ async function openSettings(tab, editModel) {
       $('memory-settings').querySelectorAll('[data-memory-text], [data-memory-enabled], [data-memory-item-kind]').forEach((input) => { input.addEventListener('input', () => input.closest('[data-memory-layer]').querySelector('[data-memory-dirty]').classList.remove('hidden')); input.addEventListener('change', () => input.closest('[data-memory-layer]').querySelector('[data-memory-dirty]').classList.remove('hidden')); });
       $('memory-settings').querySelectorAll('[data-memory-save]').forEach((button) => {
         button.onclick = async () => {
-          const layer = button.closest('[data-memory-layer]'); const layerName = layer.dataset.memoryLayer; const items = [...layer.querySelectorAll('[data-memory-item-id]')].map((item) => ({ id: item.dataset.memoryItemId, text: item.querySelector('[data-memory-text]').value.trim(), kind: item.querySelector('[data-memory-item-kind]').value, source: 'user', enabled: item.querySelector('[data-memory-enabled]').checked }));
+          const layer = button.closest('[data-memory-layer]'); const layerName = layer.dataset.memoryLayer; const items = [...layer.querySelectorAll('[data-memory-item-id]')].map((item) => ({ ...memoryDocuments[layerName].items.find((entry) => entry.id === item.dataset.memoryItemId), id: item.dataset.memoryItemId, text: item.querySelector('[data-memory-text]').value.trim(), kind: item.querySelector('[data-memory-item-kind]').value, enabled: item.querySelector('[data-memory-enabled]').checked }));
           if (items.some((item) => !item.text)) { toast('记忆内容不能为空', 'error'); return; }
           setBusy(button, true, '保存中…');
           try {
-            const result = await api('/api/memory', { method: 'POST', body: JSON.stringify({ project: state.project?.path, session: layerName === 'session' ? state.sessionId : undefined, layer: layerName, items }) });
+            const result = await api('/api/memory', { method: 'POST', body: JSON.stringify({ project: state.project?.path, session: layerName === 'session' ? state.sessionId : undefined, layer: layerName, items, revision: memoryRevisions[layerName] }) });
+            memoryRevisions[layerName] = result.revision;
             memoryDocuments[layerName] = result.document; layer.querySelector('[data-memory-dirty]').classList.add('hidden'); toast(MEMORY_LAYER_INFO[layerName][0] + '已保存');
           } catch (error) { toast(error.message, 'error'); }
           finally { setBusy(button, false); }
@@ -1818,7 +1854,7 @@ async function openSettings(tab, editModel) {
     $('drawer-body').querySelectorAll('[data-remove-provider]').forEach((button) => { button.onclick = async () => { setBusy(button, true, '移除中…'); try { await api('/api/credentials?provider=' + encodeURIComponent(button.dataset.removeProvider), { method: 'DELETE' }); await loadModels(); await openSettings(); toast('凭据已移除'); } catch (error) { toast(error.message, 'error'); } finally { setBusy(button, false); } }; });
     $('toggle-trust').disabled = state.running || !state.project;
     action('toggle-trust', '更新中…', async () => { if (!state.project) throw new Error('请先选择项目'); const result = await api('/api/projects/trust', { method: 'POST', body: JSON.stringify({ path: state.project.path, trusted: !state.trust?.trusted }) }); state.trust = result.trust; renderTrust(); if (state.sessionId) await refreshSessionState(); await loadProjects(); await openSettings(); });
-    await mountCustomProviders($('custom-providers'), { api, esc, setBusy, initialProvider: editModel?.provider, initialModel: editModel?.id, onSaved: async () => { await loadModels(); if (state.sessionId) await refreshSessionState(); await openSettings('provider'); toast('服务已保存，在聊天框下方选择模型与推理强度'); } });
+    await mountCustomProviders($('custom-providers'), { api, esc, setBusy, initialProvider: editModel?.provider, initialModel: editModel?.id, onSaved: async (kind, diagnostic) => { await loadModels(); if (state.sessionId) await refreshSessionState(); await openSettings('provider'); toast(diagnostic || (kind === 'deleted' ? '服务已删除，相关旧会话已变为只读' : '服务已保存，在聊天框下方选择模型与推理强度'), diagnostic ? 'warning' : 'info'); } });
     if (state.project) {
       state.mcpSettings = mountMcp($('mcp-settings'), { api, esc, initial: mcp, projectPath: state.project.path, runtimeEnabled: true, isVisible: () => !$('drawer').classList.contains('hidden') && state.settingsTab === 'mcp', onChanged: async () => { await loadProjects(); if (state.sessionId) await refreshSessionState(); } });
       state.skillsSettings = mountSkills($('skills-settings'), { api, esc, projectPath: state.project.path, onChanged: async () => { if (state.sessionId) await refreshSessionState(); } });
@@ -2286,6 +2322,20 @@ $('deny-button').addEventListener('click', () => submitUi(true));
 $('approval-options').addEventListener('click', (event) => { const option = event.target.closest('[data-ui-option]'); if (!option || !state.uiRequest) return; state.uiRequest.selectedValue = option.dataset.uiOption; $('allow-button').disabled = false; [...$('approval-options').children].forEach((item) => item.classList.toggle('selected', item === option)); });
 $('tasks-button').addEventListener('click', openTasks);
 $('tasks-close').addEventListener('click', closeTasks);
+$('queue-list').addEventListener('click', async (event) => {
+  const retry = event.target.closest('[data-retry-job]');
+  if (retry) {
+    if (!confirm('重新排队会创建一次新执行，并先检查当前项目状态。继续？')) return;
+    retry.disabled = true;
+    try { await api('/api/jobs/' + encodeURIComponent(retry.dataset.retryJob) + '/retry', { method: 'POST', body: '{}' }); await loadTasks(); }
+    catch (error) { toast(error.message, 'error'); retry.disabled = false; } return;
+  }
+  const cancel = event.target.closest('[data-cancel-job]');
+  if (cancel) { try { await api('/api/jobs/' + encodeURIComponent(cancel.dataset.cancelJob) + '/cancel', { method: 'POST', body: '{}' }); await loadTasks(); } catch (error) { toast(error.message, 'error'); } return; }
+  const open = event.target.closest('[data-open-job]'), job = state.jobs?.find((item) => item.id === open?.dataset.openJob);
+  if (job) { closeTasks(); await openSession(job.sessionFile, job.project); }
+});
+$('checkpoint-panel').addEventListener('toggle', () => { if ($('checkpoint-panel').open) void lifecycle.loadCheckpoints($('checkpoint-panel')); });
 $('tasks-scope').addEventListener('change', (event) => { state.taskScope = event.target.value === 'all' ? 'all' : 'project'; void loadTasks(); });
 $('tasks-list').addEventListener('click', async (event) => {
   const action = event.target.closest('[data-task-action]');

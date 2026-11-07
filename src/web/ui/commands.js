@@ -5,6 +5,7 @@ export const builtinCommands = [
   { name: 'context', title: '上下文用量', description: '查看用量、容量与自动压缩状态', source: 'local' },
   { name: 'compact', title: '压缩上下文', description: '整理较早内容，可附加需要保留的重点', argumentHint: '[保留重点]', source: 'local' },
   { name: 'changes', title: '代码变更', description: '查看右侧文件差异', source: 'local' },
+  { name: 'queue', title: '后台排队', description: '将文本任务加入持久化队列；不带参数时打开任务中心', argumentHint: '[任务内容]', source: 'local' },
   { name: 'rename', title: '重命名对话', description: '修改当前对话的名称', source: 'local' },
   { name: 'mcp', title: 'MCP 服务', description: '管理外部工具与连接', source: 'local' },
   { name: 'settings', title: '设置', description: '管理模型服务与项目配置', source: 'local' },

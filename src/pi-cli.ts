@@ -9,6 +9,8 @@ import { loadConfig } from "./config.js";
 import { createPforgeVerification } from "./verification/pi-extension.js";
 import { runVerification, verificationMessage } from "./verification/verify.js";
 import { createForgeIdentityExtension } from "./identity.js";
+import { fileURLToPath } from 'node:url';
+import { clearService, saveService, serviceStatus, startService, stopService } from './web/service.js';
 
 export interface ParsedPforgeArgs {
   cwd: string;
@@ -57,6 +59,7 @@ export function brandedHelp(): string {
     "Usage:",
     "  forge-agent                     start the interactive TUI",
     "  forge-agent web [--no-open]      start the local Web client and open a browser",
+    "  forge-agent service start|status|stop  manage the independent local background process",
     "  forge-agent [options] [prompt...] run with Pi options and a prompt",
     "  forge-agent -p <prompt>         single-shot mode",
     "  forge-agent doctor              check local configuration",
@@ -141,16 +144,38 @@ export async function runPforge(args = process.argv.slice(2)): Promise<void> {
   try {
     if (parsed.args[0] === "doctor") { process.exitCode = await doctor(parsed.cwd, home); return; }
     if (parsed.args[0] === "check") { process.exitCode = await check(parsed.cwd, home); return; }
+    if (parsed.args[0] === 'service') {
+      const action = parsed.args[1];
+      if (action === 'stop') { await stopService(home); process.stdout.write('Forge 后台服务已停止。\n'); return; }
+      if (action !== 'start' && action !== 'status') throw new Error('Use forge-agent service start|status|stop [--port 4317]');
+      const portIndex = parsed.args.indexOf('--port'), port = portIndex >= 0 ? Number(parsed.args[portIndex + 1]) : 4317;
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port must be an integer between 1 and 65535');
+      const entry = fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? '../dist/pi-cli.js' : './pi-cli.js', import.meta.url));
+      if (action === 'start' && !existsSync(entry)) throw new Error('请先执行 npm run build');
+      const status = action === 'start' ? await startService(home, parsed.cwd, entry, port) : await serviceStatus(home);
+      process.stdout.write(status.running && 'origin' in status ? `Forge 后台运行中：${status.origin}\n` : 'Forge 后台服务未运行。\n');
+      if (action === 'start' && status.running && 'origin' in status && !parsed.args.includes('--no-open')) {
+        const { loadWebToken } = await import('./web/auth.js');
+        await openLocalBrowser(status.origin + '/?token=' + encodeURIComponent(await loadWebToken(home)));
+      }
+      return;
+    }
     if (parsed.args[0] === "web") {
       const portIndex = parsed.args.indexOf("--port");
       const port = portIndex >= 0 ? Number(parsed.args[portIndex + 1]) : 4317;
       if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("--port must be an integer between 1 and 65535");
-      const running = await startWebConsole({ cwd: parsed.cwd, port });
+      let resolveStop!: () => void;
+      const stopped = new Promise<void>((resolve) => { resolveStop = resolve; });
+      const instance = process.env['FORGE_SERVICE_INSTANCE'];
+      const running = await startWebConsole({ cwd: parsed.cwd, port, serviceInstance: instance, onServiceStop: resolveStop });
       const noOpen = parsed.args.includes("--no-open");
       const localUrl = new URL(running.url);
       localUrl.search = "";
       localUrl.hash = "";
-      if (noOpen) {
+      if (instance) {
+        await saveService(home, localUrl.origin, instance);
+        process.stdout.write(`Forge background service: ${localUrl.origin}\n`);
+      } else if (noOpen) {
         process.stdout.write(`forge-agent web: ${running.url}\n`);
       } else {
         try {
@@ -163,16 +188,11 @@ export async function runPforge(args = process.argv.slice(2)): Promise<void> {
         }
       }
       process.stdout.write("Press Ctrl+C to stop.\n");
-      await new Promise<void>((resolveShutdown) => {
-        const shutdown = () => {
-          process.removeListener("SIGINT", shutdown);
-          process.removeListener("SIGTERM", shutdown);
-          resolveShutdown();
-        };
-        process.once("SIGINT", shutdown);
-        process.once("SIGTERM", shutdown);
-      });
-      await running.close();
+      const shutdown = () => resolveStop();
+      process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
+      await stopped;
+      process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);
+      try { await running.close(); } finally { if (instance) await clearService(home, instance); }
       return;
     }
   } catch (error) {

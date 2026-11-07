@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
-import { MemoryError, MemoryStore } from '../src/web/memory.js';
+import { MemoryError, MemoryStore, memoryRevision } from '../src/web/memory.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -17,6 +17,42 @@ async function fixture() {
 }
 
 describe('scoped memory', () => {
+  it('keeps model proposals out of the prompt until explicit review and records provenance', async () => {
+    const { home, project, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
+    manager.appendMessage({ role: 'user', content: 'Prefer pnpm for this project', timestamp: Date.now() });
+    const candidate = await store.propose(project, manager, { layer: 'project', kind: 'preference', text: 'Use pnpm for this project', evidence: 'The user explicitly requested pnpm in this conversation.' });
+    expect(await store.promptText(project, manager)).not.toContain('Use pnpm');
+    const views = await store.candidateViews(project, manager);
+    await store.resolveCandidate(project, manager, candidate.id, 'accept', views[0]!.revision);
+    expect(await store.promptText(project, manager)).toContain('Use pnpm');
+    expect((await store.project(project)).items[0]).toMatchObject({ source: 'agent', provenance: { candidateId: candidate.id, sessionId: manager.getSessionId() } });
+    expect(new MemoryStore(home).candidates(SessionManager.open(manager.getSessionFile()!))[0]?.status).toBe('accepted');
+    await expect(store.resolveCandidate(project, manager, candidate.id, 'accept', views[0]!.revision)).rejects.toMatchObject({ status: 409 });
+  });
+  it('rejects duplicate proposals and stale acceptance, and preserves edits when a replacement conflicts', async () => {
+    const { home, project, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
+    manager.appendMessage({ role: 'user', content: 'change preferences', timestamp: Date.now() });
+    const original = await store.replace('project', [{ text: 'Use npm' }], project);
+    const proposal = await store.propose(project, manager, { layer: 'project', kind: 'preference', text: 'Use pnpm', evidence: 'user request', supersedes: original.items[0]!.id });
+    await expect(store.propose(project, manager, { layer: 'project', kind: 'preference', text: '  Use   PNPM ', evidence: 'duplicate' })).rejects.toMatchObject({ status: 409 });
+    await store.replace('project', [{ ...original.items[0], text: 'Use yarn' }], project);
+    await expect(store.resolveCandidate(project, manager, proposal.id, 'accept', proposal.baseRevision)).rejects.toMatchObject({ status: 409 });
+    await expect(store.resolveCandidate(project, manager, proposal.id, 'accept', memoryRevision(await store.project(project)))).rejects.toThrow('原记忆已经改变');
+    expect((await store.project(project)).items[0]?.text).toBe('Use yarn');
+    await store.resolveCandidate(project, manager, proposal.id, 'reject');
+    expect(store.candidates(manager)[0]?.status).toBe('rejected');
+  });
+  it('does not give a fork ownership of pending memory candidates or write rejected proposals', async () => {
+    const { home, project, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
+    manager.appendMessage({ role: 'user', content: 'remember later', timestamp: Date.now() });
+    const candidate = await store.propose(project, manager, { layer: 'session', kind: 'decision', text: 'Keep API stable', evidence: 'user constraint' });
+    manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'Candidate ready for review.' }], timestamp: Date.now() } as any);
+    const entry = manager.appendMessage({ role: 'user', content: 'branch here', timestamp: Date.now() });
+    const branch = SessionManager.open(manager.getSessionFile()!).createBranchedSession(entry)!;
+    expect(store.candidates(SessionManager.open(branch))).toEqual([]);
+    await store.resolveCandidate(project, manager, candidate.id, 'reject');
+    expect(await store.promptText(project, manager)).not.toContain('Keep API stable');
+  });
   it('persists global and project memory while isolating projects', async () => {
     const { project, otherProject, store } = await fixture();
     await store.replace('global', [{ text: 'Prefer concise answers', kind: 'preference' }], project);

@@ -23,7 +23,7 @@ import { McpRuntimeView } from './mcp-runtime.js';
 import { isRuntimeCommand, runtimeCommands } from './commands.js';
 import { SkillsControl, SkillError } from './skills.js';
 import { changeHistory, exportSession, forkable, forkHistory, forkOrigin, HistoryError, historyPath, historyState, renameHistory, sessionTitle } from './history.js';
-import { MEMORY_LAYERS, MemoryError, MemoryStore, type MemoryLayer } from './memory.js';
+import { MEMORY_LAYERS, MemoryError, MemoryStore, memoryRevision, type MemoryLayer } from './memory.js';
 import { listProjectFiles, preparePromptAttachments, readProjectFile } from './files.js';
 import { CommandExecutionError, executeCommand } from '../tools/command.js';
 import { sameDirectory } from '../project-identity.js';
@@ -32,8 +32,10 @@ import { BudgetExceededError, BudgetRuntime, budgetLimitsSchema, loadAgentSettin
 import { homedir } from 'node:os';
 import { ProjectError, WebProjects } from './projects.js';
 import { ForgeSubagents } from './subagents.js';
+import { CheckpointStore, CheckpointError } from '../task/checkpoints.js';
+import { TaskQueue, QueueError } from '../task/queue.js';
 
-export interface WebConsoleOptions { cwd: string; host?: string; port?: number; }
+export interface WebConsoleOptions { cwd: string; host?: string; port?: number; serviceInstance?: string; onServiceStop?(): void; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
 interface SessionEventRecord { id: number; event: unknown; bytes: number; }
 interface SessionState {
@@ -93,7 +95,7 @@ function attachment(res: ServerResponse, status: number, value: { body: string; 
   res.end(value.body);
 }
 async function body(req: IncomingMessage): Promise<any> { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); size += b.length; if (size > MAX_BODY) throw new HttpError(413, 'Request body too large'); chunks.push(b); } if (!chunks.length) return {}; let parsed: unknown; try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'Request body must be valid JSON'); } if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'Request body must be a JSON object'); return parsed; }
-const ASSETS = ['index.html', 'app.js', 'style.css', 'render.js', 'stream.js', 'providers.js', 'mcp.js', 'skills.js', 'commands.js', 'vendor/marked.js', 'vendor/purify.js'];
+const ASSETS = ['index.html', 'app.js', 'style.css', 'render.js', 'stream.js', 'providers.js', 'mcp.js', 'skills.js', 'commands.js', 'lifecycle.js', 'vendor/marked.js', 'vendor/purify.js'];
 function asset(root: string, pathname: string) { const file = pathname === '/' ? 'index.html' : pathname.slice(1); if (!ASSETS.includes(file)) throw new HttpError(404, 'Invalid asset path'); return join(root, file); }
 const vendorAssets = new Map([['/vendor/marked.js', fileURLToPath(import.meta.resolve('marked'))], ['/vendor/purify.js', fileURLToPath(import.meta.resolve('dompurify'))]]);
 function sse(res: ServerResponse, record: SessionEventRecord) { if (res.writableLength > 8_000_000) { res.destroy(); return; } if (!res.destroyed && !res.writableEnded) res.write('id: ' + record.id + '\ndata: ' + JSON.stringify(record.event) + '\n\n'); }
@@ -207,6 +209,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   let agentSettings: AgentSettings = await loadAgentSettings(home);
   const sessions = new Map<string, SessionState>();
   const openingSessions = new Map<string, Promise<SessionState>>();
+  const openingOperations = new Set<Promise<unknown>>();
   let shuttingDown = false;
   let closing: Promise<void> | undefined;
   const retiring = new Set<Promise<void>>();
@@ -221,12 +224,19 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   const mcpControl = new McpControlPlane(home);
   const skillsControl = new SkillsControl(home);
   const memoryStore = new MemoryStore(home);
+  const checkpoints = new CheckpointStore(home);
   let modelMutation = false;
   let mcpMutation = false;
   let memoryMutation = false;
   let mcpOperations = 0;
   let mcpWrite: Promise<void> = Promise.resolve();
   let openingCount = 0;
+  function trackOpening<T>(operation: Promise<T>): Promise<T> {
+    let tracked!: Promise<T>;
+    tracked = operation.finally(() => { openingOperations.delete(tracked); });
+    openingOperations.add(tracked);
+    return tracked;
+  }
   function assertModelsIdle() {
     if (openingCount || [...sessions.values()].some((session) => session.running || session.busy || session.task)) throw new ProviderError(409, '请先停止正在运行的任务，再修改服务连接');
   }
@@ -371,7 +381,18 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
 
   function retireAgent(agent: AgentSession): Promise<void> {
     const existing = agentRetirements.get(agent); if (existing) return existing;
-    const work = (async () => { try { await agent.abort(); await agent.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' }); } finally { agent.dispose(); } })();
+    const work = (async () => {
+      try {
+        // An idle session may reject abort because there is no active turn (or
+        // because it already observed cancellation). Retirement must remain a
+        // best-effort lifecycle operation and never make a provider update or
+        // server shutdown fail.
+        try { await agent.abort(); } catch { /* continue to extension cleanup */ }
+        try { await agent.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' }); } catch { /* best effort */ }
+      } finally {
+        try { agent.dispose(); } catch { /* an already-disposed Pi session is still retired */ }
+      }
+    })();
     agentRetirements.set(agent, work); return work;
   }
 
@@ -448,6 +469,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
 
   function sessionSnapshot(session: SessionState) {
     const context = sessionContext(session);
+    const checkpoint = [...session.manager.getBranch()].reverse().find((entry) => entry.type === 'custom' && entry.customType === 'forge.checkpoint' && (entry.data as any)?.sessionId === session.manager.getSessionId());
     return {
       id: session.id,
       project: session.project,
@@ -481,6 +503,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       eventId: session.sequence,
       trust: trustView(trustStore, settingsManager, session.project),
       budget: session.budget?.snapshot(),
+      checkpoint: checkpoint?.type === 'custom' ? checkpoint.data : undefined,
       subagents: session.subagents?.snapshot() ?? []
     };
   }
@@ -607,7 +630,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         }
         emit(session, { type: 'pforge_verification', verification: session.verification.outcome });
       }
-      emit(session, record.type === 'agent_settled' ? { ...record, taskRunning: session.controller.active } : record);
+      emit(session, record.type === 'agent_settled' ? { ...record, taskRunning: Boolean(session.task || session.controller.active || session.running) } : record);
       if (['message_end', 'tool_execution_end', 'compaction_start', 'compaction_end'].includes(record.type)) emit(session, { type: 'pforge_context', context: sessionContext(session) });
     });
   }
@@ -749,6 +772,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     // makes a competing terminal/session request fail synchronously with 409,
     // instead of accepting work that will only fail in a detached promise.
     const lease = await executions.acquire(session.project, 'agent');
+    let directTask: TaskState | undefined;
+    let checkpoint: string | undefined;
+    let budget: BudgetRuntime | undefined;
+    let stopBudgetUpdates: () => void = () => {};
     try {
       const agent = session.session!;
       session.running = true; session.runningSince = Date.now(); session.finishedAt = undefined; session.outcome = 'running';
@@ -756,7 +783,6 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       if (!runtimeCommand) session.workflow = workflow;
       session.manager.appendCustomEntry('pforge.web.run-mode', { mode: session.mode });
       if (!runtimeCommand) saveWebWorkflow(session.manager, workflow);
-      let directTask: TaskState | undefined;
       if (workflow !== 'planned') {
         const candidate = createExecutionState(message, {
           workflow: 'direct', mode: session.mode,
@@ -766,14 +792,22 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           session.controller.setExternalState(undefined);
           session.manager.appendCustomEntry('pforge.task', { cleared: true });
         } else {
+          directTask = candidate;
+          session.controller.setExternalState(candidate);
           candidate.baseline = await captureGit(session.project, lease.signal);
           session.controller.setExternalState(candidate);
-          directTask = candidate;
         }
       }
-      const budget = new BudgetRuntime(agentSettings.budget);
-      session.budget = budget;
-      const stopBudgetUpdates = budget.subscribe((snapshot) => {
+      if (session.mode === 'agent' && !runtimeCommand && trustView(trustStore, session.settingsManager, session.project).trusted) {
+        try {
+          checkpoint = await checkpoints.begin(session.project, session.manager.getSessionId(), message);
+          session.manager.appendCustomEntry('forge.checkpoint', { id: checkpoint, sessionId: session.manager.getSessionId(), status: 'open' });
+        } catch { session.manager.appendCustomEntry('forge.checkpoint', { sessionId: session.manager.getSessionId(), diagnostic: '当前执行未建立检查点（需要 Git 仓库根目录及可读写的本机存储）。' }); }
+      }
+      const runBudget = new BudgetRuntime(agentSettings.budget);
+      budget = runBudget;
+      session.budget = runBudget;
+      stopBudgetUpdates = runBudget.subscribe((snapshot) => {
         // Planned runs persist through TaskController.run(). Adaptive runs use
         // the same durable task envelope but do not enter that controller loop;
         // keep their live budget in the task record as well, so an interruption
@@ -781,10 +815,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         if (directTask) session.controller.recordBudget(snapshot);
         if (!session.closed) emit(session, { type: 'pforge_budget', budget: snapshot });
       });
-      if (directTask) session.controller.recordBudget(budget.snapshot());
+      if (directTask) session.controller.recordBudget(runBudget.snapshot());
       session.subagents?.beginPrompt();
       const work = async () => {
-        if (workflow !== 'planned') { budget.start(); session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); budget.check(); return; }
+        if (workflow !== 'planned') { runBudget.start(); session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); runBudget.check(); return; }
         const result = await session.controller.run(message, verificationConfig.config.verifyRetries, {
         async execute(_phase, text, first, signal) {
           signal.throwIfAborted(); if (session.closed) throw new Error('Session is closed');
@@ -808,7 +842,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         },
         baseline: (signal) => captureGit(session.project, signal),
         changes: (baseline, signal) => compareGit(session.project, baseline, signal)
-        }, resumeOf, budget, {
+        }, resumeOf, runBudget, {
           workflow: 'planned', mode: session.mode,
           model: agent.model ? agent.model.provider + '/' + agent.model.id : undefined
         });
@@ -817,36 +851,86 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       };
       session.task = (async () => {
         try { await work(); }
-        catch (error) { if (error instanceof BudgetExceededError || budget.exceededReason) throw new BudgetExceededError(budget.exceededReason ?? (error instanceof Error ? error.message : String(error))); throw error; }
-        finally { await session.subagents?.cancelAll(); lease.release(); }
+        catch (error) { if (error instanceof BudgetExceededError || runBudget.exceededReason) throw new BudgetExceededError(runBudget.exceededReason ?? (error instanceof Error ? error.message : String(error))); throw error; }
+        finally { await session.subagents?.cancelAll(); }
       })().catch((error: unknown) => {
         const errorMessage = error instanceof Error ? error.message : String(error);
         session.lastError = errorMessage; session.outcome = 'failed'; emit(session, { type: 'pforge_error', error: errorMessage });
       }).finally(async () => {
-        stopBudgetUpdates();
-        const budgetStatus = budget.snapshot().status;
-        if (budgetStatus === 'running') budget.finish(session.outcome === 'completed' ? 'completed' : 'aborted');
-        if (directTask) {
-          const task = directTask;
-          const phase = task.phases.at(-1);
-          if (phase && !phase.endedAt) phase.endedAt = new Date().toISOString();
-          if (task.baseline) {
-            try { task.changes = await compareGit(session.project, task.baseline); }
-            catch (error) {
-              task.changes = { available: false, reason: error instanceof Error ? error.message : String(error), truncated: false, files: [] };
+        let finalizationError: unknown;
+        try {
+          stopBudgetUpdates();
+          const budgetStatus = runBudget.snapshot().status;
+          if (budgetStatus === 'running') runBudget.finish(session.outcome === 'completed' ? 'completed' : 'aborted');
+          if (directTask) {
+            const task = directTask;
+            const phase = task.phases.at(-1);
+            if (phase && !phase.endedAt) phase.endedAt = new Date().toISOString();
+            if (task.baseline) {
+              try { task.changes = await compareGit(session.project, task.baseline); }
+              catch (error) {
+                task.changes = { available: false, reason: error instanceof Error ? error.message : String(error), truncated: false, files: [] };
+              }
             }
+            await finalizeDirectTask(session, task, runBudget);
           }
-          await finalizeDirectTask(session, task, budget);
+          if (checkpoint) {
+            await checkpoints.seal(checkpoint, session.project, session.manager.getSessionId());
+            session.manager.appendCustomEntry('forge.checkpoint', { id: checkpoint, sessionId: session.manager.getSessionId(), status: 'sealed' });
+          }
+        } catch (error) {
+          finalizationError = error;
+          const message = error instanceof Error ? error.message : String(error);
+          session.lastError ??= '任务收尾失败：' + message;
+          session.outcome = 'failed';
+          if (directTask) {
+            directTask.status = 'failed';
+            directTask.error = session.lastError;
+            const phase = directTask.phases.at(-1);
+            if (phase && !phase.endedAt) phase.endedAt = new Date().toISOString();
+            try { session.controller.setExternalState(directTask); } catch { /* Preserve the live session even if task metadata cannot be saved. */ }
+          }
+        } finally {
+          session.running = false;
+          session.finishedAt = Date.now();
+          if (session.outcome === 'running') session.outcome = 'idle';
+          try { if (!session.closed) session.modePolicy.apply(agent); }
+          catch (error) { session.lastError ??= '执行模式恢复失败：' + (error instanceof Error ? error.message : String(error)); session.outcome = 'failed'; finalizationError = error; }
+          finally {
+            session.task = undefined; session.lastActivity = Date.now(); lease.release();
+            void flushMcpReloads();
+            if (finalizationError && !session.closed) emit(session, { type: 'pforge_error', error: session.lastError });
+            emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+          }
         }
-        session.running = false;
-        session.finishedAt = Date.now();
-        if (session.outcome === 'running') session.outcome = 'idle';
-        if (!session.closed) session.modePolicy.apply(agent);
-        session.task = undefined; session.lastActivity = Date.now();
-        void flushMcpReloads();
-        emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
       });
     } catch (error) {
+      // Preparation happens before session.task is assigned. Every failure in
+      // that window must put the session back into a usable idle state. A
+      // rejected baseline/readiness step must never leave the UI in a
+      // permanent "running" state or leave a durable direct task unfinished.
+      if (!session.task) {
+        const message = error instanceof Error ? error.message : String(error);
+        stopBudgetUpdates();
+        try { if (budget?.snapshot().status === 'running') budget.finish('aborted'); } catch { /* Keep cleanup best-effort. */ }
+        if (directTask) {
+          directTask.status = 'failed';
+          directTask.error = message;
+          const phase = directTask.phases.at(-1);
+          if (phase && !phase.endedAt) phase.endedAt = new Date().toISOString();
+          try { session.controller.setExternalState(directTask); } catch { /* The live session still needs to be released. */ }
+        }
+        try { await session.subagents?.cancelAll(); } catch { /* The original preparation error is more useful to the caller. */ }
+        session.running = false;
+        session.finishedAt = Date.now();
+        session.outcome = 'failed';
+        session.lastError = message;
+        session.task = undefined;
+        if (!session.closed) {
+          emit(session, { type: 'pforge_error', error: message });
+          emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+        }
+      }
       lease.release();
       throw error;
     }
@@ -865,24 +949,51 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const live = liveTaskSession(record);
     if (live) return live;
     const project = await requireDirectory(record.project);
-    return createSession(project, record.sessionFile, 'Task');
+    return trackOpening(createSession(project, record.sessionFile, 'Task'));
   }
   async function runRegisteredTask(record: TaskRecord, action: 'resume' | 'recheck') {
-    const session = await openTaskSession(record);
-    if (session.running || session.busy || session.task) throw new HttpError(409, '任务已经在运行');
-    if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请先配置可用模型并切换 Agent 模式');
-    const previous = session.controller.state;
-    if (!previous || previous.id !== record.id) throw new HttpError(409, '任务记录与会话历史不一致，请从会话中重新检查');
-    const allowed = action === 'resume'
-      ? ['interrupted', 'aborted', 'budget_exceeded']
-      : ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'];
-    if (!allowed.includes(previous.status)) throw new HttpError(409, action === 'resume' ? '当前任务不需要继续' : '当前任务没有可重新检查的失败状态');
-    session.busy = true;
-    const workflow: WebWorkflow = previous.workflow === 'direct' ? 'direct' : 'planned';
-    try { await launchPrompt(session, previous.prompt, workflow, previous.id); }
-    catch (error) { session.busy = false; throw error; }
-    return session;
+    openingCount++;
+    try {
+      const session = await openTaskSession(record);
+      if (session.running || session.busy || session.task) throw new HttpError(409, '任务已经在运行');
+      if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请先配置可用模型并切换 Agent 模式');
+      const previous = session.controller.state;
+      if (!previous || previous.id !== record.id) throw new HttpError(409, '任务记录与会话历史不一致，请从会话中重新检查');
+      const allowed = action === 'resume'
+        ? ['interrupted', 'aborted', 'budget_exceeded']
+        : ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'];
+      if (!allowed.includes(previous.status)) throw new HttpError(409, action === 'resume' ? '当前任务不需要继续' : '当前任务没有可重新检查的失败状态');
+      session.busy = true;
+      const workflow: WebWorkflow = previous.workflow === 'direct' ? 'direct' : 'planned';
+      try { await launchPrompt(session, previous.prompt, workflow, previous.id); }
+      catch (error) { session.busy = false; throw error; }
+      return session;
+    } finally { openingCount--; }
   }
+
+  let queue: TaskQueue;
+  try {
+    queue = await TaskQueue.open(home, async (job) => {
+      openingCount++;
+      let session: SessionState | undefined;
+      try {
+        if (shuttingDown || modelMutation || mcpMutation || memoryMutation || historyMutation) throw new HttpError(409, '资源正在更新，请检查后重新排队');
+        const project = await requireDirectory(job.project);
+        if (!trustView(trustStore, settingsManager, project).trusted) throw new HttpError(403, '排队任务的项目尚未信任或已被撤销信任');
+        session = [...sessions.values()].find((item) => sameSessionPath(item.manager.getSessionFile(), job.sessionFile)) ?? await trackOpening(createSession(project, job.sessionFile));
+        historyWritable(session);
+        if (session.running || session.busy || session.task || session.mode !== 'agent') throw new HttpError(409, '会话正在使用或已切换为只读模式，请检查后重新排队');
+        session.busy = true;
+        const model = (await modelAvailability(modelRuntime, customProviders)).availableModels.find((item) => modelKey(item) === job.model);
+        if (!model) throw new HttpError(409, '排队时选择的模型已经不可用');
+        if (!session.session) await attachAgent(session, model, preferredThinkingLevel(model, job.thinkingLevel));
+        else { await session.session.setModel(model, { persist: false }); session.session.setThinkingLevel(preferredThinkingLevel(model, job.thinkingLevel), { persist: false }); }
+        await launchPrompt(session, job.retryOf ? '用户明确重新排队。先检查当前项目与会话中的执行记录，不要重放旧工具操作，再完成原任务：\n\n' + job.prompt : job.prompt, job.workflow);
+      } finally { if (session) session.busy = false; openingCount--; }
+      await session!.task;
+      if (session!.outcome !== 'completed' || (session!.controller.state && session!.controller.state.status !== 'completed')) throw new Error(session!.lastError ?? session!.controller.state?.error ?? '后台任务未通过完成门禁');
+    }, () => !shuttingDown && !modelMutation && !mcpMutation && !memoryMutation && !historyMutation && !openingCount && ![...sessions.values()].some((session) => session.running || session.busy || session.task || session.session?.isCompacting));
+  } catch (error) { await releaseStartup(); throw error; }
 
   const server = createServer(async (request, response) => {
     let lockedSession: SessionState | undefined;
@@ -909,7 +1020,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         response.end(content);
         return;
       }
-      if (url.pathname === '/api/health') { json(response, 200, { ok: true, version: VERSION }); return; }
+      if (url.pathname === '/api/health') { json(response, 200, { ok: true, version: VERSION, ...(options.serviceInstance ? { instance: options.serviceInstance } : {}) }); return; }
       if (request.headers.origin && request.headers.origin !== origin || request.headers['sec-fetch-site'] === 'cross-site') { json(response, 403, { error: 'Cross-origin local Web requests are not allowed' }); return; }
       if (url.pathname === '/api/auth' && request.method === 'POST') {
         if (!matchesToken(token, supplied)) { json(response, 401, { error: 'Local Web authorization required', code: 'LOCAL_AUTH_REQUIRED' }); return; }
@@ -918,7 +1029,33 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         return;
       }
       if (!authenticated) { json(response, 401, { error: 'Local Web authorization required', code: 'LOCAL_AUTH_REQUIRED' }); return; }
-      if ((modelMutation || mcpMutation) && request.method === 'POST' && (url.pathname === '/api/session' || url.pathname === '/api/projects/trust' || /^\/api\/sessions\/[^/]+\/(prompt|resume-task|model|thinking|mode|compact)$/.test(url.pathname))) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
+      if (url.pathname === '/api/service/stop' && request.method === 'POST') {
+        const input = await body(request);
+        if (!options.serviceInstance || input.instance !== options.serviceInstance || !options.onServiceStop) throw new HttpError(409, '当前服务不是此后台实例');
+        json(response, 202, { accepted: true }); setImmediate(() => options.onServiceStop!()); return;
+      }
+      if (url.pathname === '/api/jobs' && request.method === 'GET') {
+        const project = url.searchParams.get('project'); json(response, 200, queue.snapshot(project ? await requireDirectory(project) : undefined)); return;
+      }
+      if (url.pathname === '/api/jobs' && request.method === 'POST') {
+        const input = await body(request), session = sessions.get(input.session);
+        if (!session?.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请打开可用的 Agent 会话后排队');
+        historyWritable(session);
+        if (!trustView(trustStore, settingsManager, session.project).trusted) throw new HttpError(403, '请先信任项目后排队');
+        try { await historyPath(session.manager.getSessionFile(), sessionRoot); }
+        catch { throw new HttpError(409, '请先完成第一轮对话，再将后续任务加入持久化队列'); }
+        if (typeof input.message !== 'string' || !input.message.trim() || input.message.length > 100_000) throw new HttpError(400, '排队任务需要 1–100000 字符的文本');
+        if (input.workflow !== undefined && !isWebWorkflow(input.workflow)) throw new HttpError(400, '无效的执行流程');
+        const model = typeof input.model === 'string' ? input.model : sessionModel(session)?.key;
+        const selected = (await modelAvailability(modelRuntime, customProviders)).availableModels.find((item) => modelKey(item) === model);
+        if (!selected) throw new HttpError(409, '排队模型不可用');
+        const job = await queue.enqueue({ project: session.project, sessionFile: session.manager.getSessionFile()!, title: input.message.trim().slice(0, 100),
+          prompt: input.message.trim(), workflow: input.workflow ?? 'direct', model: modelKey(selected), thinkingLevel: preferredThinkingLevel(selected, input.thinkingLevel ?? session.session.thinkingLevel) });
+        json(response, 202, { job: { ...job, prompt: undefined } }); return;
+      }
+      const queueAction = url.pathname.match(/^\/api\/jobs\/([^/]+)\/(cancel|retry)$/);
+      if (queueAction && request.method === 'POST') { if (queueAction[2] === 'retry') await queue.retry(queueAction[1]!); else await queue.cancel(queueAction[1]!); json(response, 200, { ok: true }); return; }
+      if ((modelMutation || mcpMutation) && request.method === 'POST' && (url.pathname === '/api/session' || url.pathname === '/api/projects/trust' || /^\/api\/sessions\/[^/]+\/(prompt|resume-task|model|thinking|mode|compact)$/.test(url.pathname) || /^\/api\/tasks\/[^/]+\/(resume|recheck)$/.test(url.pathname))) throw new ProviderError(409, '服务连接正在更新，请稍后重试');
       if (url.pathname === '/api/tasks' && request.method === 'GET') {
         const project = url.searchParams.get('project');
         if (project) await requireDirectory(project);
@@ -940,7 +1077,11 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           const session = liveTask(record);
           if (!session?.running || !session.session) throw new HttpError(409, '任务当前没有正在运行的会话');
           lockedSession = session; session.busy = true;
-          session.controller.cancel(); clearUiRequests(session); await session.session.abort(); await session.task;
+          session.controller.cancel(); clearUiRequests(session);
+          const abortResults = await Promise.allSettled([session.session.abort(), session.subagents?.cancelAll()]);
+          await session.task;
+          const failure = abortResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+          if (failure) throw failure.reason;
           json(response, 200, { ok: true, task: session.controller.state ?? null }); return;
         }
         if (action !== 'resume' && action !== 'recheck') throw new HttpError(400, 'Unsupported task action');
@@ -1102,7 +1243,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         return;
       }
       if (url.pathname === '/api/memory' && request.method === 'GET') {
-        if (url.searchParams.get('scope') === 'global' && !url.searchParams.has('project')) { json(response, 200, { global: await memoryStore.global() }); return; }
+        if (url.searchParams.get('scope') === 'global' && !url.searchParams.has('project')) { const global = await memoryStore.global(); json(response, 200, { global, revisions: { global: memoryRevision(global) } }); return; }
         const { project } = await memoryProject(url.searchParams.get('project'));
         const sessionId = url.searchParams.get('session');
         let manager: SessionManager | undefined;
@@ -1113,7 +1254,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         }
         const snapshot = await memoryStore.snapshot(project, manager);
         const prompt = manager ? await memoryStore.promptPlan(project, manager) : undefined;
-        json(response, 200, { ...snapshot, ...(prompt ? { promptBudget: prompt.layers } : {}) });
+        json(response, 200, { ...snapshot, revisions: { global: memoryRevision(snapshot.global), project: memoryRevision(snapshot.project), session: memoryRevision(snapshot.session) }, candidates: manager ? await memoryStore.candidateViews(project, manager) : [], ...(prompt ? { promptBudget: prompt.layers } : {}) });
         return;
       }
       if (url.pathname === '/api/memory' && request.method === 'POST') {
@@ -1130,34 +1271,72 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         memoryMutation = true;
         try {
           await assertMemoryIdle(layer, project, layer === 'session' ? sessionId : undefined);
+          const previous = layer === 'global' ? await memoryStore.global() : layer === 'project' ? await memoryStore.project(project) : memoryStore.session(target!.manager);
+          if (input.revision !== undefined && input.revision !== memoryRevision(previous)) throw new MemoryError(409, '记忆已被其他操作更新，请刷新后保存');
           const document = await memoryStore.replace(layer, input.items, project, target?.manager);
           await emitMemoryChanged(project, layer);
           const memory = await memoryStore.snapshot(project, target?.manager);
           const prompt = target?.manager ? await memoryStore.promptPlan(project, target.manager) : undefined;
-          json(response, 200, { document, memory: { ...memory, ...(prompt ? { promptBudget: prompt.layers } : {}) } });
+          json(response, 200, { document, revision: memoryRevision(document), memory: { ...memory, ...(prompt ? { promptBudget: prompt.layers } : {}) } });
+        } finally { memoryMutation = false; }
+        return;
+      }
+      if (url.pathname === '/api/memory/candidates' && request.method === 'POST') {
+        const input = await body(request), session = sessions.get(input.session);
+        if (!session || session.readOnly) throw new MemoryError(404, '请先打开可编辑的会话');
+        if (memoryMutation) throw new HttpError(409, '记忆正在更新');
+        memoryMutation = true;
+        try {
+          await assertMemoryIdle('project', session.project);
+          historyWritable(session);
+          if (input.action === 'propose') await memoryStore.propose(session.project, session.manager, input.candidate);
+          else if (['accept', 'reject'].includes(input.action) && typeof input.id === 'string') await memoryStore.resolveCandidate(session.project, session.manager, input.id, input.action, input.revision);
+          else throw new MemoryError(400, '无效的候选操作');
+          await emitMemoryChanged(session.project, 'project');
+          json(response, 200, { candidates: await memoryStore.candidateViews(session.project, session.manager) });
         } finally { memoryMutation = false; }
         return;
       }
       if (url.pathname === '/api/providers/custom' && request.method === 'GET') { json(response, 200, { providers: await customProviders.list() }); return; }
+      const customProviderDelete = url.pathname.match(/^\/api\/providers\/custom\/([^/]+)$/);
+      if (customProviderDelete && request.method === 'DELETE') {
+        const input = await body(request);
+        const removed = await mutateModels(async () => {
+          const result = await customProviders.remove(decodeURIComponent(customProviderDelete[1]!), input.revision, assertModelsIdle);
+          for (const session of sessions.values()) {
+            const previousAgent = session.session;
+            if (previousAgent?.model?.provider !== result.id) continue;
+            session.unsubscribe?.(); session.unsubscribe = undefined; clearUiRequests(session);
+            session.session = undefined; session.readOnly = true;
+            await retireAgent(previousAgent);
+            emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
+          }
+          return result;
+        });
+        json(response, 200, { ...removed, ...settingsCatalog(await modelCatalog(modelRuntime, customProviders)) });
+        return;
+      }
       if (url.pathname === '/api/providers/custom' && request.method === 'POST') {
         const input = await body(request);
         const saved = await mutateModels(async () => {
           const result = await customProviders.save(input, assertModelsIdle);
           for (const session of sessions.values()) {
-            const previous = session.session?.model;
-            if (previous?.provider !== result.id || !session.session) continue;
+            const previousAgent = session.session;
+            const previous = previousAgent?.model;
+            if (previous?.provider !== result.id || !previousAgent) continue;
             const updated = modelRuntime.getModel(result.id, previous.id);
             let refreshed = false;
             if (updated) try {
               // A session holds its own model object. Refresh the endpoint together with its key.
-              await session.session.setModel(updated, { persist: false });
-              const level = preferredThinkingLevel(updated, session.session.thinkingLevel);
-              if (level !== session.session.thinkingLevel) session.session.setThinkingLevel(level, { persist: false });
+              await previousAgent.setModel(updated, { persist: false });
+              const level = preferredThinkingLevel(updated, previousAgent.thinkingLevel);
+              if (level !== previousAgent.thinkingLevel) previousAgent.setThinkingLevel(level, { persist: false });
               refreshed = true;
             } catch { /* Keep the transcript readable if the updated model cannot be attached. */ }
             if (!refreshed) {
               session.unsubscribe?.(); session.unsubscribe = undefined; clearUiRequests(session);
-              session.session.dispose(); session.session = undefined; session.readOnly = true;
+              await retireAgent(previousAgent);
+              session.session = undefined; session.readOnly = true;
             }
             emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) });
           }
@@ -1407,7 +1586,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         if (!opening) {
           if (input.mode !== undefined && !isWebMode(input.mode)) throw new HttpError(400, 'invalid working mode');
           if (input.workflow !== undefined && !isWebWorkflow(input.workflow)) throw new HttpError(400, 'invalid workflow');
-          opening = createSession(project, key, typeof input.title === 'string' ? input.title : 'New conversation', typeof input.model === 'string' ? input.model : undefined, typeof input.thinkingLevel === 'string' ? input.thinkingLevel : undefined, input.mode, input.workflow);
+          opening = trackOpening(createSession(project, key, typeof input.title === 'string' ? input.title : 'New conversation', typeof input.model === 'string' ? input.model : undefined, typeof input.thinkingLevel === 'string' ? input.thinkingLevel : undefined, input.mode, input.workflow));
           if (key) openingSessions.set(key, opening);
         }
         let session: SessionState;
@@ -1429,17 +1608,58 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           session.busy = true;
         }
         if (!action && request.method === 'GET') { json(response, 200, sessionSnapshot(session)); return; }
+        if (action === 'checkpoints') {
+          if (!trustView(trustStore, settingsManager, session.project).trusted) throw new HttpError(403, '请先信任项目后查看或恢复检查点');
+          const entries = session.manager.getBranch().filter((entry) => entry.type === 'custom' && entry.customType === 'forge.checkpoint' && (entry.data as any)?.sessionId === session.manager.getSessionId()).map((entry) => entry.type === 'custom' ? entry.data as { id?: string } : undefined).filter((entry) => entry?.id);
+          const ids = [...new Set(entries.map((entry) => entry!.id!))].reverse().slice(0, 50);
+          const id = url.searchParams.get('id');
+          if (id && !ids.includes(id)) throw new HttpError(404, '检查点不属于当前会话分支');
+          if (request.method === 'GET') {
+            if (id && url.searchParams.get('path')) json(response, 200, await checkpoints.diff(id, session.project, session.manager.getSessionId(), url.searchParams.get('path')!));
+            else json(response, 200, { checkpoints: await Promise.all((id ? [id] : ids).map((item) => checkpoints.view(item, session.project, session.manager.getSessionId()))) });
+            return;
+          }
+          if (request.method === 'POST') {
+            if (session.mode !== 'agent') throw new HttpError(403, '恢复检查点需要 Agent 模式');
+            if (session.running || session.busy || session.task || modelMutation || mcpMutation || historyMutation) throw new HttpError(409, '请等待会话空闲后恢复文件');
+            historyWritable(session); lockedSession = session; session.busy = true;
+            const input = await body(request);
+            if (!ids.includes(input.id) || !Array.isArray(input.paths) || input.paths.some((path: unknown) => typeof path !== 'string') || typeof input.revision !== 'string') throw new HttpError(400, '无效的检查点恢复请求');
+            const lease = await executions.acquire(session.project, 'terminal');
+            try { json(response, 200, await checkpoints.apply(input.id, session.project, session.manager.getSessionId(), input.paths, input.revision)); }
+            finally { lease.release(); }
+            emit(session, { type: 'pforge_snapshot', snapshot: sessionSnapshot(session) }); return;
+          }
+        }
         if (action === 'subagents') {
           const children = session.subagents!;
           if (request.method === 'GET') {
             const id = url.searchParams.get('agent');
             if (id && !children.snapshot().some((child) => child.id === id)) throw new HttpError(404, '子任务不存在或不属于当前会话');
+            if (id && url.searchParams.get('path')) { json(response, 200, await children.proposal(id, url.searchParams.get('path')!)); return; }
             json(response, 200, id ? await children.detail(id) : { agents: children.snapshot() }); return;
           }
           if (request.method === 'POST') {
             const input = await body(request);
-            if (input.action !== 'stop' || typeof input.id !== 'string') throw new HttpError(400, '无效的子任务操作');
+            if (!['stop', 'apply', 'discard'].includes(input.action) || typeof input.id !== 'string') throw new HttpError(400, '无效的子任务操作');
             if (!children.snapshot().some((child) => child.id === input.id)) throw new HttpError(404, '子任务不存在或不属于当前会话');
+            if (input.action !== 'stop') {
+              if (session.running || session.busy || session.task || modelMutation || mcpMutation || historyMutation) throw new HttpError(409, '请等待父会话空闲后处理子任务变更');
+              if (session.mode !== 'agent' || session.readOnly || !trustView(trustStore, settingsManager, session.project).trusted) throw new HttpError(403, '处理子任务变更需要可信项目中的 Agent 模式');
+              historyWritable(session); lockedSession = session; session.busy = true;
+              if (input.action === 'apply' && (!Array.isArray(input.paths) || input.paths.some((path: unknown) => typeof path !== 'string') || typeof input.revision !== 'string')) throw new HttpError(400, '无效的子任务变更选择');
+              const lease = await executions.acquire(session.project, 'terminal');
+              try {
+                if (input.action === 'apply') {
+                  const checkpoint = await checkpoints.begin(session.project, session.manager.getSessionId(), '应用子任务变更');
+                  session.manager.appendCustomEntry('forge.checkpoint', { id: checkpoint, sessionId: session.manager.getSessionId(), status: 'open' });
+                  try { await children.applyProposal(input.id, input.paths, input.revision); }
+                  finally { await checkpoints.seal(checkpoint, session.project, session.manager.getSessionId()); session.manager.appendCustomEntry('forge.checkpoint', { id: checkpoint, sessionId: session.manager.getSessionId(), status: 'sealed' }); }
+                } else await children.discardWorkspace(input.id);
+                json(response, 200, { agents: children.snapshot(), detail: await children.detail(input.id) });
+              } finally { lease.release(); }
+              return;
+            }
             await children.stop(input.id); json(response, 200, { agents: children.snapshot() }); return;
           }
         }
@@ -1511,7 +1731,15 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           attachment(response, 200, exportSession(session.manager, format));
           return;
         }
-        if (action === 'abort' && request.method === 'POST') { if (!session.session) { json(response, 409, { error: 'This session is read-only' }); return; } session.controller.cancel(); clearUiRequests(session); await Promise.all([session.session.abort(), session.subagents?.cancelAll()]); await session.task; json(response, 200, { ok: true }); return; }
+        if (action === 'abort' && request.method === 'POST') {
+          if (!session.session) { json(response, 409, { error: 'This session is read-only' }); return; }
+          session.controller.cancel(); clearUiRequests(session);
+          const abortResults = await Promise.allSettled([session.session.abort(), session.subagents?.cancelAll()]);
+          await session.task;
+          const failure = abortResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+          if (failure) throw failure.reason;
+          json(response, 200, { ok: true }); return;
+        }
         if (action === 'mode' && request.method === 'POST') {
           const input = await body(request);
           if (!isWebMode(input.mode)) throw new HttpError(400, 'invalid working mode');
@@ -1623,7 +1851,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }
       json(response, 404, { error: 'Not found' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError || error instanceof HistoryError || error instanceof MemoryError || error instanceof ProjectBusyError || error instanceof ProjectError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProviderError || error instanceof McpError || error instanceof SkillError || error instanceof HistoryError || error instanceof MemoryError || error instanceof ProjectBusyError || error instanceof ProjectError || error instanceof CheckpointError || error instanceof QueueError ? error.status : 500;
       json(response, status, { error: error instanceof Error ? error.message : String(error) });
     } finally { if (lockedSession) { lockedSession.busy = false; void flushMcpReloads(); } }
   });
@@ -1633,24 +1861,36 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
   };
   try { await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(port, host, () => resolveListen()); }); }
-  catch (error) { await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
+  catch (error) { await queue.close(); await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
   const url = 'http://' + host + ':' + actualPort + '/?token=' + encodeURIComponent(token);
   try { await taskRegistry.setAddress(url); }
-  catch (error) { await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
+  catch (error) { await queue.close(); await releaseStartup(); await closeListeningServer().catch(() => {}); throw error; }
+  queue.start();
   const shutdown = async () => {
     shuttingDown = true;
+    queue.stopAdmission();
     const failures: unknown[] = [];
     const capture = async (operation: Promise<unknown>) => { try { await operation; } catch (error) { failures.push(error); } };
     // A reload can attach fresh transports. Finish it before disposing the sessions.
     const mcpClosing = Promise.resolve().then(() => mcpControl.close());
     await capture(mcpWrite);
     await capture(mcpClosing);
+    // Mark sessions closed before waiting for session creation. An opening
+    // session may still be inside resource loading; closing it first makes
+    // attachAgent abort with 503 instead of allowing a new runtime to appear
+    // while the gateway is shutting down.
     for (const session of sessions.values()) void disposeSession(session);
     sessions.clear();
+    // Session creation can still be loading Pi resources or attaching an
+    // agent. Wait for those operations before closing the task registry and
+    // releasing the Web-home lease; otherwise a late createSession callback
+    // can write into a closed registry or outlive close().
+    await Promise.allSettled([...openingOperations]);
     const disposals = await Promise.allSettled([...retiring]);
     for (const result of disposals) if (result.status === 'rejected') failures.push(result.reason);
+    await capture(queue.close());
     await capture(executions.close());
     await capture(taskRegistry.close());
     await capture(closeListeningServer());

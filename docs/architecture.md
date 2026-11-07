@@ -1,7 +1,6 @@
 # Forge Agent architecture and current scope
 
-Reviewed against the local implementation on 2026-11-06. The current package is
-`forge-agent` 0.1.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
+The current package is `forge-agent` 0.2.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
 
 forge-agent is a product layer built on the Pi Coding Agent SDK. It does not fork Pi
 or implement a second agent loop. It uses more than Pi's model request runtime:
@@ -18,13 +17,17 @@ flowchart TD
   Verify["forge-agent verification extension"] --> Session
   Modes["forge-agent Web mode policy"] --> Session
   Session --> Delegation["Forge parent-owned subagent catalog and budgets"]
-  Delegation --> Children["Independent read-only Pi sessions"]
+  Delegation --> Children["Independent Pi sessions: readers and worktree writers"]
+  Gateway --> Queue["Durable FIFO and detached service"]
+  Gateway --> Checkpoints["Working-file checkpoints and reviewed proposals"]
+  Gateway --> Memory["Scoped memory and reviewed candidates"]
 ```
 
 ## Ownership
 
-The Web client's managed read-only subagents use independent Pi sessions with a
-parent-owned catalog, restricted tools, shared execution budgets and cancellation.
+The Web client's managed subagents use independent Pi sessions with a
+parent-owned catalog, restricted tools, shared budgets and cancellation. Writers
+use detached worktrees and produce proposals requiring explicit user application.
 See [subagent design and current boundaries](subagents.md). The planned workflow's
 existing self-review remains a separate gate; it is not automatically delegated.
 
@@ -46,6 +49,9 @@ existing self-review remains a separate gate; it is not automatically delegated.
 | Project execution ownership | forge-agent `src/web/executions.ts` and `src/project-identity.ts`; Agent prompts, terminal commands, project-trust changes, and shutdown share one canonical-directory reservation. |
 | Execution budgets | forge-agent `src/task/budget.ts` and Web hooks; each execution observes duration, model turns, tool calls, provider-reported tokens and cost, then aborts Pi and records `budget_exceeded`. |
 | Git change evidence and bounded diff preview | forge-agent `src/task/git.ts` and the Web changes panel; pre-existing dirty files are marked. |
+| Checkpoints and worktree proposals | `src/task/checkpoints.ts` and `worktrees.ts`: bounded content snapshots, HEAD/index fingerprints, conflict-checked selected-file undo/application and interrupted-write journals. |
+| Background execution | `src/task/queue.ts` persists FIFO jobs and frozen settings before admission; `src/web/service.ts` manages a detached gateway using authenticated live-instance control. |
+| Reviewed memory | `src/web/memory.ts` stores pending model candidates separately from injected memory; acceptance requires current revisions and checks duplicates, source ownership and replacement conflicts. |
 
 The CLI's TUI remains Pi's interface. The Web interface is forge-agent's own
 implementation. Using the Pi SDK does not automatically expose every Pi CLI
@@ -122,9 +128,9 @@ snapshot.
   names use Pi session-info entries. A fork uses a disposable Pi session manager
   and `createBranchedSession()` so the live source session is never moved. Saved
   sessions can be exported as Markdown or structured JSON without changing the
-  source branch. Background task management is not yet exposed as a separate
-  queue; a running session continues in the local gateway while its browser tab
-  is away.
+  source branch. `/queue` persists subsequent text tasks after Pi has saved the
+  first turn; a detached gateway can survive the launching terminal. The queue
+  executes through the same prompt path and never implements model/tool turns.
 - Verification reports are persisted as an atomic project latest record and a
   run-specific evidence file, and the corresponding outcome is also appended to
   the Pi session branch. The Web task panel displays the associated evidence.
@@ -145,11 +151,13 @@ bounded text diffs, refuses symlink escapes and sensitive credential files, and
 marks files already dirty before the task. It reports Git, unborn-repository,
 and non-Git limits instead of attributing every workspace change to the agent.
 
-Current lifecycle limits matter when interpreting these controls: a Forge home is
-intentionally single-owner, so a second gateway sharing it is rejected rather
-than merged. There is no independent background queue; a running session remains
-owned by the local gateway while its browser tab is away. Scoped memory is
-user-maintained reference injection, not automatic learning or retrieval. Global
+Current lifecycle limits matter: a Forge home is intentionally single-owner, so
+a second gateway sharing it is rejected. One queued job runs at a time, only
+when existing work is idle. Queue snapshots expose committed disk state; restart
+marks running jobs interrupted and preserves queued jobs. Explicit retry creates
+a new execution that checks current state. The service is a detached local process,
+not an OS startup service or distributed scheduler. Scoped memory remains reference
+injection, with model proposals accepted only after user review. Global
 and project memory are stored under the Forge home, and project memory uses the
 canonical real directory with validated legacy migration; Pi owns automatic
 compaction.
@@ -157,7 +165,10 @@ Memory injection also reserves separate prompt budgets for global, project and
 session layers. The active session and project scopes therefore remain visible
 when a user has accumulated a large global memory; the Web settings surface
 shows the selected and truncated budget for the current session. This remains
-explicit user-maintained reference material rather than automatic learning.
+reviewed reference material rather than a learned retrieval system. Pending
+candidates carry evidence and session ownership, do not enter the prompt, and
+are not inherited as controllable records by a normal fork. The same ownership
+rule applies to child tasks and checkpoints.
 The [product review](product-audit.md) records reproduced cases and acceptance criteria.
 
 ## Active and legacy code
@@ -170,7 +181,8 @@ Earlier self-built agent, provider, context, MCP, security, storage, and eval
 modules, tests and old demos are preserved under `archive/prototype/`. They are
 excluded from the active product and must not be counted as implemented features
 or passing active tests. The active task evaluation harness is
-`scripts/evaluate-agent.mjs`; it uses the supported Web/Pi path.
+`scripts/evaluate-agent.mjs`; the larger pinned-repository harness is
+`scripts/evaluate-repository.mjs`. Both use the supported Web/Pi path.
 
 ## Release assessment
 
@@ -183,3 +195,21 @@ have regression and browser coverage. The small scripted evaluation suite checks
 the plumbing, not frontier coding quality. Real-model results on larger coding
 tasks and broader provider compatibility remain necessary before generalizing.
 See [evaluation](evaluation.md) and [the product audit](product-audit.md).
+
+## Change recovery and distribution
+
+Each trusted Agent execution in a Git root attempts a bounded working-file
+checkpoint. Missing Git or unsupported files produce explicit limits without
+inventing rollback coverage. Undo restores the exact captured dirty baseline,
+leaves HEAD/index alone and rejects later edits, changed index/HEAD or stale
+revisions. Worker proposals compare the main project with their seeded baseline;
+application takes the same project lease and creates its own undo checkpoint.
+Writes are journaled per file, so an interrupted multi-file write requires review
+and is never automatically replayed. Snapshots have per-run bounds but no global
+retention quota. These controls are not process isolation or a backup system.
+
+The package checker validates tarball assets, private-file exclusions and the
+unpacked CLI. CI tests Windows/Ubuntu and Node 22/24. A separate release workflow
+checks clean tarball installs on both platforms and creates a GitHub Release only
+for a tag matching the package version. See [operations and upgrades](operations.md)
+for storage schemas, migration, cleanup and downgrade limits.

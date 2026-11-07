@@ -1,0 +1,74 @@
+import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { loadRepositorySuite } from '../scripts/repository-suite.mjs';
+const execute = promisify(execFile), cleanups = [];
+afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+async function fixture() {
+  const root = await mkdtemp(join(tmpdir(), 'forge-repository-suite-')), source = join(root, 'source'), home = join(root, 'config');
+  await mkdir(source); await mkdir(home);
+  const git = (args) => execute('git', args, { cwd: source, windowsHide: true });
+  await git(['init']); await writeFile(join(source, 'solution.mjs'), 'export const add = (a, b) => a - b;\n');
+  await writeFile(join(source, 'verify.mjs'), 'import assert from "node:assert/strict"; import { add } from "./solution.mjs"; assert.equal(add(1, 2), 3);');
+  await git(['add', '.']); await git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'failing baseline']);
+  const revision = (await git(['rev-parse', 'HEAD'])).stdout.trim();
+  await writeFile(join(root, 'oracle.mjs'), 'import assert from "node:assert/strict"; import { pathToFileURL } from "node:url"; import { join } from "node:path"; const { add } = await import(pathToFileURL(join(process.argv[2], "solution.mjs"))); assert.equal(add(1, 2), 3); assert.equal(add(-2, 3), 1);');
+  const suite = { version: 1, name: 'Fixture only, not model quality', tasks: [{ id: 'add-bug', source, revision, prompt: 'Fix the add bug in solution.mjs; preserve verify.mjs and notes.txt. Run configured verification.', verify: [{ name: 'visible', command: 'node verify.mjs', timeoutMs: 10000 }], oracle: 'oracle.mjs', protected: ['verify.mjs', 'notes.txt'], dirtyFiles: { 'notes.txt': 'user work' } }] };
+  const path = join(root, 'suite.json'); await writeFile(path, JSON.stringify(suite));
+  return { root, source, home, suite, path };
+}
+describe('pinned repository evaluation harness', () => {
+  it('pins immutable revisions, fingerprints independent oracles and rejects traversal/duplicate ids', async () => {
+    const f = await fixture(), loaded = await loadRepositorySuite(f.path);
+    const before = loaded.fingerprint; await writeFile(join(f.root, 'oracle.mjs'), '// changed oracle');
+    expect((await loadRepositorySuite(f.path)).fingerprint).not.toBe(before);
+    f.suite.tasks[0].oracle = '../outside.mjs'; await writeFile(f.path, JSON.stringify(f.suite)); await expect(loadRepositorySuite(f.path)).rejects.toThrow();
+    f.suite.tasks[0].oracle = 'oracle.mjs'; f.suite.tasks.push({ ...f.suite.tasks[0] }); await writeFile(f.path, JSON.stringify(f.suite)); await expect(loadRepositorySuite(f.path)).rejects.toThrow('unique');
+  });
+  it('prepares without model calls and refuses command execution without explicit suite trust', async () => {
+    const f = await fixture();
+    const prepared = await execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--prepare'], { windowsHide: true });
+    expect(JSON.parse(prepared.stdout).tasks[0].revision).toBe(f.suite.tasks[0].revision);
+    await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock'], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('--trust-suite') });
+  });
+  it('runs the actual pinned clone with a scripted provider and records held-out failures as false completions', async () => {
+    const f = await fixture(); let correct = true, modelCalls = 0;
+    const model = createServer(async (request, response) => {
+      modelCalls++;
+      let raw = ''; for await (const chunk of request) raw += chunk; const input = JSON.parse(raw);
+      const last = input.messages.at(-1), write = last.role !== 'tool';
+      const solution = correct ? 'export const add = (a, b) => a + b;\n' : 'export const add = () => 3;\n';
+      const delta = write ? { role: 'assistant', tool_calls: [{ index: 0, id: 'edit-' + Math.random().toString(16).slice(2), type: 'function', function: { name: 'write', arguments: JSON.stringify({ path: 'solution.mjs', content: solution }) } }] } : { role: 'assistant', content: 'Implementation complete.' };
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      for (const [part, finish] of [[delta, null], [{}, write ? 'tool_calls' : 'stop']]) response.write('data: ' + JSON.stringify({ id: 'mock', object: 'chat.completion.chunk', model: 'mock', choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
+      response.end('data: [DONE]\n\n');
+    });
+    await new Promise((done) => model.listen(0, '127.0.0.1', done)); cleanups.push(() => new Promise((done) => { model.closeAllConnections(); model.close(() => done()); }));
+    await writeFile(join(f.home, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1', models: [{ id: 'mock' }] } } }));
+    const argumentsFor = (output) => ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--output', output];
+    const passedOutput = join(f.root, 'passed'); await execute(process.execPath, argumentsFor(passedOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 });
+    const passed = JSON.parse(await readFile(join(passedOutput, 'report.json'), 'utf8'));
+    expect(passed.metrics).toMatchObject({ passed: 1, total: 1, falseCompletions: 0 }); expect(passed.results[0]).toMatchObject({ baselineFails: true, heldOutPass: true, workspaceIntegrity: true });
+    correct = false; const failedOutput = join(f.root, 'failed');
+    await expect(execute(process.execPath, argumentsFor(failedOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
+    const failed = JSON.parse(await readFile(join(failedOutput, 'report.json'), 'utf8'));
+    expect(failed.metrics).toMatchObject({ passed: 0, total: 1, falseCompletions: 1 });
+    expect(await readFile(join(f.source, 'solution.mjs'), 'utf8')).toContain('a - b');
+    expect(JSON.stringify(failed)).not.toContain('fixture-only');
+    const callsBeforeOverride = modelCalls;
+    await writeFile(join(f.source, 'forge-agent.yaml'), 'verify: []\n');
+    await execute('git', ['add', 'forge-agent.yaml'], { cwd: f.source, windowsHide: true });
+    await execute('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'conflicting configuration'], { cwd: f.source, windowsHide: true });
+    f.suite.tasks[0].revision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: f.source, windowsHide: true })).stdout.trim();
+    await writeFile(f.path, JSON.stringify(f.suite));
+    const overriddenOutput = join(f.root, 'overridden');
+    await expect(execute(process.execPath, argumentsFor(overriddenOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
+    const overridden = JSON.parse(await readFile(join(overriddenOutput, 'report.json'), 'utf8'));
+    expect(overridden.metrics.infrastructureFailures).toBe(1);
+    expect(overridden.results[0].error).toContain('overrides the suite'); expect(modelCalls).toBe(callsBeforeOverride);
+  }, 120000);
+});

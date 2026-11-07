@@ -5,7 +5,7 @@ export async function mountCustomProviders(root, { api, esc, setBusy, onSaved, i
   const find = (id) => root.querySelector('#' + id);
   let providers = [], loadingError = false;
   const renderList = () => {
-    find('custom-provider-list').innerHTML = providers.map((provider) => '<div class="custom-provider-row"><div><strong>' + esc(provider.name) + '</strong><small>' + esc(provider.baseUrl || provider.id) + '</small><span>' + provider.models.length + ' 个模型 · ' + (provider.noKey ? '本地免密钥' : provider.authConfigured ? '已配置凭据' : '待配置凭据') + '</span></div><button class="button quiet small" data-edit-custom="' + esc(provider.id) + '" ' + (provider.editable ? '' : 'disabled title="此高级配置请在 models.json 中管理"') + '>编辑</button></div>').join('') || '<div class="provider-empty">添加一个服务，选择它提供的模型，即可开始对话。</div>';
+    find('custom-provider-list').innerHTML = providers.map((provider) => '<div class="custom-provider-row"><div><strong>' + esc(provider.name) + '</strong><small>' + esc(provider.baseUrl || provider.id) + '</small><span>' + provider.models.length + ' 个模型 · ' + (provider.noKey ? '本地免密钥' : provider.authConfigured ? '已配置凭据' : '待配置凭据') + '</span></div><div class="custom-provider-actions"><button class="button quiet small" data-edit-custom="' + esc(provider.id) + '" ' + (provider.editable ? '' : 'disabled title="此高级配置请在 models.json 中管理"') + '>编辑</button><button class="button quiet small danger" data-delete-custom="' + esc(provider.id) + '" ' + (provider.editable ? '' : 'disabled title="此高级配置请在 models.json 中管理"') + '>删除</button></div></div>').join('') || '<div class="provider-empty">添加一个服务，选择它提供的模型，即可开始对话。</div>';
   };
   try { providers = (await api('/api/providers/custom')).providers || []; renderList(); }
   catch (error) { loadingError = true; find('custom-provider-list').textContent = error.message; find('custom-provider-list').classList.add('form-error'); }
@@ -28,7 +28,7 @@ export async function mountCustomProviders(root, { api, esc, setBusy, onSaved, i
       '<div class="hidden" id="custom-model-import"><details class="model-multiselect" id="model-multiselect"><summary aria-label="批量选择可用模型"><span id="model-multiselect-label">选择模型</span><span>⌄</span></summary><div class="multiselect-panel"><label class="sr-only" for="discovered-model-search">搜索服务返回的模型</label><input id="discovered-model-search" type="search" placeholder="搜索模型名称或 ID" autocomplete="off"><div class="multiselect-actions"><button type="button" id="select-filtered-models">全选当前结果</button><button type="button" id="clear-filtered-models">清空当前结果</button><span id="discovered-model-count" aria-live="polite"></span></div><div id="discovered-model-options" class="multiselect-options" role="group" aria-label="可用模型"></div><div class="multiselect-footer"><span id="discovered-selection-count" aria-live="polite"></span><button type="button" class="button primary small" id="apply-discovered-models">确认选择</button></div></div></details></div>' +
       '<div id="custom-model-rows" class="provider-models"></div><button type="button" class="button quiet small" id="add-custom-model">＋ 手动添加模型</button>' +
       '<div class="provider-save-bar"><div class="provider-feedback" id="custom-feedback" role="status" aria-live="polite"></div>' +
-      '<div class="provider-form-actions"><button type="button" class="button quiet" id="test-custom-provider">测试模型调用</button><button type="submit" class="button primary" id="save-custom-provider">保存服务</button></div><p>测试发送一次简短请求，可能产生少量 API 费用。</p></div></form>';
+      '<label>调用测试<select id="custom-test-profile"><option value="text">流式文本</option><option value="coding">编码兼容：文本、工具调用与结果回传</option></select></label><div class="provider-form-actions"><button type="button" class="button quiet" id="test-custom-provider">测试模型调用</button><button type="submit" class="button primary" id="save-custom-provider">保存服务</button></div><p>测试可能产生少量 API 费用；编码兼容测试最多发送三次请求，不执行项目工具。</p></div></form>';
     find('custom-name').value = provider?.name || '';
     find('custom-id').value = provider?.id || 'custom-' + Math.random().toString(36).slice(2, 10);
     find('custom-api').value = provider?.api || 'openai-completions';
@@ -167,8 +167,9 @@ export async function mountCustomProviders(root, { api, esc, setBusy, onSaved, i
     });
     find('test-custom-provider').onclick = () => run(find('test-custom-provider'), '测试中…', async () => {
       const input = payload(); if (!input.models[0]?.id) throw new Error('请先添加模型 ID');
-      const result = await api('/api/providers/test', { method: 'POST', body: JSON.stringify({ ...input, model: input.models[0] }) });
-      feedback('调用成功 · ' + result.model + ' · ' + result.latencyMs + ' ms（测试第一个模型，尚未保存）');
+      const result = await api('/api/providers/test', { method: 'POST', body: JSON.stringify({ ...input, model: input.models[0], capabilities: find('custom-test-profile').value === 'coding' }) });
+      const labels = { 'streaming-text': '流式文本', 'tool-call': '工具调用', 'tool-result': '工具结果回传' };
+      feedback((result.codingCompatible === false ? '编码兼容检查未通过' : '调用成功') + ' · ' + result.model + ' · ' + result.latencyMs + ' ms · ' + (result.checks || []).map((check) => (labels[check.name] || check.name) + '：' + (check.status === 'passed' ? '通过' : check.status === 'skipped' ? '未执行' : '失败')).join('；') + '（测试第一个模型，尚未保存）', result.codingCompatible === false);
     });
     find('custom-provider-form').onsubmit = (event) => {
       event.preventDefault();
@@ -186,6 +187,20 @@ export async function mountCustomProviders(root, { api, esc, setBusy, onSaved, i
   };
   find('add-custom-provider').onclick = () => openEditor();
   find('custom-provider-list').onclick = (event) => { const button = event.target.closest('[data-edit-custom]'); const provider = providers.find((item) => item.id === button?.dataset.editCustom); if (provider?.editable) openEditor(provider); };
+  find('custom-provider-list').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-delete-custom]');
+    const provider = providers.find((item) => item.id === button?.dataset.deleteCustom);
+    if (!provider?.editable || !button) return;
+    if (typeof globalThis.confirm === 'function' && !globalThis.confirm('删除“' + provider.name + '”及其本机保存的凭据？已有会话会变为只读。')) return;
+    setBusy(button, true, '删除中…');
+    try {
+      const result = await api('/api/providers/custom/' + encodeURIComponent(provider.id), { method: 'DELETE', body: JSON.stringify({ revision: provider.revision }) });
+      await onSaved('deleted', result.diagnostic);
+      if (result.diagnostic && root.isConnected) { const feedback = document.createElement('p'); feedback.className = 'form-error'; feedback.setAttribute('role', 'alert'); feedback.textContent = result.diagnostic; root.prepend(feedback); }
+    }
+    catch (error) { const feedback = find('custom-feedback') || find('custom-provider-list'); feedback.textContent = error.message; feedback.classList.add('form-error'); }
+    finally { setBusy(button, false); }
+  });
   const initial = providers.find((provider) => provider.id === initialProvider);
   if (initial?.editable) openEditor(initial);
 }

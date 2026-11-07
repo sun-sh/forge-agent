@@ -3,10 +3,11 @@ import { mkdtemp, readFile, writeFile, access, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
+import { AgentSession, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
 import { ForgeSubagents } from '../src/web/subagents.js';
 import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../src/task/budget.js';
 import { startWebConsole } from '../src/web/server.js';
+import { checkpointGit } from '../src/task/checkpoints.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
@@ -49,6 +50,52 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  const pathAliases = ['~/forge-worker-boundary.txt', '@sample.txt', 'file:///forge-worker-boundary.txt', 'new\u00a0file.txt'];
+  if (process.platform === 'win32') pathAliases.push('/c/forge-worker-boundary.txt', '/mnt/c/forge-worker-boundary.txt', '.git./config');
+  it.each(pathAliases)('blocks the Pi-expanded path alias %s before a writable tool can run', async (path) => {
+    const f = await fixture((input, res) => {
+      if (input.messages.at(-1).role === 'tool') return answer(res, input, 'Write blocked.');
+      answer(res, input, '', { name: 'write', args: { path, content: 'must never write' } });
+    });
+    await checkpointGit(f.project, ['init']); await checkpointGit(f.project, ['add', '.']);
+    await checkpointGit(f.project, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'baseline']);
+    const [child] = await f.agents.delegate([{ title: 'Path boundary', role: 'worker', prompt: 'Attempt a special path write.' }], 'worker-path');
+    const detail = await f.agents.detail(child!.id);
+    expect(JSON.stringify(detail.messages), path).toContain('只能修改独立 worktree');
+    expect((detail.proposal as any).files, path).toEqual([]);
+    await f.agents.discardWorkspace(child!.id);
+    expect(await readFile(join(f.project, 'sample.txt'), 'utf8')).toBe('file-evidence\n');
+  });
+  it('executes a writable worker in a worktree, exposes a reviewable proposal and refuses writes outside it', async () => {
+    const f = await fixture((input, res) => {
+      if (input.messages.at(-1).role === 'tool') return answer(res, input, 'Proposed an isolated change; parent verification is still required.');
+      answer(res, input, '', { name: 'write', args: { path: 'sample.txt', content: 'worker proposal\n' } });
+    });
+    await checkpointGit(f.project, ['init']); await checkpointGit(f.project, ['add', '.']);
+    await checkpointGit(f.project, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'baseline']);
+    const [child] = await f.agents.delegate([{ title: 'Isolated edit', role: 'worker', prompt: 'Edit sample.txt.' }], 'worker-call');
+    expect(child).toMatchObject({ status: 'completed', role: 'worker', proposal: expect.any(String) });
+    expect(await readFile(join(f.project, 'sample.txt'), 'utf8')).toBe('file-evidence\n');
+    const detail = await f.agents.detail(child!.id);
+    expect(detail.proposal).toMatchObject({ kind: 'proposal', files: [{ path: 'sample.txt', eligible: true }] });
+    await f.agents.applyProposal(child!.id, ['sample.txt'], (detail.proposal as any).revision);
+    expect(await readFile(join(f.project, 'sample.txt'), 'utf8')).toBe('worker proposal\n');
+    await f.agents.discardWorkspace(child!.id);
+    expect((await f.agents.detail(child!.id)).agent?.worktreeRemoved).toBe(true);
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['edit', 'find', 'grep', 'ls', 'read', 'write']);
+  });
+  it('blocks an isolated worker from writing an absolute path in the parent project', async () => {
+    let parent = '';
+    const f = await fixture((input, res) => {
+      if (input.messages.at(-1).role === 'tool') return answer(res, input, 'Write blocked.');
+      answer(res, input, '', { name: 'write', args: { path: join(parent, 'sample.txt'), content: 'must never write' } });
+    }); parent = f.project;
+    await checkpointGit(f.project, ['init']); await checkpointGit(f.project, ['add', '.']); await checkpointGit(f.project, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'baseline']);
+    const [child] = await f.agents.delegate([{ title: 'Boundary', role: 'worker', prompt: 'Attempt a parent write.' }], 'worker-call');
+    expect(await readFile(join(f.project, 'sample.txt'), 'utf8')).toBe('file-evidence\n');
+    expect(JSON.stringify((await f.agents.detail(child!.id)).messages)).toContain('只能修改独立 worktree');
+    await f.agents.discardWorkspace(child!.id);
+  });
   it('runs independent Pi contexts in parallel, gathers evidence, persists and continues owned children', async () => {
     let inFlight = 0, maximum = 0;
     const f = await fixture(async (input, res) => {
@@ -120,6 +167,15 @@ describe('managed Pi subagents', () => {
     expect(results.every((row) => row.status === 'cancelled')).toBe(true);
     expect(results.every((row) => row.endedAt)).toBe(true);
     await expect(f.agents.delegate([{ ...task(), id: results[0]!.id }], 'retry', AbortSignal.abort())).rejects.toThrow();
+  });
+
+  it('keeps a completed child completed when idle Pi abort rejects during cleanup', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'Evidence collected.'));
+    try {
+      vi.spyOn(AgentSession.prototype, 'abort').mockRejectedValue(new Error('no active turn'));
+      const [result] = await f.agents.delegate([task()], 'call');
+      expect(result).toMatchObject({ status: 'completed', result: 'Evidence collected.' });
+    } finally { vi.restoreAllMocks(); }
   });
 
   it('marks active persisted children interrupted after restart, and does not inherit ownership on a normal fork', async () => {

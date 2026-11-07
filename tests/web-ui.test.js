@@ -9,9 +9,53 @@ import { createSseParser, readEventStream, StreamError } from '../src/web/ui/str
 import { mountCustomProviders } from '../src/web/ui/providers.js';
 import { mountMcp } from '../src/web/ui/mcp.js';
 import { mountSkills } from '../src/web/ui/skills.js';
+import { lifecycleUI } from '../src/web/ui/lifecycle.js';
 
 const windows = [];
 afterEach(() => { windows.splice(0).forEach((window) => { window.__app?.state.eventSource?.close(); window.close(); }); vi.unstubAllGlobals(); });
+
+describe('reviewing host-owned changes', () => {
+  function fixture(handler) {
+    const dom = new JSDOM('<details id="review"></details>'); windows.push(dom.window);
+    let session = 'parent'; const api = vi.fn(handler), toast = vi.fn(), changed = vi.fn();
+    dom.window.confirm = vi.fn(() => true);
+    const esc = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
+    const ui = lifecycleUI({ api, esc, toast, changed, currentSession: () => session, running: () => false, readOnly: () => false });
+    return { window: dom.window, container: dom.window.document.getElementById('review'), api, ui, changed, setSession: (value) => { session = value; } };
+  }
+  const view = { id: 'checkpoint', label: 'An execution', kind: 'task', createdAt: new Date().toISOString(), revision: 'reviewed-revision', files: [{ path: 'safe.txt', operation: 'modify', eligible: true }, { path: 'later.txt', operation: 'modify', eligible: false, conflict: true }] };
+  it('requires confirmation and submits only eligible selected files with the reviewed revision', async () => {
+    const f = fixture(async (_url, input) => input ? {} : { checkpoints: [view] });
+    await f.ui.loadCheckpoints(f.container);
+    expect(f.container.querySelector('[value="later.txt"]').disabled).toBe(true);
+    f.window.confirm.mockReturnValueOnce(false); f.container.querySelector('[data-checkpoint-apply]').click();
+    expect(f.api).toHaveBeenCalledTimes(1);
+    f.container.querySelector('[data-checkpoint-apply]').click();
+    await vi.waitFor(() => expect(f.changed).toHaveBeenCalledOnce());
+    const mutation = f.api.mock.calls.find(([_url, init]) => init?.method === 'POST');
+    expect(JSON.parse(mutation[1].body)).toEqual({ id: 'checkpoint', paths: ['safe.txt'], revision: 'reviewed-revision' });
+  });
+  it('keeps conflict feedback visible without claiming a successful rollback', async () => {
+    const f = fixture(async (_url, input) => { if (input) throw new Error('Files changed after review'); return { checkpoints: [view] }; });
+    await f.ui.loadCheckpoints(f.container); f.container.querySelector('[data-checkpoint-apply]').click();
+    await vi.waitFor(() => expect(f.container.textContent).toContain('Files changed after review'));
+    expect(f.changed).not.toHaveBeenCalled(); expect(f.container.querySelector('[data-checkpoint-apply]').disabled).toBe(false);
+  });
+  it('prevents stale checkpoint and memory controls from acting after a session switch', async () => {
+    const f = fixture(async () => ({ checkpoints: [view] }));
+    await f.ui.loadCheckpoints(f.container); f.setSession('fork'); f.container.querySelector('[data-checkpoint-apply]').click();
+    expect(f.api).toHaveBeenCalledTimes(1);
+    f.ui.candidates(f.container, [{ id: 'candidate', status: 'pending', layer: 'project', text: '<script>bad</script>', evidence: '<img src=x>', revision: 'memory-revision' }], vi.fn());
+    expect(f.container.querySelector('script,img')).toBeNull();
+    f.setSession('another'); f.container.querySelector('[data-action="accept"]').click();
+    expect(f.api).toHaveBeenCalledTimes(1);
+  });
+  it('discards a late checkpoint response for the previously open session', async () => {
+    let release; const f = fixture(() => new Promise((resolve) => { release = resolve; }));
+    const loading = f.ui.loadCheckpoints(f.container); f.setSession('fork'); release({ checkpoints: [view] }); await loading;
+    expect(f.container.querySelector('[data-checkpoint-apply]')).toBeNull();
+  });
+});
 
 describe('safe agent output', () => {
   it('keeps subagent navigation compact and displays child output safely in a separate panel', async () => {
@@ -123,7 +167,7 @@ async function client(initial = {}) {
   Object.assign(window, {
     TextDecoder,
     matchMedia: () => reviewMedia,
-    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills,
+    marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills, lifecycleUI,
     builtinCommands, filterCommands, parseCommand,
     safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
@@ -850,9 +894,9 @@ describe('Task center scope', () => {
     const { window, requests } = await client(), find = (id) => window.document.getElementById(id);
     find('tasks-button').click();
     await vi.waitFor(() => expect(find('tasks-panel').classList.contains('hidden')).toBe(false));
-    expect(requests.at(-1).url).toContain('/api/tasks?project=');
+    expect(requests.some((request) => request.url.startsWith('/api/tasks?project='))).toBe(true);
     find('tasks-scope').value = 'all'; find('tasks-scope').dispatchEvent(new window.Event('change', { bubbles: true }));
-    await vi.waitFor(() => expect(requests.at(-1).url).toBe('/api/tasks'));
+    await vi.waitFor(() => expect(requests.some((request) => request.url === '/api/tasks')).toBe(true));
     expect(find('tasks-note').textContent).toContain('还没有持久化任务');
   });
 });
@@ -984,6 +1028,18 @@ describe('Composer run controls', () => {
 });
 
 describe('Web client integration', () => {
+  it('keeps committed-deletion diagnostics visible after the settings tree is remounted', async () => {
+    const { window, app } = await client(); let deleted = false;
+    const fetcher = window.fetch;
+    window.fetch = async (url, init = {}) => {
+      if (url === '/api/providers/custom') return new Response(JSON.stringify({ providers: deleted ? [] : [{ id: 'third-party', name: 'Gateway', models: [], editable: true, revision: 'provider-revision' }] }), { status: 200 });
+      if (url === '/api/providers/custom/third-party' && init.method === 'DELETE') { deleted = true; return new Response(JSON.stringify({ removed: true, diagnostic: '服务已删除，但目录刷新失败，请重启服务' }), { status: 200 }); }
+      return fetcher(url, init);
+    };
+    await app.openSettings('provider'); window.document.querySelector('[data-delete-custom]').click();
+    await vi.waitFor(() => expect(window.document.querySelector('#toast-root').textContent).toContain('目录刷新失败'));
+    expect(window.document.querySelector('[data-delete-custom]')).toBeNull();
+  });
   it('opens the MCP settings entry and preserves a configuration draft across change notifications', async () => {
     const { window, app, streams } = await client();
     app.state.sessionId = 'mcp-session'; app.connect('mcp-session');

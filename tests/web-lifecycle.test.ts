@@ -7,6 +7,8 @@ import { AgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } fro
 import { startWebConsole } from '../src/web/server.js';
 import { loadWebToken } from '../src/web/auth.js';
 import { MemoryStore } from '../src/web/memory.js';
+import * as taskGit from '../src/task/git.js';
+import { CheckpointStore, checkpointGit } from '../src/task/checkpoints.js';
 
 const closers: Array<() => Promise<void>> = [];
 const streamClosers: Array<() => Promise<unknown>> = [];
@@ -50,6 +52,26 @@ async function savedSession(root: string, home: string) {
 }
 
 describe('project removal', () => {
+  it('does not inherit checkpoint ownership when a saved conversation is forked', async () => {
+    const { root, home, api } = await fixture();
+    await checkpointGit(root, ['init']); await writeFile(join(root, 'sample.txt'), 'before');
+    await api('api/projects/trust', { path: root, trusted: true });
+    const path = await savedSession(root, home), manager = SessionManager.open(path);
+    const store = new CheckpointStore(home), id = await store.begin(root, manager.getSessionId(), 'parent change');
+    await writeFile(join(root, 'sample.txt'), 'after'); await store.seal(id, root, manager.getSessionId());
+    manager.appendCustomEntry('forge.checkpoint', { id, sessionId: manager.getSessionId(), status: 'sealed' });
+    const forkPath = manager.createBranchedSession(manager.getLeafId()!);
+    const opened = await (await api('api/session', { project: root, sessionFile: forkPath })).json() as any;
+    expect(opened.checkpoint).toBeUndefined();
+    const response = await api('api/sessions/' + opened.id + '/checkpoints');
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({ checkpoints: [] });
+    expect((await api('api/sessions/' + opened.id + '/checkpoints?id=' + id)).status).toBe(404);
+    const source = await (await api('api/session', { project: root, sessionFile: path })).json() as any;
+    await api('api/sessions/' + source.id + '/mode', { mode: 'plan' });
+    const current = await store.view(id, root, SessionManager.open(path).getSessionId());
+    expect((await api('api/sessions/' + source.id + '/checkpoints', { id, paths: ['sample.txt'], revision: current.revision })).status).toBe(403);
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('after');
+  });
   it('removes a history-only project across restarts, preserves source and Pi history, and recovers on reopen', async () => {
     const { root, home, server, base, headers, api } = await fixture();
     const path = await savedSession(root, home), original = await readFile(path, 'utf8');
@@ -124,6 +146,26 @@ async function stream(url: string, headers: Record<string, string>) {
 }
 
 describe('Web lifecycle regressions', () => {
+  it('returns a failed preparation to idle when the direct task baseline cannot be captured', async () => {
+    const { root, api } = await fixture({ model: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    const prompt = vi.spyOn(AgentSession.prototype, 'prompt');
+    vi.spyOn(taskGit, 'captureGit').mockRejectedValueOnce(new Error('baseline unavailable'));
+
+    const failed = await api('api/sessions/' + created.id + '/prompt', { message: 'fix the current file' });
+    expect(failed.status).toBe(500);
+    expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false, outcome: 'failed', error: 'baseline unavailable' });
+    expect(prompt).not.toHaveBeenCalled();
+
+    // The failed preparation must release the project lease and allow a new
+    // user prompt without requiring a gateway restart.
+    prompt.mockResolvedValueOnce(undefined);
+    const accepted = await api('api/sessions/' + created.id + '/prompt', { message: 'retry after the preparation failure' });
+    expect(accepted.status).toBe(202);
+    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
   it('authorizes skill management and reloads Pi commands in idle sessions without changing the readonly mode', async () => {
     const { root, api, base, headers } = await fixture({ model: true });
     await mkdir(join(root, '.pi', 'skills', 'managed-review'), { recursive: true });

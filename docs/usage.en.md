@@ -44,7 +44,7 @@ Open **Settings → About → Execution budget** to set the per-execution durati
 
 Provider token and cost usage is usually reported at the end of a response, so this is a host protection threshold and one response may slightly cross it. It is not a billing-level isolation boundary. The budget is stored in `FORGE_AGENT_HOME/web-settings.json`, outside the strict project `forge-agent.json` schema.
 
-Only one Web service may own a given `FORGE_AGENT_HOME` at a time. After an abnormal exit, the lease can be recovered after its stale interval; a second instance reports the existing local address. A project allows only one of Agent execution, terminal commands, or trust changes at a time. Junctions, symlinks, and Windows case aliases are normalized to the real directory. Closing the service cancels active terminal work and waits for the project reservation to release. There is no independent background queue yet; the local gateway owns running work.
+Only one Web service may own a given `FORGE_AGENT_HOME` at a time. After an abnormal exit, the lease can be recovered after its stale interval; a second instance reports the existing local address. Agent execution, terminal commands, trust changes and reviewed filesystem operations share project ownership. Junctions, symlinks and Windows case aliases use canonical identity. Shutdown cancels active terminal work and waits for release. A detached service and durable queue support subsequent jobs; interrupted executions require explicit retry.
 
 ## Projects, sessions, and attachments
 
@@ -58,11 +58,11 @@ The paperclip next to Send supports selecting multiple images and files; drag an
 
 ## Subtasks
 
-For a complex request, ask Forge to explore independent modules in parallel or delegate a separate risk review. The parent may also delegate when useful. Children use independent Pi contexts with the parent's configured model and reasoning effort, and are restricted to built-in reading and search.
+For a complex request, ask Forge to explore modules in parallel, review risks or propose an implementation in an independent worktree. The parent may also delegate when useful. Children use independent Pi contexts with the model/effort at delegation. Exploration/review use readers; implementation workers additionally edit ordinary files in their own worktrees. Shell is unavailable.
 
 When children exist, a compact people icon appears beside the conversation header. Open its catalog for task titles, state, duration and tokens; select a row to view the child on the right. Task instructions, thinking and tool output start collapsed. **Stop subtask** stops just that child; the main composer Stop action cancels the parent and drains all children. Ask the parent to continue a previous subtask when you need a follow-up; direct messages from the details panel are not yet supported.
 
-Children stay out of the ordinary history list. Refresh restores records; service interruption marks unfinished children interrupted without replay. Both parent and child execution budgets apply. Children cannot edit files or run commands in the current implementation.
+Children stay out of ordinary history. Refresh restores records; interruptions do not replay work. Parent and child budgets both apply. Writers use separate worktrees and produce selectively applied proposals; conflicts are not auto-merged. Writable tasks require new delegation rather than continuation in the old worktree.
 
 ## Composer commands and context
 
@@ -115,6 +115,20 @@ Open **Tool Settings** (`工具设置`) on a service card to choose how its tool
 
 Pi owns MCP protocol, transports, tool discovery, execution, and OAuth. Browser authorization refreshes idle sessions; running sessions refresh after their current task ends. Put credentials in environment, header, or OAuth secret fields rather than command arguments or URLs. Changing a connection target requires re-entering credentials you want to retain. External vendors' OAuth metadata, registration policies, and proxy environments still need compatibility checks with those services. See the [MCP management design](mcp-management.md) for implementation details.
 
+## Review memory, changes and child tasks
+
+Model suggestions made with `memory_proposal` appear in **Settings → Memory → Pending memory**. Candidates do not enter context until accepted. Review content and source evidence, then accept or reject; duplicates and explicit replacements are visible, and concurrent edits require renewed review. Evidence is model-provided, not external verification. Existing manual memory remains editable, disableable and removable.
+
+Open **Changes → Execution checkpoints** in the right panel to select an Agent execution, preview files and undo selected changes. Only trusted Git roots support snapshots; ignored, known sensitive, linked and oversized files are excluded. Recovery preserves pre-execution dirty work without resetting Git. Changed HEAD/index, later edits and stale revisions block recovery. Interrupted multi-file recovery requires inspection; snapshots are not backups.
+
+Implementation children use independent worktrees; exploration and review remain read-only. Inspect proposal diffs, explicitly select files to apply, then run main-project verification. Conflicts are not auto-merged. Cleaning a worktree retains its sealed proposal. Children cannot use shell, MCP or further delegation. See [subagent design](subagents.md).
+
+## Background operation and queue
+
+After the first conversation turn has persisted, `/queue task text` queues subsequent text tasks, while `/queue` opens the task center. Queued jobs can be cancelled; running work is stopped from its conversation. Failed/interrupted jobs can be explicitly requeued as new executions that inspect current state. Model, effort and workflow are frozen at admission; composer attachments are not copied. Public queue state reflects successful disk commits.
+
+Closing the foreground `npm start` process ends execution. For detached operation, stop it first and run `node dist/pi-cli.js service start`; use `service status` and `service stop` for control. Queued jobs survive restarts, while started jobs become interrupted without replay. See [operations, storage and upgrades](operations.md).
+
 ## Optional command-line entry points
 
 Run `npm link` once from the source directory if you want the command on your PATH:
@@ -144,6 +158,7 @@ Sessions are stored under `FORGE_AGENT_HOME/sessions`. The sidebar groups them b
 | Global and project memory | `FORGE_AGENT_HOME/memory`; project files use canonical real-directory identity and legacy files migrate only after scope validation; session memory is stored in the Pi session tree |
 | Web settings, execution budgets, and task index | `FORGE_AGENT_HOME/web-settings.json`, `FORGE_AGENT_HOME/tasks` |
 | Verification evidence and raw output | `FORGE_AGENT_HOME/verification` |
+| Queue, checkpoints and writable child directories | `FORGE_AGENT_HOME/tasks/queue.json`, `checkpoints/`, `worktrees/` |
 | Local gateway access credential | `FORGE_AGENT_HOME/web/access-token` |
 
 Legacy `PFORGE_HOME`, `~/.pforge`, and `pforge.json/yaml/yml` remain compatible. New `forge-agent.*` configuration takes precedence in the same directory. Existing sessions retain compatible storage identifiers.

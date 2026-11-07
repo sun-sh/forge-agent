@@ -7,6 +7,8 @@ answer different questions and must not be combined into a frontier-performance 
 | Command | What it establishes |
 | --- | --- |
 | `npm run check` | Types, active regression tests, build and CLI/bin integration. |
+| `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --prepare` | Inspect the fixed public repository commit, commands and oracle fingerprint without running repository code or a model. |
+| `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --model provider/model --workflow both --repeat 3 --trust-suite` | Execute a reviewed suite in fresh pinned clones, with independent external acceptance and false-completion reporting. |
 | `npm run test:web` | A real Chromium browser can operate the local Web client against a local fixture model. |
 | `npm run eval:smoke` | Five scripted solutions execute through actual Pi tools and forge-agent's workflow, then pass independent assertions and completion checks. No model coding judgment is measured. |
 | `npm run eval:agent -- --model provider/model --workflow direct` | Runs the five public tasks through adaptive/direct execution against the selected real model. The evaluator copies the selected Forge model catalog and credentials into an isolated evaluation home, sends task content to that provider, and incurs its usage. |
@@ -65,3 +67,51 @@ and evaluator integrity. It does not measure model coding quality. No
 real-model benchmark result on a complex repository is currently claimed by
 this implementation, and five small public tasks cannot support an industry
 ranking.
+
+## Pinned repository evaluations
+
+`scripts/evaluate-repository.mjs` accepts a strict versioned JSON manifest.
+Each task needs a unique ID, local/HTTPS source, immutable 40/64-character Git
+revision, prompt, setup commands, at least one verification command, protected
+files and an independent standalone Node oracle. `dirtyFiles` can seed existing
+user work. The oracle receives the workspace as `process.argv[2]`; it must be
+within the suite directory and cannot use an escaping symlink. The manifest
+and oracle bytes determine the fingerprint.
+
+The included public-repository example asks for revision-checked provider deletion
+at a pinned Forge commit where that capability is absent. It checks stale writes,
+unrelated-provider preservation and credential removal beyond visible regressions.
+It is one public development task, not an unbiased benchmark or a published
+real-model result. Review the JSON and oracle before executing it.
+
+The runner clones without hardlinks, checks out the exact revision, runs reviewed
+setup, seeds dirty files and configures the checks. It refuses symlinked/sensitive
+fixture paths and rejects repository/legacy configuration that overrides the
+suite's verification. The baseline oracle must fail before the model starts.
+A copy of the oracle stays outside the project; afterward its assertions,
+protected hashes, effective configuration, host completion and verification must
+all pass. Each execution has a ten-minute, two-dollar host budget; a provider's
+single response can cross the limit before usage is available.
+
+Execution requires an explicit `--model provider/model` and `--trust-suite`.
+`--prepare` validates and prints metadata without cloning, setup, model calls or
+oracle execution. `--config-home` chooses the source credentials; only model/auth
+configuration is copied into a temporary home. Setup, project resources and
+oracles run with the launching user's permissions. This is not a container or
+hostile-code sandbox; use a restricted environment for untrusted suites.
+
+Reports live in `.forge-agent/repository-evals/<timestamp>/`, or `--output`.
+They include task/repository revisions, fingerprint, model, workflow, repeats,
+environment, baseline failure, external result, workspace integrity, completion,
+verification, false completions, infrastructure failures, latency percentiles,
+tokens and cost. A fixture test checks that visible-test success with an external
+oracle failure is recorded as false completion. Temporary clones and credentials
+are cleaned afterward; logs and reports remain and need review before sharing.
+
+## 中文说明
+
+五个公开小任务的 smoke 验证链路，真实模型执行才测模型行为；两者不能合并宣传。
+固定仓库评测使用独立 clone、不可变 commit、外部 oracle、保护文件和已有脏内容，
+同时核对验证门禁和宿主完成状态，并记录错误完成率。示例 suite 是可复现开发任务，
+不代表已经取得真实模型成绩。先执行 `--prepare` 并审阅仓库、命令与判题脚本；明确
+`--trust-suite` 后才执行项目代码。运行、安装和 oracle 都不是 OS 沙箱。

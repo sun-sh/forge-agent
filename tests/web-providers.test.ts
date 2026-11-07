@@ -5,7 +5,7 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseJsonc } from 'jsonc-parser';
-import { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { AgentSession, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { CustomProviders, normalizeProviderUrl } from '../src/web/providers.js';
 import { startWebConsole } from '../src/web/server.js';
 
@@ -38,28 +38,35 @@ async function providers() {
   const runtime = await ModelRuntime.create({ modelsPath: join(home, 'models.json'), authPath: join(home, 'auth.json') });
   return { runtime, editor: new CustomProviders(home, runtime) };
 }
-async function mockService() {
+async function mockService(options: { toolCalls?: boolean; invalidArgs?: boolean; status?: number } = {}) {
   const requests: Array<{ path: string; auth: string | undefined; body: any }> = [];
   const origin = await listen(createServer(async (request, response) => {
     let raw = ''; for await (const chunk of request) raw += chunk;
     requests.push({ path: request.url || '', auth: request.headers.authorization || request.headers['x-api-key'] as string | undefined, body: JSON.parse(raw || '{}') });
     const route = request.url?.split('?')[0] || '';
+    if (options.status) { response.writeHead(options.status, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: 'fixture error with literal-test-key' } })); return; }
+    const input = JSON.parse(raw || '{}'), nonce = /value ([a-f0-9]{16})/.exec(raw)?.[1] ?? '';
+    const toolResult = /"role":"tool"|"type":"tool_result"|"type":"function_call_output"/.test(raw);
+    const toolCall = options.toolCalls && nonce && !toolResult;
+    const argumentsText = JSON.stringify({ value: options.invalidArgs ? 'wrong' : nonce });
+    const answerText = toolResult ? nonce : 'OK';
     if (route.endsWith('/models')) { response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'coder', name: 'Coder' }, { id: 'coder' }, { id: 'other-model' }] })); return; }
     if (route.endsWith('/chat/completions')) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });
-      for (const chunk of [{ delta: { role: 'assistant', content: 'OK from custom provider.' } }, { delta: {}, finish_reason: 'stop' }]) response.write('data: ' + JSON.stringify({ id: 'custom-test', object: 'chat.completion.chunk', created: 1, model: 'coder', choices: [{ index: 0, ...chunk }] }) + '\n\n');
+      const chunks = toolCall ? [{ delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'probe-call', type: 'function', function: { name: 'forge_probe', arguments: argumentsText.slice(0, 5) } }] } }, { delta: { tool_calls: [{ index: 0, function: { arguments: argumentsText.slice(5) } }] } }, { delta: {}, finish_reason: 'tool_calls' }] : [{ delta: { role: 'assistant', content: toolResult ? answerText : 'OK from custom provider.' } }, { delta: {}, finish_reason: 'stop' }];
+      for (const chunk of chunks) response.write('data: ' + JSON.stringify({ id: 'custom-test', object: 'chat.completion.chunk', created: 1, model: 'coder', choices: [{ index: 0, ...chunk }] }) + '\n\n');
       response.end('data: [DONE]\n\n'); return;
     }
     if (route.endsWith('/responses')) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });
-      const message = { type: 'message', id: 'message-1', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'OK', annotations: [] }] };
+      const message = toolCall ? { type: 'function_call', id: 'fc-1', call_id: 'probe-call', name: 'forge_probe', arguments: argumentsText, status: 'completed' } : { type: 'message', id: 'message-1', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: answerText, annotations: [] }] };
       const result = { id: 'response-1', object: 'response', created_at: 1, status: 'completed', model: 'coder', output: [message], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } } };
-      for (const event of [{ type: 'response.created', response: { ...result, status: 'in_progress', output: [] } }, { type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [] } }, { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: message.id, delta: 'OK' }, { type: 'response.output_item.done', output_index: 0, item: message }, { type: 'response.completed', response: result }]) response.write('event: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n');
+      for (const event of [{ type: 'response.created', response: { ...result, status: 'in_progress', output: [] } }, { type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [], arguments: '' } }, toolCall ? { type: 'response.function_call_arguments.delta', output_index: 0, item_id: message.id, delta: argumentsText } : { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: message.id, delta: answerText }, { type: 'response.output_item.done', output_index: 0, item: message }, { type: 'response.completed', response: result }]) response.write('event: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n');
       response.end(); return;
     }
     if (route.endsWith('/messages')) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });
-      for (const event of [{ type: 'message_start', message: { id: 'message-1', type: 'message', role: 'assistant', content: [], model: 'coder', usage: { input_tokens: 1, output_tokens: 0 }, stop_reason: null, stop_sequence: null } }, { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }, { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'OK' } }, { type: 'content_block_stop', index: 0 }, { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } }, { type: 'message_stop' }]) response.write('event: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n');
+      for (const event of [{ type: 'message_start', message: { id: 'message-1', type: 'message', role: 'assistant', content: [], model: 'coder', usage: { input_tokens: 1, output_tokens: 0 }, stop_reason: null, stop_sequence: null } }, { type: 'content_block_start', index: 0, content_block: toolCall ? { type: 'tool_use', id: 'probe-call', name: 'forge_probe', input: {} } : { type: 'text', text: '' } }, { type: 'content_block_delta', index: 0, delta: toolCall ? { type: 'input_json_delta', partial_json: argumentsText } : { type: 'text_delta', text: answerText } }, { type: 'content_block_stop', index: 0 }, { type: 'message_delta', delta: { stop_reason: toolCall ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } }, { type: 'message_stop' }]) response.write('event: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n');
       response.end(); return;
     }
     response.writeHead(404).end();
@@ -68,6 +75,23 @@ async function mockService() {
 }
 
 describe('Pi third-party provider configuration', () => {
+  it.each(['openai-completions', 'openai-responses', 'anthropic-messages'])('checks streamed tools and result roundtrip through Pi for %s', async (api) => {
+    const mock = await mockService({ toolCalls: true }), { editor } = await providers();
+    const result = await editor.test({ ...service(mock.origin + '/v1', { api }), model: { id: 'coder', maxTokens: 4096 }, capabilities: true });
+    expect(result).toMatchObject({ ok: true, codingCompatible: true, checks: [{ name: 'streaming-text', status: 'passed' }, { name: 'tool-call', status: 'passed' }, { name: 'tool-result', status: 'passed' }] });
+    expect(mock.requests).toHaveLength(3); expect(JSON.stringify(result)).not.toContain('literal-test-key');
+  });
+  it('distinguishes a text-only endpoint and malformed tool arguments from coding compatibility', async () => {
+    const mock = await mockService({ toolCalls: true, invalidArgs: true }), { editor } = await providers();
+    const result = await editor.test({ ...service(mock.origin + '/v1'), model: { id: 'coder' }, capabilities: true });
+    expect(result).toMatchObject({ ok: true, codingCompatible: false, checks: [{ status: 'passed' }, { name: 'tool-call', status: 'failed' }, { name: 'tool-result', status: 'skipped' }] });
+    expect(mock.requests).toHaveLength(2);
+  });
+  it.each([401, 429, 500])('does not retry or echo remote credentials in an HTTP %s probe failure', async (status) => {
+    const mock = await mockService({ status }), { editor } = await providers();
+    await expect(editor.test({ ...service(mock.origin + '/v1'), model: { id: 'coder' }, capabilities: true })).rejects.toMatchObject({ status: 502, message: expect.not.stringContaining('literal-test-key') });
+    expect(mock.requests).toHaveLength(1);
+  });
   it('does not offer or execute built-in models enabled only by inherited environment credentials', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'inherited-test-key');
     const web = await gateway();
@@ -210,6 +234,60 @@ describe('Pi third-party provider configuration', () => {
     await web.server.close();
     const restarted = await gateway();
     expect((await restarted.request('/api/settings')).body).toMatchObject({ model: 'third-party/coder', models: expect.arrayContaining([expect.objectContaining({ key: 'third-party/coder' })]) });
+  });
+
+  it('retires a live session through the full shutdown path when a provider update cannot rebind its model', async () => {
+    const mock = await mockService();
+    const web = await gateway();
+    const config = service(mock.origin + '/v1');
+    expect((await web.request('/api/providers/custom', config)).status).toBe(200);
+    const created = await web.request('/api/session', { project, model: 'third-party/coder' });
+    expect(created.status).toBe(201);
+    const listed = await web.request('/api/providers/custom');
+    const revision = listed.body.providers.find((provider: any) => provider.id === 'third-party').revision;
+    const abort = vi.spyOn(AgentSession.prototype, 'abort');
+    vi.spyOn(AgentSession.prototype, 'setModel').mockRejectedValueOnce(new Error('model refresh failed'));
+
+    const updated = await web.request('/api/providers/custom', {
+      ...config, apiKey: '', name: 'Updated gateway', revision,
+      models: [{ ...config.models[0], name: 'Updated coder' }]
+    });
+    expect(updated.status).toBe(200);
+    expect(abort).toHaveBeenCalled();
+    expect((await web.request('/api/sessions/' + created.body.id)).body).toMatchObject({ readOnly: true, model: null });
+  });
+
+  it('deletes an editable custom provider with revision protection and retires its sessions', async () => {
+    const mock = await mockService();
+    const web = await gateway();
+    const config = service(mock.origin + '/v1');
+    expect((await web.request('/api/providers/custom', config)).status).toBe(200);
+    const created = await web.request('/api/session', { project, model: 'third-party/coder' });
+    expect(created.status).toBe(201);
+    const provider = (await web.request('/api/providers/custom')).body.providers[0];
+    const stale = await fetch(web.origin + '/api/providers/custom/third-party', { method: 'DELETE', headers: { 'x-pforge-token': web.server.token, 'content-type': 'application/json' }, body: JSON.stringify({ revision: 'stale' }) });
+    expect(stale.status).toBe(409);
+    const response = await fetch(web.origin + '/api/providers/custom/third-party', { method: 'DELETE', headers: { 'x-pforge-token': web.server.token, 'content-type': 'application/json' }, body: JSON.stringify({ revision: provider.revision }) });
+    expect(response.status).toBe(200);
+    const removed = await response.json() as any;
+    expect(removed).toMatchObject({ id: 'third-party', removed: true, models: [] });
+    expect(JSON.parse(await readFile(join(home, 'models.json'), 'utf8'))).toMatchObject({ providers: {} });
+    expect(await readFile(join(home, 'auth.json'), 'utf8').catch(() => '')).not.toContain('literal-test-key');
+    expect((await web.request('/api/sessions/' + created.body.id)).body).toMatchObject({ readOnly: true, model: null });
+    expect((await web.request('/api/sessions/' + created.body.id + '/prompt', { message: 'must choose a model' })).status).toBe(409);
+    expect((await web.request('/api/providers/custom')).body.providers).toEqual([]);
+  });
+
+  it('keeps a committed provider deletion when runtime refresh fails', async () => {
+    const { runtime, editor } = await providers();
+    await editor.save(service());
+    const provider = (await editor.list())[0]!;
+    vi.spyOn(runtime, 'refresh').mockRejectedValueOnce(new Error('catalog unavailable'));
+    const removed = await editor.remove(provider.id, provider.revision);
+    expect(removed).toMatchObject({ removed: true, diagnostic: expect.stringContaining('刷新失败') });
+    expect(JSON.parse(await readFile(join(home, 'models.json'), 'utf8'))).toMatchObject({ providers: {} });
+    expect(await readFile(join(home, 'auth.json'), 'utf8').catch(() => '')).not.toContain('literal-test-key');
+    expect(await editor.list()).toEqual([]);
   });
 
   it('keeps API keys literal, including a leading !, and omits all credentials and advanced headers from responses', async () => {

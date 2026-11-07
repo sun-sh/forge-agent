@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "Forge provider removal at a fixed public revision",
+  "tasks": [
+    {
+      "id": "forge-provider-removal",
+      "source": "https://github.com/sun-sh/forge-agent.git",
+      "revision": "20226232a7455cd057bb15105d09d1ebd8cfb3d0",
+      "prompt": "Implement CustomProviders.remove(id, expectedRevision) in src/web/providers.ts. Delete only an editable custom provider, require its current revision, reject stale revisions with status 409, preserve other providers, remove the provider's stored Pi credential, refresh the model runtime without network requests, and return { id, removed: true }. Preserve literal credential handling, project trust and concurrent-update protections. Do not modify package files, existing tests, or notes.txt. Run all configured verification, including the build, before completing. This task concerns the provider editor API; no UI or HTTP route is required.",
+      "setup": [
+        { "name": "dependencies", "command": "npm ci", "timeoutMs": 300000 },
+        { "name": "baseline build", "command": "npm run build", "timeoutMs": 120000 }
+      ],
+      "verify": [
+        { "name": "typecheck", "command": "npm run typecheck", "timeoutMs": 120000 },
+        { "name": "provider regressions", "command": "npm test -- --run tests/web-providers.test.ts", "timeoutMs": 300000 },
+        { "name": "build", "command": "npm run build", "timeoutMs": 120000 }
+      ],
+      "oracle": "forge-provider-removal.oracle.mjs",
+      "oracleTimeoutMs": 30000,
+      "protected": ["package.json", "package-lock.json", "tests/web-providers.test.ts", "notes.txt"],
+      "dirtyFiles": { "notes.txt": "Existing user work. Preserve exactly.\n" }
+    }
+  ]
+}
