@@ -6,6 +6,7 @@ import { basename, join } from 'node:path';
 import { AgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../src/web/server.js';
 import { loadWebToken } from '../src/web/auth.js';
+import { MemoryStore } from '../src/web/memory.js';
 
 const closers: Array<() => Promise<void>> = [];
 const streamClosers: Array<() => Promise<unknown>> = [];
@@ -48,6 +49,50 @@ async function savedSession(root: string, home: string) {
   return manager.getSessionFile()!;
 }
 
+describe('project removal', () => {
+  it('removes a history-only project across restarts, preserves source and Pi history, and recovers on reopen', async () => {
+    const { root, home, server, base, headers, api } = await fixture();
+    const path = await savedSession(root, home), original = await readFile(path, 'utf8');
+    await writeFile(join(root, 'keep.txt'), 'workspace source');
+    expect((await (await api('api/history')).json() as any).projects).toHaveLength(1);
+    expect((await fetch(base + 'api/projects', { method: 'DELETE', body: JSON.stringify({ path: root }) })).status).toBe(401);
+    expect((await fetch(base + 'api/projects', { method: 'DELETE', headers, body: JSON.stringify({ path: '../relative' }) })).status).toBe(400);
+    expect((await fetch(base + 'api/projects', { method: 'DELETE', headers, body: JSON.stringify({ path: root }) })).status).toBe(200);
+    expect(await (await api('api/history')).json()).toEqual({ projects: [] });
+    expect(await (await api('api/projects')).json()).toMatchObject({ projects: [], removedPaths: [expect.any(String)] });
+    expect(await readFile(path, 'utf8')).toBe(original);
+    expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe('workspace source');
+    await server.close();
+    const restarted = await startWebConsole({ cwd: root, port: 0 }); closers.push(restarted.close);
+    const origin = restarted.url.split('?')[0]!, auth = { 'x-pforge-token': restarted.token, 'content-type': 'application/json' };
+    expect(await (await fetch(origin + 'api/history', { headers: auth })).json()).toEqual({ projects: [] });
+    expect((await fetch(origin + 'api/projects', { method: 'POST', headers: auth, body: JSON.stringify({ path: root }) })).status).toBe(201);
+    expect((await (await fetch(origin + 'api/history', { headers: auth })).json() as any).projects[0].sessions).toHaveLength(1);
+    expect(await readFile(path, 'utf8')).toBe(original);
+  });
+
+  it('rejects removal while a project is running or a session is opening', async () => {
+    const { root, api, base, headers } = await fixture({ model: true, extension: 'export default (pi) => { pi.registerCommand("web-pending", { description: "test", handler: async (_args, ctx) => { await ctx.ui.confirm("Pending", "test"); } }); };' });
+    await api('api/projects/trust', { path: root, trusted: true });
+    const remove = () => fetch(base + 'api/projects', { method: 'DELETE', headers, body: JSON.stringify({ path: root }) });
+    const originalReload = DefaultResourceLoader.prototype.reload;
+    let entered!: () => void, release!: () => void;
+    const ready = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(DefaultResourceLoader.prototype, 'reload').mockImplementationOnce(async function(this: DefaultResourceLoader) { entered(); await gate; return originalReload.call(this); });
+    const creating = api('api/session', { project: root, model: 'mock/mock' });
+    await ready;
+    try { expect((await remove()).status).toBe(409); } finally { release(); }
+    const session = await (await creating).json() as any;
+    await api('api/sessions/' + session.id + '/prompt', { message: '/web-pending' });
+    await vi.waitFor(async () => expect((await (await api('api/sessions/' + session.id)).json() as any).pendingUiRequests).toHaveLength(1));
+    expect((await remove()).status).toBe(409);
+    await api('api/sessions/' + session.id + '/abort', {});
+    await vi.waitFor(async () => expect((await (await api('api/sessions/' + session.id)).json() as any).running).toBe(false));
+    expect((await remove()).status).toBe(200);
+  });
+});
+
 async function stream(url: string, headers: Record<string, string>) {
   const response = await fetch(url, { headers });
   expect(response.status).toBe(200);
@@ -67,6 +112,12 @@ async function stream(url: string, headers: Record<string, string>) {
         const { value, done } = await reader.read();
         if (done) throw new Error('Stream ended before the expected event');
         buffer += decoder.decode(value, { stream: true });
+      }
+    },
+    async nextType(type: string): Promise<{ id: number; event: any }> {
+      for (;;) {
+        const next = await this.next();
+        if (next.event?.type === type) return next;
       }
     }
   };
@@ -219,6 +270,28 @@ describe('Web lifecycle regressions', () => {
     expect((await api('api/sessions/' + canonical.id + '/prompt', { message: 'blocked' })).status).toBe(409);
   });
 
+  it('shares project trust, resources, session memory and MCP state across directory aliases', async () => {
+    const { root, home, api } = await fixture({ model: true, extension: 'export default (pi) => { pi.registerCommand("alias-check", { description: "fixture", handler: async () => {} }); };' });
+    const alias = join(home, 'project-alias');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    expect((await api('api/projects/trust', { path: alias, trusted: false })).status).toBe(200);
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    expect(created.trust.trusted).toBe(false);
+    expect(created.commands.some((item: any) => item.name === 'alias-check')).toBe(false);
+    expect((await api('api/projects/trust', { path: alias, trusted: true })).status).toBe(200);
+    expect((await api('api/sessions/' + created.id + '/model', { model: 'mock/mock' })).status).toBe(200);
+    const ready = await (await api('api/sessions/' + created.id)).json() as any;
+    expect(ready.trust.trusted).toBe(true);
+    expect(ready.commands.some((item: any) => item.name === 'alias-check')).toBe(true);
+    expect((await api('api/memory', { project: alias, session: created.id, layer: 'session', items: [{ text: 'Same project through an alias' }] })).status).toBe(200);
+    const memory = await (await api('api/memory?project=' + encodeURIComponent(root) + '&session=' + created.id)).json() as any;
+    expect(memory.session.items[0].text).toBe('Same project through an alias');
+    for (const path of [root, alias]) {
+      const runtime = await (await api('api/mcp/runtime?project=' + encodeURIComponent(path))).json() as any;
+      expect(runtime.sessions.map((session: any) => session.id)).toEqual([created.id]);
+    }
+  });
+
   it('blocks history writes and forks during a model turn and requires restore before continuing', async () => {
     const { root, home, api } = await fixture({ model: true });
     const path = await savedSession(root, home);
@@ -242,6 +315,25 @@ describe('Web lifecycle regressions', () => {
     await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
   });
 
+  it('persists adaptive execution budget while the model turn is still running', async () => {
+    const { root, api } = await fixture({ model: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    let started = false;
+    vi.spyOn(AgentSession.prototype, 'prompt').mockImplementationOnce(async () => { started = true; await pending; });
+    try {
+      expect((await api('api/sessions/' + created.id + '/prompt', { message: 'fix the current file' })).status).toBe(202);
+      await vi.waitFor(() => expect(started).toBe(true));
+      const running = await (await api('api/sessions/' + created.id)).json() as any;
+      expect(running.task).toMatchObject({ status: 'running', workflow: 'direct', budget: { status: 'running', modelTurns: 0, toolCalls: 0 } });
+      expect(running.budget).toMatchObject({ status: 'running', limits: expect.any(Object) });
+    } finally {
+      release();
+    }
+    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
+  });
+
   it('allows a read-only historical session to continue after selecting a currently available Pi model', async () => {
     const { root, home, api, base, headers } = await fixture({ model: true });
     const file = await savedSession(root, home);
@@ -250,7 +342,12 @@ describe('Web lifecycle regressions', () => {
     const events = await stream(base + 'api/sessions/' + created.id + '/events', headers);
     await events.next();
     expect((await api('api/sessions/' + created.id + '/model', { model: 'mock/mock' })).status).toBe(200);
-    expect((await events.next()).event.snapshot).toMatchObject({ readOnly: false, model: { key: 'mock/mock' } });
+    let changed: { id: number; event: any } | undefined;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const next = await events.next();
+      if (next.event.type === 'pforge_snapshot') { changed = next; break; }
+    }
+    expect(changed?.event.snapshot).toMatchObject({ readOnly: false, model: { key: 'mock/mock' } });
     const state = await (await api('api/sessions/' + created.id)).json() as any;
     expect(state).toMatchObject({ readOnly: false, model: { key: 'mock/mock' } });
     expect(JSON.stringify(state.entries)).toContain('tool output kept');
@@ -375,6 +472,27 @@ describe('Web lifecycle regressions', () => {
     expect(enabledSnapshot.context.autoCompaction).toBe(true);
   });
 
+  it('serializes memory writes against other edits and model prompts', async () => {
+    const { root, api } = await fixture({ model: true });
+    const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
+    const original = MemoryStore.prototype.replace;
+    let release!: () => void, started = false;
+    const gate = new Promise<void>((done) => { release = done; });
+    vi.spyOn(MemoryStore.prototype, 'replace').mockImplementationOnce(async function (this: MemoryStore, ...args) {
+      started = true; await gate; return original.apply(this, args);
+    });
+    const input = { project: root, session: created.id, layer: 'session', items: [{ text: 'Persist once' }] };
+    const saving = api('api/memory', input);
+    try {
+      await vi.waitFor(() => expect(started).toBe(true));
+      expect((await api('api/memory', input)).status).toBe(409);
+      expect((await api('api/sessions/' + created.id + '/prompt', { message: 'must wait for memory' })).status).toBe(409);
+    } finally { release(); }
+    expect((await saving).status).toBe(200);
+    const memory = await (await api('api/memory?project=' + encodeURIComponent(root) + '&session=' + created.id)).json() as any;
+    expect(memory.session.items.map((item: any) => item.text)).toEqual(['Persist once']);
+  });
+
   it('rejects memory edits while the affected session is running', async () => {
     const { root, api } = await fixture({ model: true });
     const created = await (await api('api/session', { project: root, model: 'mock/mock' })).json() as any;
@@ -475,9 +593,9 @@ describe('Web lifecycle regressions', () => {
     const events = await stream(base + 'api/sessions/' + created.id + '/events', headers);
     await events.next();
     await api('api/sessions/' + created.id + '/prompt', { message: '/web-expire' });
-    const request = await events.next();
+    const request = await events.nextType('extension_ui_request');
     expect(request.event.type).toBe('extension_ui_request');
-    const closed = await events.next();
+    const closed = await events.nextType('extension_ui_closed');
     expect(closed.event).toMatchObject({ type: 'extension_ui_closed', reason: 'timeout', requestId: request.event.requestId });
     await vi.waitFor(async () => {
       const state = await (await api('api/sessions/' + created.id)).json() as any;

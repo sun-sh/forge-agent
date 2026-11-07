@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { z } from 'zod';
-import { loadConfig } from "../config.js";
+import { loadConfig, type LoadedConfig } from "../config.js";
 import { pforgeHome } from "../pforge-home.js";
 import { runVerification, verificationMessage, VerificationInterruptedError, type VerificationReport } from "./verify.js";
 
@@ -22,6 +22,8 @@ export interface PforgeVerificationOutcome {
 export interface PforgeVerificationRuntime {
   extension: ExtensionFactory;
   outcome: PforgeVerificationOutcome;
+  /** Reload the project configuration while the session is idle. */
+  reload(): LoadedConfig;
   waitForVerification(signal?: AbortSignal): Promise<PforgeVerificationOutcome>;
   beginTurn(runId?: string): void;
   verifyTrusted(signal: AbortSignal): Promise<PforgeVerificationOutcome>;
@@ -62,14 +64,21 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
   onOutcome?: (outcome: PforgeVerificationOutcome) => void;
   initialOutcome?: PforgeVerificationOutcome;
 } = {}): PforgeVerificationRuntime {
-  const loaded = loadConfig(cwd);
-  const commands = loaded.config.verify;
-  const retries = loaded.config.verifyRetries;
+  let loaded = loadConfig(cwd);
+  let commands = loaded.config.verify;
+  let retries = loaded.config.verifyRetries;
   const outcome: PforgeVerificationOutcome = options.initialOutcome ? structuredClone(options.initialOutcome) : { status: "unchecked", attempts: 0 };
   if (outcome.status === 'running') { outcome.status = 'failed'; outcome.error = 'Verification was interrupted; run it again explicitly.'; }
   let contextTrust: (() => boolean) | undefined;
   const trusted = () => options.isProjectTrusted?.() ?? contextTrust?.() ?? false;
   const persist = async () => { await persistOutcome(cwd, outcome); options.onOutcome?.(structuredClone(outcome)); };
+  const reload = (): LoadedConfig => {
+    const next = loadConfig(cwd);
+    loaded = next;
+    commands = next.config.verify;
+    retries = next.config.verifyRetries;
+    return next;
+  };
   const beginTurn = (runId = randomUUID()) => {
     for (const key of Object.keys(outcome)) delete (outcome as unknown as Record<string, unknown>)[key];
     Object.assign(outcome, { status: 'unchecked', attempts: 0, runId });
@@ -117,8 +126,6 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     pi.on('before_agent_start', (event) => {
       if (event.messageType === 'user' && !options.managed?.()) { beginTurn(); blocked(); options.onOutcome?.(structuredClone(outcome)); }
     });
-    if (commands.length === 0) return;
-
     pi.registerTool(defineTool({
       name: "run_verification",
       label: "Run Verification",
@@ -203,6 +210,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
   return {
     extension,
     outcome,
+    reload,
     beginTurn,
     async verifyTrusted(signal) {
       if (blocked()) return outcome;

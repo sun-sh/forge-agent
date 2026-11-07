@@ -40,20 +40,39 @@ export const budgetSnapshotSchema = z.object({
 }).strict();
 
 const settingsSchema = z.object({ budget: budgetLimitsSchema }).strict();
-export interface AgentSettings { budget: BudgetLimits; }
+export interface AgentSettings {
+  budget: BudgetLimits;
+  /** Missing settings are normal; a malformed existing file is not. */
+  valid: boolean;
+  diagnostic?: string;
+}
+
+function defaultSettings(): AgentSettings {
+  return { budget: { ...DEFAULT_BUDGET_LIMITS }, valid: true };
+}
 
 export async function loadAgentSettings(home: string): Promise<AgentSettings> {
   const path = join(home, 'web-settings.json');
   try {
-    const parsed = settingsSchema.safeParse(JSON.parse(await readFile(path, 'utf8')));
-    return parsed.success ? parsed.data : { budget: DEFAULT_BUDGET_LIMITS };
+    const raw: unknown = JSON.parse(await readFile(path, 'utf8'));
+    const parsed = settingsSchema.safeParse(raw);
+    if (parsed.success) return { ...parsed.data, valid: true };
+    return {
+      budget: { ...DEFAULT_BUDGET_LIMITS },
+      valid: false,
+      diagnostic: '执行预算配置无效，已暂停使用该配置。请在设置中重新保存预算后再开始任务。'
+    };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { budget: DEFAULT_BUDGET_LIMITS };
-    return { budget: DEFAULT_BUDGET_LIMITS };
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return defaultSettings();
+    return {
+      budget: { ...DEFAULT_BUDGET_LIMITS },
+      valid: false,
+      diagnostic: '无法读取执行预算配置，已暂停使用该配置。请检查文件权限或在设置中重新保存预算。'
+    };
   }
 }
 
-export async function saveAgentSettings(home: string, settings: AgentSettings): Promise<void> {
+export async function saveAgentSettings(home: string, settings: Pick<AgentSettings, 'budget'>): Promise<void> {
   const parsed = settingsSchema.parse(settings);
   const path = join(home, 'web-settings.json');
   await mkdir(dirname(path), { recursive: true });
@@ -71,6 +90,7 @@ export class BudgetRuntime {
   private timer?: ReturnType<typeof setTimeout>;
   private abort?: () => void;
   private onChange?: (snapshot: BudgetSnapshot) => void;
+  private readonly observers = new Set<(snapshot: BudgetSnapshot) => void>();
   constructor(readonly limits: BudgetLimits, onChange?: (snapshot: BudgetSnapshot) => void) {
     this.onChange = onChange;
     this.snapshotValue = { version: 1, status: 'running', startedAt: new Date().toISOString(), limits: { ...limits }, modelTurns: 0, toolCalls: 0, totalTokens: 0, costUsd: 0 };
@@ -82,7 +102,16 @@ export class BudgetRuntime {
   }
   setAbort(abort: (() => void) | undefined) { this.abort = abort; if (this.snapshotValue.status === 'exceeded') abort?.(); }
   setOnChange(onChange: ((snapshot: BudgetSnapshot) => void) | undefined) { this.onChange = onChange; }
-  private changed() { this.onChange?.(this.snapshot()); }
+  /** Observe live usage without taking ownership of the controller callback. */
+  subscribe(observer: (snapshot: BudgetSnapshot) => void): () => void {
+    this.observers.add(observer);
+    return () => { this.observers.delete(observer); };
+  }
+  private changed() {
+    const snapshot = this.snapshot();
+    this.onChange?.(snapshot);
+    for (const observer of this.observers) observer(structuredClone(snapshot));
+  }
   private exceed(reason: string) {
     if (this.snapshotValue.status === 'exceeded') return;
     this.snapshotValue.status = 'exceeded'; this.snapshotValue.exceededReason = reason; this.snapshotValue.endedAt = new Date().toISOString();

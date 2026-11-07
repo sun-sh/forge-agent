@@ -29,20 +29,23 @@ npm start
 `npm start` launches the local gateway and opens your default browser on port `4317`. Normal startup handles browser authorization automatically. Use `npm start -- --port 4328` for another port.
 
 1. Open **Settings → Service → Add service** (`设置 → 服务 → 添加服务`). Enter a Base URL, protocol, and API key, or explicitly select the no-key option for a compatible local service. Discover and select models, or enter their IDs manually; test an actual invocation and save.
-2. Select a folder, model, and reasoning effort below the composer. Inspect the project and its configuration, then confirm project trust in settings.
-3. Describe the task, for example: **“Fix the failing login tests, preserve the existing API, and run project verification.”** Configure `forge-agent.json` below if you want automatic project checks.
+2. Choose the model, reasoning effort, and working mode below the composer. A first-time user does not need to choose a folder: sending the first message creates an independent project under `FORGE_AGENT_HOME/projects`. The project picker can also create one explicitly or open an existing folder elsewhere on the computer.
+3. Describe the task, for example: **“Fix the failing login tests, preserve the existing API, and run project verification.”** Configure `forge-agent.json` below if you want automatic project checks. Use the paperclip next to Send to select images, UTF-8 text, and source files; drag and drop and pasted images also work.
 
 The provider editor supports APIs compatible with **OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages**. Local services such as Ollama and LM Studio need to expose a compatible endpoint. Reasoning options follow the model's capabilities; changes selected during a run apply to the next message. The Web interface is currently in Chinese.
+
+The Web model picker offers providers with credentials or configuration saved in the Forge data directory. Credentials inherited from the launching application do not automatically add models. Explicit environment references in `models.json` remain supported.
 
 ## Workspace and capabilities
 
 | Scenario | Current support |
 | --- | --- |
-| **Work by project** | Project conversations, search, rename, pin, archive, trash, and restore; message-edit forks and Markdown / JSON export. |
+| **Work by project** | Forge-managed projects and explicitly opened local folders share one project list, with removal and recovery by reopening the folder; project conversations, search, rename, pin, archive, trash, and restore; message-edit forks and Markdown / JSON export. |
 | **Inspect changes** | A right-side Git list and diff, project text search/preview, and user-entered terminal commands; labels for changes present before a task. |
-| **Provide context** | Project text references, image attachments, user-maintained global/project/session memory, and composer-level context and Pi compaction controls. |
+| **Provide context** | Project text references, uploaded images and UTF-8 source/text files, user-maintained global/project/session memory, and composer-level context and Pi compaction controls. |
 | **Connect models and tools** | Provider setup, model discovery and multi-select; MCP configuration, probes, browser OAuth and tool settings; Skills preview, toggles and local-directory imports. |
 | **Track and recover tasks** | Planned-task phases, verification output, review records and a durable task index; interrupted work is re-inspected only after an explicit user continuation. |
+| **Delegate subtasks** | Parallel exploration and review in independent Pi sessions; a compact header catalog shows state and usage, a right-side panel exposes records and Stop, and the parent collects conclusions. |
 
 File references and previews check paths, known sensitive filenames, symlinks, and size; images also have format and aggregate limits. These checks bound the Web feature's access and do not provide process isolation.
 
@@ -76,18 +79,27 @@ Completion requires passing configured checks, a structured `ready` model review
 
 This makes execution inspectable; the benefit of extra planning and model self-review still needs measurement. Verification repairs and per-execution time, model-turn, tool-call, token, and cost limits are bounded. An exhausted budget becomes a recoverable `budget_exceeded` task state.
 
+### Subagents
+
+For complex requests, the parent can use `subagent` to delegate a batch of up to three parallel read-only exploration or review tasks. Simple questions still get direct answers. Each child has an independent Pi context, inherits the model and reasoning effort at delegation, and can only use built-in file readers and search. Children cannot write, run commands, call MCP or delegate further. The parent waits for the batch, synthesizes its results, and can ask follow-up questions using a child ID. The existing planned-workflow self-review gate does not automatically become an independent multi-agent review.
+
+A compact header control appears only when children exist. Its catalog shows state, duration and tokens; opening a row shows the child's record and Stop action on the right. Child sessions stay out of ordinary history. Stopping the parent drains its children; unfinished children become interrupted after restart without replay. Parallel writers, Git worktree isolation, separate child model settings, and direct messages from the child panel are not supported yet.
+
 ### Execution budgets
 
 **Settings → About → Execution budget** controls each Agent execution, including adaptive and planned workflows. The defaults are 15 minutes, 50 model turns, 300 tool calls, 750,000 tokens, and 25 USD. Budget snapshots are stored with the session and task record; after changing the limits, an interrupted or budget-exhausted task can be rechecked. Provider usage is usually observable at the end of a response, so one response may slightly cross a threshold; this is an execution guard, not a billing-level isolation boundary.
 
+Child turns, tools and usage also count toward the parent's aggregate budget. Each child activation additionally has limits of three minutes, 12 model turns, 60 tool calls, 120,000 tokens and 2 USD, capped by the corresponding parent limits. One user request can delegate at most 12 activations, including follow-ups.
+
 ## Design and ownership
 
-Forge implements product and control behavior above Pi sessions, retaining one model/tool loop.
+Forge implements product and control behavior above Pi sessions and reuses Pi's model/tool loop instead of reimplementing a second runtime.
 
 | Forge implementation | Problem it addresses | Code |
 | --- | --- | --- |
 | **Task state and recovery** | Phase transitions, stopping, bounded repairs, task discovery and explicit re-inspection; Pi sessions retain the conversation and task records. | [Controller](src/task/controller.ts), [task index](src/task/registry.ts) |
 | **Execution ownership and budgets** | One Web owner per home; Agent, terminal and project-trust changes share a canonical project lock; every execution has time, turn, tool, token and cost limits. | [Home lease](src/task/registry.ts), [project execution](src/web/executions.ts), [budget](src/task/budget.ts) |
+| **Child lifecycle** | Independent Pi contexts, restricted tools, reserved capacity, aggregate budgets, result collection, cancellation and ownership checks. | [Subagent manager](src/web/subagents.ts), [design](docs/subagents.md) |
 | **Verification and execution evidence** | Exact failed output, bounded repairs, timeouts and child-process tree termination; failed verification cannot count as successful completion. | [Verification extension](src/verification/pi-extension.ts), [command executor](src/tools/command.ts) |
 | **Tool policies** | Enforce read-only modes during execution rather than relying on hidden UI controls. | [Mode policy](src/web/modes.ts) |
 | **Change and context adapters** | Git baselines, fingerprints and bounded diffs; user-maintained scoped memory and safe file references. | [Git evidence](src/task/git.ts), [memory](src/web/memory.ts), [file references](src/web/files.ts) |
@@ -122,11 +134,11 @@ See the [JSON Schema](forge-agent.schema.json). For terminal entry points, run `
 | `npm run check` | Types, active regression tests, build and CLI/bin checks. |
 | `npm run test:web` | Web interaction acceptance in real Edge / Chrome / Chromium, using a local fixture model. |
 | `npm run eval:smoke` | Scripted solutions exercise tools, workflows and evaluation plumbing. |
-| `npm run eval:agent -- --model provider/model --workflow direct` | Run the fixed task suite against a configured real model. |
+| `npm run eval:agent -- --model provider/model --workflow direct` | Run the fixed task suite against a real model; startup checks availability and copies the model catalog and credentials into an isolated evaluation home. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | Run the same suite through planned execution for comparison. |
 | `npm run eval:agent -- --model provider/model --workflow both --repeat 3` | Repeat both workflows with fixed model settings and compare pass rate, latency, repairs, tokens, and cost. |
 
-Evaluation runs in an isolated temporary Forge home and workspace by default; use `--home` when you need a retained location for inspection. It checks independent assertions, protected files, verification results, and completion state, recording the Git revision, suite fingerprint, latency percentiles, repairs, tool calls, tokens, cost, and Pi statistics. The public suite contains five small function-repair tasks, including two cross-file tasks; no real-model comparison on complex repositories has been published. Regression tests, browser acceptance, and scripted solutions do not establish model coding performance. See [evaluation methods](docs/evaluation.md).
+Evaluation runs in an isolated temporary Forge home and workspace by default; use `--home` when you need a retained location for inspection. Real runs read the current Forge home by default, or a source selected with `--config-home <path>`. Only `models.json` and `auth.json` are copied; source sessions, tasks, and MCP state are never reused. A preflight fails before the first task when the requested model is unavailable. Reports include independent assertions, protected files, verification results, completion state, Git revision, suite fingerprint, latency percentiles, repairs, tool calls, tokens, cost, and Pi statistics. Execution budget totals also include usage charged by managed child agents. The public suite contains five small function-repair tasks, including two cross-file tasks; no real-model comparison on complex repositories has been published. Regression tests, browser acceptance, and scripted solutions do not establish model coding performance. See [evaluation methods](docs/evaluation.md).
 
 ## Current scope
 
@@ -139,7 +151,9 @@ Reproduced issues, impact, and acceptance criteria are recorded in the [product 
 
 ## Data and security
 
-Local data defaults to `~/.forge-agent`, overridden by `FORGE_AGENT_HOME`. Legacy `PFORGE_HOME`, `~/.pforge`, and `pforge.json/yaml/yml` remain compatible.
+Local data defaults to `~/.forge-agent`, overridden by `FORGE_AGENT_HOME`. Legacy `PFORGE_HOME`, `~/.pforge`, and `pforge.json/yaml/yml` remain compatible. The gateway does not automatically treat its launch directory as the first project.
+
+Forge-managed projects live under `FORGE_AGENT_HOME/projects`, with the project index at `FORGE_AGENT_HOME/web/projects.json`. When you open an external folder, Forge stores its canonical path and works in place; it does not move or copy that project. A project directory is created lazily when the first message is sent without a selected project. Pi sessions remain centralized under `FORGE_AGENT_HOME/sessions`, so projects, conversations, and forks can be managed together on the local machine.
 
 The gateway binds to `127.0.0.1` by default and uses a local credential, an HttpOnly / SameSite cookie, and Host / Origin checks. Model keys are saved through Pi's authentication API, never returned to the editor or stored in browser storage.
 

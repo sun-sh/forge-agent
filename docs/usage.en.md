@@ -46,6 +46,24 @@ Provider token and cost usage is usually reported at the end of a response, so t
 
 Only one Web service may own a given `FORGE_AGENT_HOME` at a time. After an abnormal exit, the lease can be recovered after its stale interval; a second instance reports the existing local address. A project allows only one of Agent execution, terminal commands, or trust changes at a time. Junctions, symlinks, and Windows case aliases are normalized to the real directory. Closing the service cancels active terminal work and waits for the project reservation to release. There is no independent background queue yet; the local gateway owns running work.
 
+## Projects, sessions, and attachments
+
+Use the `…` menu beside a project to remove it from the sidebar. Source files and Pi session files stay in place. Removal persists across refreshes and service restarts; explicitly opening the same folder restores the project and its history. Stop running work before removing its project.
+
+Drag the small grip at the top of the composer up or down to adjust its height. The preferred height is remembered in this browser, within the available screen space. Double-click the grip to restore the default; when focused, use the arrow keys to adjust or Home/End for the minimum/maximum. Typing and clearing text preserve the chosen height.
+
+The Web client does not preselect the directory from which the service was launched. You can type a first message immediately; once a model is available, Forge creates an independent project under `FORGE_AGENT_HOME/projects` using the message title and binds the conversation to it. The project picker also supports explicitly creating a Forge-managed project, opening another local folder, or returning to “create on send.” External folders stay where they are; Forge stores only their canonical path. All Pi sessions remain centralized under `FORGE_AGENT_HOME/sessions`, so projects, conversations, and forks can be managed together.
+
+The paperclip next to Send supports selecting multiple images and files; drag and drop and pasted images also work. Images support PNG, JPEG, WEBP, and GIF; local files support UTF-8 text and source files, which are sent inline as user material and are not written into the project automatically. Project file references require a selected project. Credential files, symlinks, binary files, and oversized content are rejected. Uploaded content is marked as user material and cannot grant tool permissions or change project policy.
+
+## Subtasks
+
+For a complex request, ask Forge to explore independent modules in parallel or delegate a separate risk review. The parent may also delegate when useful. Children use independent Pi contexts with the parent's configured model and reasoning effort, and are restricted to built-in reading and search.
+
+When children exist, a compact people icon appears beside the conversation header. Open its catalog for task titles, state, duration and tokens; select a row to view the child on the right. Task instructions, thinking and tool output start collapsed. **Stop subtask** stops just that child; the main composer Stop action cancels the parent and drains all children. Ask the parent to continue a previous subtask when you need a follow-up; direct messages from the details panel are not yet supported.
+
+Children stay out of the ordinary history list. Refresh restores records; service interruption marks unfinished children interrupted without replay. Both parent and child execution budgets apply. Children cannot edit files or run commands in the current implementation.
+
 ## Composer commands and context
 
 Type `/` in the composer or select **Commands** (`命令`) below it to search for an action. Use `↑` / `↓` to select, `Enter` to execute, `Tab` to complete, and `Esc` to close.
@@ -118,6 +136,8 @@ Sessions are stored under `FORGE_AGENT_HOME/sessions`. The sidebar groups them b
 | Data | Default location |
 | --- | --- |
 | Configuration, models, and authentication | `~/.forge-agent`, overridden by `FORGE_AGENT_HOME` |
+| Forge-managed projects | `FORGE_AGENT_HOME/projects` |
+| Project index | `FORGE_AGENT_HOME/web/projects.json` |
 | Global MCP configuration and OAuth credentials | `FORGE_AGENT_HOME/mcp.json` and `FORGE_AGENT_HOME/mcp-auth.json` |
 | Project MCP configuration | `<project>/.pi/mcp.json`, loaded only after project trust |
 | Sessions | `FORGE_AGENT_HOME/sessions` |

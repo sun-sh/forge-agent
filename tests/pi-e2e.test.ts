@@ -69,6 +69,9 @@ describe("pforge end-to-end", () => {
     expect(system).toContain('You are Forge Agent');
     expect(system).toContain('Pi Coding Agent runtime');
     expect(system).toContain('terminal client (interactive TUI or single-shot CLI)');
+    expect(system).toContain('Do not turn a greeting into a product introduction');
+    expect(system).toContain('Do not volunteer absolute project paths');
+    expect(system).toContain('Provide these details accurately when the user asks for them');
     expect(system).not.toContain('operating inside pi, a coding agent harness');
   }, 30000);
 

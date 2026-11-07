@@ -14,6 +14,52 @@ const windows = [];
 afterEach(() => { windows.splice(0).forEach((window) => { window.__app?.state.eventSource?.close(); window.close(); }); vi.unstubAllGlobals(); });
 
 describe('safe agent output', () => {
+  it('keeps subagent navigation compact and displays child output safely in a separate panel', async () => {
+    const { window, app, requests, reviewMedia } = await client();
+    const doc = window.document;
+    app.state.sessionId = 'abc';
+    app.applySnapshot({ id: 'abc', messages: [], subagents: [{ id: 'child-1', title: '审查输入校验', role: 'reviewer', status: 'completed', model: 'mock/a', startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), budget: { totalTokens: 420 } }] });
+    const button = doc.getElementById('subagents-button');
+    expect(button.classList.contains('hidden')).toBe(false);
+    expect(button.getAttribute('aria-label')).toContain('子任务 1');
+    expect(doc.querySelectorAll('#timeline .subagent-row')).toHaveLength(0);
+    button.click();
+    const row = doc.querySelector('[data-subagent-open]');
+    expect(row.textContent).toContain('审查输入校验');
+    expect(row.textContent).toContain('420 tokens');
+    const priorFetch = window.fetch;
+    window.fetch = async (url, init) => url.includes('/subagents?') ? new Response(JSON.stringify({ agent: app.state.subagents[0], prompt: '<img src=x onerror=alert(1)>', messages: [{ role: 'assistant', content: [{ type: 'thinking', text: 'private process' }, { type: 'text', text: '**Evidence**\n\n<script>bad</script>' }] }] }), { status: 200 }) : priorFetch(url, init);
+    row.click();
+    await vi.waitFor(() => expect(doc.getElementById('subagent-detail').textContent).toContain('Evidence'));
+    expect(doc.querySelector('#subagent-detail strong')?.textContent).toBe('Evidence');
+    expect(doc.querySelector('#subagent-detail script, #subagent-detail img')).toBeNull();
+    expect(doc.querySelector('#subagent-detail .subagent-process').open).toBe(false);
+    expect(doc.getElementById('subagent-panel').classList.contains('hidden')).toBe(false);
+    reviewMedia.matches = true; reviewMedia.dispatchEvent(new window.Event('change'));
+    expect(doc.getElementById('subagent-panel').getAttribute('aria-modal')).toBe('true');
+    expect(doc.getElementById('chat-pane').inert).toBe(true);
+    expect(doc.getElementById('sidebar').inert).toBe(true);
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+    doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(doc.getElementById('subagent-panel').classList.contains('hidden')).toBe(true);
+    expect(doc.getElementById('chat-pane').inert).toBe(false);
+    expect(doc.activeElement).toBe(button);
+  });
+
+  it('retains subtask counts from SSE without mixing outputs into the parent chat, and clears them for a new session', async () => {
+    const { window, app } = await client();
+    app.state.sessionId = 'abc';
+    app.applySnapshot({ id: 'abc', messages: [], subagents: [] });
+    const child = { id: 'child-1', title: '<unsafe>', role: 'explorer', status: 'running', model: 'mock/a', startedAt: new Date().toISOString() };
+    app.handleEvent({ type: 'forge_subagents', agents: [child] });
+    expect(window.document.getElementById('subagents-count').textContent).toBe('1 / 1');
+    expect(window.document.querySelector('#subagent-list unsafe')).toBeNull();
+    expect(window.document.getElementById('timeline').textContent).not.toContain('<unsafe>');
+    await app.newConversation();
+    expect(window.document.getElementById('subagents-button').classList.contains('hidden')).toBe(true);
+    expect(window.document.getElementById('subagent-menu').classList.contains('hidden')).toBe(true);
+    expect(app.state.subagents).toEqual([]);
+  });
   it('formats code and tables while treating HTML, CSS impersonation and remote images as untrusted source', () => {
     const dom = new JSDOM(''); windows.push(dom.window);
     const output = safeMarkdown('## Result\n\n**safe**\n\n```diff\n+added\n-removed\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n<script>alert(1)</script>\n\n<p class="modal">fake</p>\n\n![remote](https://example.com/tracker)\n\n[bad](javascript:alert(1)) [good](https://example.com)', marked, createDOMPurify(dom.window));
@@ -66,12 +112,16 @@ async function client(initial = {}) {
   const window = dom.window; windows.push(window);
   const reviewMedia = new window.EventTarget(); reviewMedia.matches = Boolean(initial.narrow);
   for (const [key, value] of Object.entries(initial.localStorage || {})) window.localStorage.setItem(key, JSON.stringify(value));
+  // Most legacy UI cases exercise an already selected project. First-run cases
+  // opt out explicitly so the production default remains unselected.
+  if (!initial.firstRun && !Object.prototype.hasOwnProperty.call(initial.localStorage || {}, 'forge.selectedProject.v1')) window.localStorage.setItem('forge.selectedProject.v1', JSON.stringify('C:\\repo'));
   const models = initial.models || [model('a'), model('b')];
   let defaultModel = initial.model || models[0]?.key || null;
   let thinkingLevel = initial.thinkingLevel || 'off';
   const modelThinkingLevels = { ...initial.modelThinkingLevels };
   const streams = [], requests = [];
   Object.assign(window, {
+    TextDecoder,
     matchMedia: () => reviewMedia,
     marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills,
     builtinCommands, filterCommands, parseCommand,
@@ -116,6 +166,95 @@ async function client(initial = {}) {
 function streamText(app, delta) { app.handleEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } }); }
 
 describe('History navigation', () => {
+  it('keeps a first-run composer unbound until the first message is sent', async () => {
+    const { window, app } = await client({ firstRun: true });
+    expect(app.state.project).toBeNull();
+    expect(window.document.getElementById('project-selector-label').textContent).toContain('自动创建');
+    expect(window.document.getElementById('current-project-path').textContent).toContain('发送时自动创建');
+  });
+
+  it('offers uploads before project selection and sends attachment-only first messages into a managed project', async () => {
+    const { window, app, requests } = await client({ firstRun: true });
+    const doc = window.document;
+    expect(doc.querySelector('[data-upload-picker="prompt"]').disabled).toBe(false);
+    expect(doc.querySelector('[data-file-picker="prompt"]').disabled).toBe(true);
+    const upload = new window.File(['export const value = 42;'], 'example.ts', { type: 'text/plain' });
+    const credential = new window.File(['must stay local'], '.env', { type: 'text/plain' });
+    const drop = new window.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [upload, credential], types: ['Files'] } });
+    doc.getElementById('composer').dispatchEvent(drop);
+    await vi.waitFor(() => expect(app.state.attachmentReading).toBe(false));
+    expect(app.state.attachments).toMatchObject([{ type: 'upload', name: 'example.ts', text: 'export const value = 42;' }]);
+    expect(doc.getElementById('prompt-attachments').textContent).toContain('example.ts');
+    expect(doc.getElementById('toast-root').textContent).toContain('凭据');
+    expect(await app.sendPrompt('')).toBe(true);
+    const session = JSON.parse(requests.find((request) => request.url === '/api/session').body);
+    expect(session).not.toHaveProperty('project');
+    expect(session.requestId).toBeTruthy();
+    const prompt = JSON.parse(requests.find((request) => request.url === '/api/sessions/created/prompt').body);
+    expect(prompt.message).toContain('附件');
+    expect(prompt.attachments).toMatchObject([{ type: 'upload', name: 'example.ts' }]);
+    expect(app.state.attachments).toEqual([]);
+  });
+
+  it('previews pasted images, supports removal, and keeps unsent attachments out of other conversations', async () => {
+    const { window, app } = await client({ firstRun: true });
+    const doc = window.document;
+    const image = new window.File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])], 'clipboard.png', { type: 'image/png' });
+    const paste = () => {
+      const event = new window.Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: { items: [{ kind: 'file', type: image.type, getAsFile: () => image }] } });
+      doc.getElementById('prompt').dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    };
+    paste();
+    await vi.waitFor(() => expect(app.state.attachments).toHaveLength(1));
+    expect(doc.querySelector('#prompt-attachments img').getAttribute('src')).toContain('data:image/png;base64,');
+    doc.querySelector('#prompt-attachments [data-remove-attachment]').click();
+    expect(app.state.attachments).toHaveLength(0);
+    paste();
+    await vi.waitFor(() => expect(app.state.attachments).toHaveLength(1));
+    await app.newConversation();
+    expect(app.state.attachments).toHaveLength(0);
+    expect(doc.querySelector('#prompt-attachments img')).toBeNull();
+  });
+
+  it('preserves the composed message and local uploads when choosing a different project', async () => {
+    const { window, app } = await client();
+    const doc = window.document;
+    doc.getElementById('prompt').value = 'Use this file in a new project';
+    const drop = new window.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [new window.File(['export const answer = 42;'], 'draft.ts')], types: ['Files'] } });
+    doc.getElementById('composer').dispatchEvent(drop);
+    await vi.waitFor(() => expect(app.state.attachmentReading).toBe(false));
+    app.state.attachments.push({ type: 'file', path: 'old-project.ts' });
+    doc.getElementById('project-selector').click();
+    doc.getElementById('folder-auto').click();
+    await vi.waitFor(() => expect(app.state.project).toBeNull());
+    expect(doc.getElementById('prompt').value).toBe('Use this file in a new project');
+    expect(app.state.attachments).toMatchObject([{ type: 'upload', name: 'draft.ts' }]);
+    expect(doc.getElementById('prompt-attachments').textContent).not.toContain('old-project.ts');
+  });
+
+  it('keeps first-message attachments available after a rejected prompt and sends them on retry', async () => {
+    const { window, app, requests } = await client({ firstRun: true });
+    const originalFetch = window.fetch;
+    let rejectPrompt = true;
+    window.fetch = async (url, init) => {
+      if (url.endsWith('/prompt') && rejectPrompt) return { ok: false, status: 503, json: async () => ({ error: 'Temporarily unavailable' }) };
+      return originalFetch(url, init);
+    };
+    app.state.attachments = [{ type: 'upload', name: 'retry.ts', text: 'export const retry = true;', size: 26 }];
+    expect(await app.sendPrompt('Analyze this file')).toBe(false);
+    expect(app.state.attachments).toMatchObject([{ type: 'upload', name: 'retry.ts' }]);
+    expect(window.document.getElementById('followup-attachments').textContent).toContain('retry.ts');
+    rejectPrompt = false;
+    expect(await app.sendFollowup('Analyze this file')).toBe(true);
+    const request = requests.find((item) => item.url.endsWith('/prompt'));
+    expect(JSON.parse(request.body).attachments).toMatchObject([{ type: 'upload', name: 'retry.ts' }]);
+    expect(app.state.attachments).toEqual([]);
+  });
+
   it('keeps empty projects visible and places history operations in a keyboard accessible menu', async () => {
     const { window, app, requests } = await client(), doc = window.document;
     expect(doc.querySelector('[data-project-toggle] .project-icon svg')).not.toBeNull();
@@ -133,6 +272,55 @@ describe('History navigation', () => {
     expect(doc.getElementById('session-name').value).toBe('Current session');
     expect(doc.querySelector('.conversation-header #rename-button')).toBeNull();
     expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('removes a selected project and clears stale navigation while retaining its conversation draft', async () => {
+    const { window, app, requests } = await client(), doc = window.document;
+    app.state.sessionId = 'source';
+    app.applySnapshot({ id: 'source', project: 'C:\\repo', sessionFile: 'C:\\sessions\\source.jsonl', running: false, messages: [] });
+    doc.getElementById('followup-prompt').value = 'Keep this unsent draft';
+    let removed = false;
+    const originalFetch = window.fetch;
+    window.fetch = async (url, init = {}) => {
+      if (url === '/api/projects' && init.method === 'DELETE') {
+        requests.push({ url, ...init }); removed = true;
+        return { ok: true, json: async () => ({ path: 'C:\\repo', removed: true }) };
+      }
+      if (removed && url === '/api/projects') return { ok: true, json: async () => ({ projects: [], removedPaths: ['C:\\repo'] }) };
+      return originalFetch(url, init);
+    };
+    const more = doc.querySelector('[data-project-menu]'); more.click();
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(doc.getElementById('session-menu').getAttribute('aria-label')).toBe('项目操作');
+    doc.querySelector('[data-project-action="remove"]').click();
+    await vi.waitFor(() => expect(app.state.historyBusy).toBe(false));
+    expect(removed).toBe(true);
+    expect(app.state.project).toBeNull(); expect(app.state.sessionId).toBeNull();
+    expect(doc.querySelector('[data-project-menu]')).toBeNull();
+    expect(window.localStorage.getItem('forge.selectedProject.v1')).toBeNull();
+    expect(window.sessionStorage.getItem('pforge.activeSession')).toBeNull();
+    expect(JSON.parse(window.sessionStorage.getItem('pforge.draft.C:\\sessions\\source.jsonl'))).toBe('Keep this unsent draft');
+    // A stale recent-project cache from an older tab must not rediscover the project.
+    window.localStorage.setItem('pforge.recentProjects', JSON.stringify([{ path: 'C:\\repo', name: 'repo' }]));
+    await app.loadConfig();
+    expect(doc.querySelector('[data-project-menu]')).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem('pforge.recentProjects'))).toEqual([]);
+    expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
+  });
+
+  it('keeps the current project and draft when project removal is rejected', async () => {
+    const { window, app } = await client(), doc = window.document;
+    const originalFetch = window.fetch;
+    window.fetch = async (url, init = {}) => url === '/api/projects' && init.method === 'DELETE'
+      ? { ok: false, status: 409, json: async () => ({ error: '请先停止此项目正在执行的任务' }) }
+      : originalFetch(url, init);
+    doc.getElementById('prompt').value = 'Unsent';
+    doc.querySelector('[data-project-menu]').click(); doc.querySelector('[data-project-action="remove"]').click();
+    await vi.waitFor(() => expect(app.state.historyBusy).toBe(false));
+    expect(app.state.project.path).toBe('C:\\repo');
+    expect(doc.getElementById('prompt').value).toBe('Unsent');
+    expect(doc.querySelector('[data-project-menu]')).not.toBeNull();
+    expect(doc.getElementById('toast-root').textContent).toContain('先停止');
   });
 
   it('starts answer forks with an empty draft and preserves the source draft without sending a model prompt', async () => {

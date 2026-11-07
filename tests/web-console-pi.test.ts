@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { startWebConsole } from "../src/web/server.js";
 
@@ -49,6 +50,27 @@ describe("pforge Pi web console", () => {
     const response = await fetch(base + "api/session", { method: "POST", headers: { "x-pforge-token": server.token } });
     expect(response.status).toBe(503);
     expect(((await response.json()) as { error?: string }).error).toMatch(/No model credentials/);
+    expect(existsSync(join(process.env["PFORGE_HOME"]!, "projects"))).toBe(false);
+  });
+
+  it("creates a managed project only when a configured first message has no project", async () => {
+    const root = await workspace();
+    const home = process.env["PFORGE_HOME"]!;
+    await writeFile(join(home, "models.json"), JSON.stringify({ providers: { mock: { baseUrl: "http://127.0.0.1:9/v1", api: "openai-completions", apiKey: "test", models: [{ id: "mock" }] } } }));
+    const server = await startWebConsole({ cwd: root, port: 0 });
+    const base = server.url.split("?")[0];
+    closers.push(server.close);
+    const headers = { "x-pforge-token": server.token, "content-type": "application/json" };
+    expect(existsSync(join(home, "projects"))).toBe(false);
+    const response = await fetch(base + "api/session", { method: "POST", headers, body: JSON.stringify({ model: "mock/mock", title: "首个任务", requestId: "first-message" }) });
+    expect(response.status).toBe(201);
+    const session = await response.json() as { project: string; sessionFile: string };
+    expect(relative(await realpath(home), session.project).split(sep)).toHaveLength(2);
+    expect(relative(await realpath(home), session.project).split(sep)[0]).toBe("projects");
+    expect(existsSync(session.project)).toBe(true);
+    expect(relative(await realpath(home), session.sessionFile).split(sep)[0]).toBe("sessions");
+    const projects = await (await fetch(base + "api/projects", { headers })).json() as { projects: Array<{ path: string; kind: string; name: string }> };
+    expect(projects.projects).toEqual(expect.arrayContaining([expect.objectContaining({ path: session.project, kind: "managed", name: "首个任务" })]));
   });
 
   it("exposes project, directory, history, and model endpoints", async () => {

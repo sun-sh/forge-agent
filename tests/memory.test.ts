@@ -76,6 +76,20 @@ describe('scoped memory', () => {
     expect(prompt).toContain('Enabled decision');
   });
 
+  it('reserves prompt space for project and session layers when global memory is large', async () => {
+    const { home, project, store } = await fixture();
+    await store.replace('global', Array.from({ length: 5 }, (_, index) => ({ text: `global-${index}-` + 'g'.repeat(3990) })) , project);
+    await store.replace('project', [{ text: 'PROJECT_RULE_SENTINEL', kind: 'constraint' }], project);
+    const manager = SessionManager.create(project, join(home, 'sessions'));
+    await store.replace('session', [{ text: 'SESSION_RULE_SENTINEL', kind: 'decision' }], project, manager);
+    const plan = await store.promptPlan(project, manager);
+    expect(plan.text).toContain('PROJECT_RULE_SENTINEL');
+    expect(plan.text).toContain('SESSION_RULE_SENTINEL');
+    expect(plan.layers.find((layer) => layer.layer === 'global')).toMatchObject({ truncated: true });
+    expect(plan.layers.find((layer) => layer.layer === 'project')).toMatchObject({ truncated: false, includedItems: 1 });
+    expect(plan.layers.find((layer) => layer.layer === 'session')).toMatchObject({ truncated: false, includedItems: 1 });
+  });
+
   it('uses one project identity for a directory alias and keeps case-sensitive projects separate', async () => {
     const { project, store } = await fixture();
     const alias = join(project, '..', 'forge-memory-alias');

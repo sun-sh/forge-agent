@@ -18,6 +18,10 @@ export interface TaskState {
   kind?: TaskKind;
   status: TaskStatus;
   phase: TaskPhase;
+  /** The scheduler used for this execution. Older persisted tasks omit it. */
+  workflow?: 'direct' | 'planned';
+  mode?: string;
+  model?: string;
   startedAt: string;
   updatedAt: string;
   resumeOf?: string;
@@ -40,6 +44,7 @@ export const taskStateSchema = z.object({
   kind: z.enum(TASK_KINDS).optional(),
   status: z.enum(['running', 'completed', 'needs_attention', 'failed', 'aborted', 'interrupted', 'budget_exceeded']),
   phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
+  workflow: z.enum(['direct', 'planned']).optional(), mode: z.string().max(64).optional(), model: z.string().max(512).optional(),
   resumeOf: z.uuid().optional(), repairs: z.number().int().min(0).max(20),
   phases: z.array(z.object({ phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(), summary: z.string().max(12000).optional() })).max(100),
   // Evidence is display data. It never controls whether resumed code runs or what tools are allowed.
@@ -63,6 +68,25 @@ export interface TaskAdapter {
   baseline(signal: AbortSignal): Promise<GitBaseline>;
   changes(baseline: GitBaseline, signal: AbortSignal): Promise<GitChanges>;
 }
+
+export interface TaskExecutionMetadata {
+  workflow: 'direct' | 'planned';
+  mode?: string;
+  model?: string;
+}
+
+/** Create the durable envelope used by both adaptive and planned runs. */
+export function createExecutionState(prompt: string, metadata: TaskExecutionMetadata, resumeOf?: string): TaskState {
+  const kind = taskKind(prompt);
+  const phase: TaskPhase = metadata.workflow === 'direct' ? kind === 'verify' ? 'verify' : 'implement' : 'inspect';
+  const now = new Date().toISOString();
+  return {
+    version: 1, id: randomUUID(), prompt, kind, status: 'running', phase, workflow: metadata.workflow,
+    ...(metadata.mode ? { mode: metadata.mode } : {}), ...(metadata.model ? { model: metadata.model } : {}),
+    startedAt: now, updatedAt: now, ...(resumeOf ? { resumeOf } : {}), repairs: 0,
+    phases: [{ phase, startedAt: now }]
+  };
+}
 function verified(outcome: PforgeVerificationOutcome) {
   return outcome.status === 'passed' && outcome.report?.passed === true && outcome.report.results.length > 0
     && outcome.report.results.every((result) => result.passed && result.exitCode === 0 && !result.failure && !result.error);
@@ -76,6 +100,8 @@ export class TaskController {
   get active() { return Boolean(this.cancellation); }
   get readOnly() { return this.active && !['implement', 'verify'].includes(this.state!.phase); }
   cancel(reason = '任务已由用户停止。') { if (this.state && this.active) { this.state.error = reason; this.cancellation!.abort(); } }
+  /** Record a host-owned adaptive execution without entering the planned loop. */
+  setExternalState(state: TaskState | undefined) { this.state = state ? structuredClone(state) : undefined; this.commit(); }
   recordBudget(snapshot: BudgetSnapshot) { if (this.state) { this.state.budget = structuredClone(snapshot); this.commit(); } }
   private commit() { if (!this.state) return; this.state.updatedAt = new Date().toISOString(); this.save(structuredClone(this.state)); }
   private phase(phase: TaskPhase) {
@@ -83,13 +109,13 @@ export class TaskController {
     const previous = task.phases.at(-1); if (previous && !previous.endedAt) previous.endedAt = now;
     task.phase = phase; task.phases.push({ phase, startedAt: now }); this.commit();
   }
-  async run(prompt: string, retries: number, adapter: TaskAdapter, resumeOf?: string, budget?: BudgetRuntime): Promise<TaskState> {
+  async run(prompt: string, retries: number, adapter: TaskAdapter, resumeOf?: string, budget?: BudgetRuntime, metadata: TaskExecutionMetadata = { workflow: 'planned' }): Promise<TaskState> {
     if (this.active) throw new Error('Task is already running');
     if (!Number.isInteger(retries) || retries < 0 || retries > 20) throw new Error('Invalid repair budget');
     const cancellation = new AbortController(); this.cancellation = cancellation;
     const signal = cancellation.signal, now = new Date().toISOString();
     const kind = taskKind(prompt);
-    this.state = { version: 1, id: randomUUID(), prompt, kind, status: 'running', phase: 'inspect', startedAt: now, updatedAt: now, resumeOf, repairs: 0, phases: [] };
+    this.state = { version: 1, id: randomUUID(), prompt, kind, status: 'running', phase: 'inspect', workflow: metadata.workflow, ...(metadata.mode ? { mode: metadata.mode } : {}), ...(metadata.model ? { model: metadata.model } : {}), startedAt: now, updatedAt: now, resumeOf, repairs: 0, phases: [] };
     const task = this.state;
     budget?.setOnChange((snapshot) => { task.budget = structuredClone(snapshot); this.commit(); });
     budget?.start(); task.budget = budget?.snapshot(); this.commit();

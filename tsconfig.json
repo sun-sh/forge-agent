@@ -53,6 +53,7 @@
     "tests/task-registry.test.ts",
     "tests/project-executions.test.ts",
     "tests/web-budget.test.ts",
+    "tests/web-subagents.test.ts",
     "tests/task-git.test.ts",
     "tests/web-files.test.ts",
     "tests/web-tasks-files.test.ts",

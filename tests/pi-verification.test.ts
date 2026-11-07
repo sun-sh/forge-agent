@@ -62,6 +62,17 @@ describe("Pi verification extension", () => {
     expect(fake.commands.has("verify")).toBe(true);
   });
 
+  it('reloads verification commands for an existing idle session', async () => {
+    const root = await workspace([], 0);
+    const runtime = createPforgeVerification(root, { isProjectTrusted: () => true });
+    expect(runtime.commands).toHaveLength(0);
+    await writeFile(join(root, 'pforge.json'), JSON.stringify({ verify: [{ name: 'marker', command: 'node -e "process.stdout.write(\'reloaded\')"' }], verifyRetries: 1 }), 'utf8');
+    const loaded = runtime.reload();
+    expect(loaded.config.verifyRetries).toBe(1);
+    expect(runtime.commands).toMatchObject([{ name: 'marker' }]);
+    expect((await runtime.verifyTrusted(new AbortController().signal)).report?.results[0]?.output).toBe('reloaded');
+  });
+
   it("blocks the tool, command, settle hook and explicit waiter in a read-only mode without claiming a pass", async () => {
     const root = await workspace([{ name: "ok", command: "node --version" }], 1);
     let reason: string | undefined = "Read-only planning mode";

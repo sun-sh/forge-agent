@@ -27,9 +27,10 @@ const state = {
   elapsedTimer: null, uiRequest: null, uiQueue: [], readOnly: false, lastEventId: 0,
   thinking: null, executionProcess: null, turnAnswer: null, verification: null, outcome: 'idle', error: null, loadingSession: false, historyQuery: '', widgets: new Map(),
   authRequired: false, recoveringAuth: false, changingConfig: false, changingMode: false, openingSettings: false, sending: false, runControl: null, modelThinkingLevels: {}, pickerAnchor: null, modePickerAnchor: null,
-  workflow: 'direct', task: null, attachments: [], tasks: [], taskScope: 'project', filePickerInput: null,
-  context: null, compacting: false, compactRequest: false, runtimeCommands: [], commandInput: null, commandIndex: 0, commandItems: [], commandCategory: 'all', commandDiscoveryError: '', contextAnchor: null,
-  changes: { open: false, sessionId: null, reviewView: 'changes', files: [], selectedPath: null, fingerprint: null, diffStatus: 'idle', listRequest: 0, diffRequest: 0, projectFiles: [], selectedProjectFile: null, projectFilesRequest: 0, projectFileRequest: 0, terminalBusy: false }
+  workflow: 'direct', task: null, attachments: [], attachmentReading: false, attachmentGeneration: 0, managedRoot: '', sessionRoot: '', projectRequestId: null, tasks: [], taskScope: 'project', filePickerInput: null,
+  context: null, budget: null, compacting: false, compactRequest: false, runtimeCommands: [], commandInput: null, commandIndex: 0, commandItems: [], commandCategory: 'all', commandDiscoveryError: '', contextAnchor: null,
+  changes: { open: false, sessionId: null, reviewView: 'changes', files: [], selectedPath: null, fingerprint: null, diffStatus: 'idle', listRequest: 0, diffRequest: 0, projectFiles: [], selectedProjectFile: null, projectFilesRequest: 0, projectFileRequest: 0, terminalBusy: false },
+  subagents: [], subagentSession: null, subagentSelected: null, subagentRequest: 0, subagentTimer: null
 };
 const changesMedia = window.matchMedia?.('(max-width: 1180px)');
 let projectsRequest = 0;
@@ -38,6 +39,8 @@ const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (c
 const ICON_PATHS = {
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/>',
   folderPlus: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/><path d="M12 10v6m-3-3h6"/>',
+  paperclip: '<path d="m8 12 6-6a3.5 3.5 0 0 1 5 5l-8 8a5 5 0 0 1-7-7l8-8m-6 10 8-8a1.5 1.5 0 0 1 2 2l-8 8"/>',
+  file: '<path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h8m-8 4h6"/>',
   chat: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1v-8.5A8.5 8.5 0 0 1 11.5 4H13a8 8 0 0 1 8 7.5Z"/>',
   chevron: '<path d="m9 5 7 7-7 7"/>', more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   newChat: '<path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6Z"/>',
@@ -120,6 +123,7 @@ function toast(message, kind = 'info') {
   setTimeout(() => node.remove(), 3600);
 }
 function shortPath(value) { return String(value || '').replace(/^.*[\\/]/, ''); }
+function newRequestId() { return globalThis.crypto?.randomUUID?.() || ('request-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)); }
 function samePath(left, right) {
   const normalize = (value) => String(value || '').replace(/[\\/]+$/, '').replaceAll('/', '\\').toLowerCase();
   return normalize(left) === normalize(right);
@@ -128,8 +132,10 @@ function formatNumber(value) { return typeof value === 'number' ? new Intl.Numbe
 function formatTime(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 function modelByKey(key) { return state.models.find((model) => model.key === key); }
 function renderAttachments() {
-  const html = state.attachments.map((item, index) => '<span class="attachment-chip"><span>' + (item.type === 'file' ? '▧ ' + esc(item.path) : '▣ ' + esc(item.name || '图片')) + '</span><button type="button" data-remove-attachment="' + index + '" aria-label="移除附件" title="移除附件">×</button></span>').join('');
+  const html = state.attachments.map((item, index) => '<span class="attachment-chip">' + (item.type === 'image' ? '<img class="attachment-preview" src="data:' + esc(item.mimeType) + ';base64,' + esc(item.data) + '" alt="图片预览">' : icon('file')) + '<span><strong>' + esc(item.path || item.name || '图片') + '</strong><small>' + (item.type === 'file' ? '项目文件引用' : (item.size < 1000 ? item.size + ' B' : Math.ceil(item.size / 1000) + ' KB') + (item.type === 'image' ? ' · 图片' : ' · 本机文件')) + '</small></span><button type="button" data-remove-attachment="' + index + '" aria-label="移除 ' + esc(item.path || item.name || '附件') + '" title="移除附件"' + (state.attachmentReading ? ' disabled' : '') + '>×</button></span>').join('');
   ['prompt-attachments', 'followup-attachments'].forEach((id) => { if ($(id)) $(id).innerHTML = html; });
+  document.querySelectorAll('[data-upload-picker]').forEach((button) => { button.setAttribute('aria-busy', String(state.attachmentReading)); button.title = state.attachmentReading ? '正在读取附件…' : '添加图片或文件'; });
+  renderComposerControl();
 }
 function removeAttachment(index) { state.attachments.splice(index, 1); renderAttachments(); rememberDraft(); }
 function addFileAttachment(path) {
@@ -151,21 +157,46 @@ function openFilePicker(inputName) {
   closeModelPicker(); closeModePicker(); closeCommandPicker(); state.filePickerInput = inputName;
   $('file-search').value = ''; $('file-picker').classList.remove('hidden'); void renderFileOptions(); $('file-search').focus();
 }
-async function addImageAttachment(file) {
-  if (!file) return;
-  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) || file.size > 2_000_000) { toast('图片必须是 PNG、JPEG、WEBP 或 GIF，且不超过 2 MB', 'warning'); return; }
-  if (state.attachments.length >= 6) { toast('最多只能附加 6 个文件或图片', 'warning'); return; }
-  const imageSize = state.attachments.filter((item) => item.type === 'image').reduce((total, item) => total + Math.floor((item.data?.length || 0) * 3 / 4), 0);
-  if (state.attachments.filter((item) => item.type === 'image').length >= 4 || imageSize + file.size > 6_000_000) { toast('图片附件最多 4 张，原始总大小不能超过 6 MB', 'warning'); return; }
-  const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',')[1] || ''); reader.onerror = reject; reader.readAsDataURL(file); });
-  if (typeof data !== 'string' || !data) return;
-  state.attachments.push({ type: 'image', name: file.name, mimeType: file.type, data }); renderAttachments(); rememberDraft();
+function readAttachment(file, method) {
+  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('无法读取 ' + file.name)); reader[method](file); });
+}
+async function addLocalAttachments(files) {
+  if (historyLocked() || state.attachmentReading || historyReadOnly()) return;
+  const generation = state.attachmentGeneration;
+  state.attachmentReading = true; setRunning(state.running); renderAttachments();
+  try {
+    for (const file of Array.from(files || [])) {
+      if (generation !== state.attachmentGeneration) return;
+      try {
+        if (state.attachments.length >= 6) throw new Error('最多只能附加 6 个文件或图片');
+        if (file.size > 2_000_000) throw new Error(file.name + ' 超过 2 MB，请缩小文件后重试');
+        if (!file.name || /[\\/\u0000-\u001f]/.test(file.name) || /^(?:\.env(?:\..*)?|auth\.json|credentials?\.json|secrets?\.json|\.npmrc|\.netrc|id_rsa|id_ed25519)$/i.test(file.name) || /\.(?:pem|key|p12|pfx)$/i.test(file.name)) throw new Error('请勿上传凭据文件：' + file.name);
+        const image = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type);
+        let attachment;
+        if (image) {
+          const images = state.attachments.filter((item) => item.type === 'image');
+          if (images.length >= 4 || images.reduce((sum, item) => sum + (item.size || 0), 0) + file.size > 6_000_000) throw new Error('图片附件最多 4 张，总大小不能超过 6 MB');
+          const data = String(await readAttachment(file, 'readAsDataURL')).split(',')[1];
+          attachment = { type: 'image', name: file.name, mimeType: file.type, data, size: file.size };
+        } else {
+          if (file.type?.startsWith('image/') || /\.(?:pdf|docx?|xlsx?|pptx?|zip|exe|dll|bin)$/i.test(file.name)) throw new Error('暂不支持 ' + file.name + '，请上传 UTF-8 文本、代码或 PNG/JPEG/WEBP/GIF 图片');
+          const buffer = await readAttachment(file, 'readAsArrayBuffer');
+          let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(buffer); } catch { throw new Error(file.name + ' 不是 UTF-8 文本文件'); }
+          if (text.includes('\0')) throw new Error(file.name + ' 是二进制文件，暂不支持');
+          if (state.attachments.filter((item) => item.type === 'upload').reduce((sum, item) => sum + item.size, 0) + file.size > 4_000_000) throw new Error('文本附件总大小不能超过 4 MB');
+          attachment = { type: 'upload', name: file.name, text, size: file.size };
+        }
+        if (state.attachments.reduce((sum, item) => sum + (item.size || 0), 0) + file.size > 8_000_000) throw new Error('附件总大小不能超过 8 MB');
+        if (generation === state.attachmentGeneration && !state.attachments.some((item) => item.type === attachment.type && item.name === attachment.name && item.size === attachment.size && (image ? item.data === attachment.data : item.text === attachment.text))) state.attachments.push(attachment);
+      } catch (error) { toast(error.message, 'warning'); }
+    }
+  } finally { state.attachmentReading = false; renderAttachments(); setRunning(state.running); }
 }
 const TASK_STATUS_LABELS = { running: '运行中', interrupted: '服务重启后中断', aborted: '已停止', failed: '失败', needs_attention: '需要检查', budget_exceeded: '达到执行预算', completed: '已完成' };
 function renderTasks() {
   const list = $('tasks-list'); if (!list) return;
   const tasks = state.tasks || [];
-  $('tasks-note').textContent = tasks.length ? '共 ' + tasks.length + ' 个' + (state.taskScope === 'project' ? '当前项目' : '跨项目') + '任务，状态独立于当前浏览器标签页保存。' : (state.taskScope === 'project' ? '当前项目还没有持久化任务。' : '还没有持久化任务。') + '使用“规划并执行”或验证任务后会显示在这里。';
+  $('tasks-note').textContent = tasks.length ? '共 ' + tasks.length + ' 个' + (state.taskScope === 'project' ? '当前项目' : '跨项目') + '任务，状态独立于当前浏览器标签页保存。' : (state.taskScope === 'project' ? '当前项目还没有持久化任务。' : '还没有持久化任务。') + '执行过修改或验证后会显示在这里。';
   list.innerHTML = tasks.map((task) => {
     const running = task.status === 'running';
     const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(task.status);
@@ -188,8 +219,50 @@ async function taskAction(id, action) {
     await loadTasks(); toast(action === 'stop' ? '任务已停止' : action === 'recheck' ? '任务已重新检查' : '任务已继续');
   } catch (error) { toast(error.message, 'error'); await loadTasks(); }
 }
-function showStart() { toggleChanges(false); syncChangesSession(); $('toggle-changes').classList.add('hidden'); $('start-state').classList.remove('hidden'); $('conversation-view').classList.add('hidden'); }
-function showChat() { $('toggle-changes').classList.remove('hidden'); $('start-state').classList.add('hidden'); $('conversation-view').classList.remove('hidden'); }
+const composerHeightKey = 'forge.composerHeight.v1';
+const savedComposerHeight = stored(composerHeightKey, null);
+let composerHeight = Number.isFinite(savedComposerHeight) && savedComposerHeight >= 64 && savedComposerHeight <= 600 ? savedComposerHeight : null;
+function resizeComposerInputs() {
+  ['prompt', 'followup-prompt'].forEach((id) => {
+    const input = $(id), handle = input.form.querySelector('.composer-resize');
+    input.style.height = composerHeight === null ? '' : composerHeight + 'px';
+    if (!input.clientWidth) return;
+    const style = getComputedStyle(input);
+    handle.setAttribute('aria-valuemin', Math.round(parseFloat(style.minHeight)));
+    handle.setAttribute('aria-valuemax', Math.round(parseFloat(style.maxHeight)));
+    handle.setAttribute('aria-valuenow', Math.round(input.getBoundingClientRect().height));
+  });
+}
+function setComposerHeight(input, height) {
+  const style = getComputedStyle(input);
+  composerHeight = Math.round(Math.max(parseFloat(style.minHeight), Math.min(parseFloat(style.maxHeight), height)));
+  resizeComposerInputs();
+}
+document.querySelectorAll('.composer-resize').forEach((handle) => {
+  const input = $(handle.getAttribute('aria-controls'));
+  let drag = null;
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault(); handle.focus({ preventScroll: true });
+    drag = { pointer: event.pointerId, y: event.clientY, height: input.getBoundingClientRect().height, previous: composerHeight };
+    handle.setPointerCapture(event.pointerId); handle.classList.add('dragging');
+  });
+  handle.addEventListener('pointermove', (event) => { if (drag?.pointer === event.pointerId) setComposerHeight(input, drag.height + drag.y - event.clientY); });
+  handle.addEventListener('pointerup', (event) => {
+    if (drag?.pointer !== event.pointerId) return;
+    saveStored(composerHeightKey, composerHeight); drag = null; handle.classList.remove('dragging'); handle.releasePointerCapture(event.pointerId);
+  });
+  handle.addEventListener('lostpointercapture', () => { if (drag) { composerHeight = drag.previous; drag = null; handle.classList.remove('dragging'); resizeComposerInputs(); } });
+  handle.addEventListener('dblclick', () => { composerHeight = null; saveStored(composerHeightKey, null); resizeComposerInputs(); });
+  handle.addEventListener('keydown', (event) => {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); const style = getComputedStyle(input), current = input.getBoundingClientRect().height;
+    const height = event.key === 'Home' ? parseFloat(style.minHeight) : event.key === 'End' ? parseFloat(style.maxHeight) : current + (event.key === 'ArrowUp' ? 28 : -28);
+    setComposerHeight(input, height); saveStored(composerHeightKey, composerHeight);
+  });
+});
+function showStart() { closeSubagent(); renderSubagents([]); toggleChanges(false); syncChangesSession(); $('toggle-changes').classList.add('hidden'); $('start-state').classList.remove('hidden'); $('conversation-view').classList.add('hidden'); resizeComposerInputs(); }
+function showChat() { $('toggle-changes').classList.remove('hidden'); $('start-state').classList.add('hidden'); $('conversation-view').classList.remove('hidden'); resizeComposerInputs(); }
 function continuationKind() {
   if (!state.sessionId || state.running || state.readOnly || historyReadOnly()) return null;
   if (state.task) return ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status) && state.mode === 'agent' ? 'task' : null;
@@ -197,7 +270,7 @@ function continuationKind() {
 }
 function renderComposerControl() {
   const stopping = state.runControl === 'stopping', resuming = state.runControl === 'resuming';
-  const continuation = continuationKind(), draft = Boolean($('followup-prompt').value.trim());
+  const continuation = continuationKind(), draft = Boolean($('followup-prompt').value.trim() || state.attachments.length || state.attachmentReading);
   const compactLocked = state.compacting || state.compactRequest;
   const showStop = state.running || stopping, showResume = !showStop && (resuming || Boolean(continuation && !draft));
   const canEditRetry = !showStop && !state.readOnly && !historyReadOnly() && Boolean(state.lastUserEntryId && state.forkableEntries.has(state.lastUserEntryId)) && (state.outcome === 'failed' || state.outcome === 'aborted' || ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task?.status));
@@ -216,13 +289,14 @@ function renderComposerControl() {
   const status = $('composer-control-status');
   status.textContent = stopping ? '正在停止…' : '';
   status.classList.toggle('hidden', !stopping);
+  resizeComposerInputs();
 }
 function setRunning(value) {
   state.running = value;
   const locked = value || state.compacting || state.compactRequest || state.loadingSession || Boolean(state.changingMode) || state.changingConfig || state.sending || Boolean(state.runControl) || state.historyBusy;
   const executionLocked = state.compacting || state.compactRequest || state.loadingSession || Boolean(state.changingMode) || state.changingConfig || state.sending || Boolean(state.runControl);
-  $('run-button').disabled = locked;
-  $('followup-send').disabled = locked || state.readOnly || historyReadOnly();
+  $('run-button').disabled = locked || state.attachmentReading;
+  $('followup-send').disabled = locked || state.attachmentReading || state.readOnly || historyReadOnly();
   $('new-chat-button').disabled = locked;
   $('conversation-menu-button').disabled = locked;
   $('history-filter').disabled = locked;
@@ -245,10 +319,10 @@ function setRunning(value) {
   if (locked) closeModePicker();
   ['workflow-select', 'followup-workflow-select'].forEach((id) => { if ($(id)) $(id).disabled = locked || state.mode !== 'agent'; });
   ['settings-button', 'new-chat-button', 'brand-button', 'history-search-button', 'history-search-close', 'add-project-button', 'project-selector', 'followup-project-selector'].forEach((id) => { if ($(id)) $(id).disabled = locked; });
-  document.querySelectorAll('[data-file-picker], [data-image-picker]').forEach((button) => { button.disabled = locked; });
+  document.querySelectorAll('[data-file-picker], [data-upload-picker]').forEach((button) => { button.disabled = locked || state.attachmentReading || historyReadOnly() || (button.hasAttribute('data-file-picker') && !state.project); });
   $('history-query').disabled = locked;
   $('project-list').inert = locked;
-  document.querySelectorAll('[data-project-new]').forEach((button) => { button.disabled = locked; });
+  document.querySelectorAll('[data-project-new], [data-project-menu]').forEach((button) => { button.disabled = locked; });
   $('drawer-body').inert = locked;
   $('folder-modal').inert = locked;
   if (!value && state.elapsedTimer) { clearInterval(state.elapsedTimer); state.elapsedTimer = null; }
@@ -260,15 +334,19 @@ function setRunning(value) {
   if (state.commandInput) renderCommandPicker();
 }
 function setProject(project) {
-  state.project = project ? { path: project.path, name: project.name || shortPath(project.path), trust: project.trust } : null;
-  $('current-project-name').textContent = state.project ? state.project.name : '选择项目';
-  $('current-project-path').textContent = state.project ? state.project.path : '';
-  $('project-selector-label').textContent = state.project ? state.project.name : '选择文件夹';
+  const changed = !samePath(state.project?.path, project?.path);
+  state.project = project ? { ...state.projects.find((item) => samePath(item.path, project.path)), ...project, name: project.name || shortPath(project.path) } : null;
+  $('current-project-name').textContent = state.project ? state.project.name : '新对话';
+  $('current-project-path').textContent = state.project ? state.project.path : '未选择项目 · 发送时自动创建';
+  $('project-selector-label').textContent = state.project ? state.project.name : '自动创建项目';
   $('followup-project-label').textContent = state.project ? state.project.name : '当前项目';
   state.trust = project && project.trust ? project.trust : null;
   renderTrust();
+  saveStored('forge.selectedProject.v1', state.project?.path || null);
+  $('project-selector').title = state.project?.path || '发送时在 Forge 项目目录自动创建，也可选择已有文件夹';
+  document.querySelectorAll('[data-file-picker]').forEach((button) => { button.disabled = !state.project || historyLocked(); });
+  if (!state.sessionId && changed) { state.attachmentGeneration++; state.projectRequestId = null; state.attachments = state.attachments.filter((item) => item.type !== 'file'); renderAttachments(); }
   if (state.project) {
-    saveStored('pforge.project', state.project.path);
     const recent = stored('pforge.recentProjects', []);
     saveStored('pforge.recentProjects', [state.project, ...(Array.isArray(recent) ? recent : []).filter((item) => item.path && !samePath(item.path, state.project.path))].slice(0, 20));
   }
@@ -423,7 +501,8 @@ function renderProjects() {
       const active = state.sessionPath && samePath(state.sessionPath, session.path);
       return '<div class="session-row ' + (active ? 'active' : '') + '"><button type="button" class="session-item ' + (active ? 'active' : '') + '" data-session="' + esc(session.path) + '" ' + (active ? 'aria-current="page" ' : '') + 'title="' + esc(session.title) + '"><span class="session-icon">' + icon(session.fork ? 'branch' : 'chat') + '</span><span class="session-summary"><span class="session-title">' + (session.pinned ? '<span class="session-pin" title="已置顶">' + icon('pin') + '</span>' : '') + esc(session.title || '未命名对话') + '</span><small>' + esc(new Date(session.updatedAt).toLocaleDateString() + ' ' + formatTime(session.updatedAt)) + '</small></span></button><button type="button" class="session-more icon-button small" data-session-menu="' + esc(session.path) + '" aria-label="会话操作：' + esc(session.title) + '" title="会话操作" aria-haspopup="menu" aria-controls="session-menu" aria-expanded="false">' + icon('more') + '</button></div>';
     }).join('');
-    return '<div class="project-group ' + (open ? 'open ' : '') + (current ? 'current' : '') + '" data-project="' + esc(project.path) + '"><div class="project-row"><button type="button" class="project-toggle" aria-expanded="' + open + '" data-project-toggle="' + esc(project.path) + '" title="' + esc(project.path) + '"><span class="project-chevron">' + icon('chevron') + '</span><span class="project-icon">' + icon('folder') + '</span><span class="project-name">' + esc(project.name || shortPath(project.path)) + '</span><span class="project-count">' + visible.length + '</span></button><button type="button" class="project-new-chat icon-button small" data-project-new="' + esc(project.path) + '" title="在此项目新建会话" aria-label="在 ' + esc(project.name || shortPath(project.path)) + ' 中新建会话">' + icon('newChat') + '</button></div><div class="session-list">' + (sessions || '<div class="empty-sessions">' + (query ? '没有匹配的会话' : '还没有对话') + '</div>') + '</div></div>';
+    const projectMenu = '<button type="button" class="project-menu-button icon-button small" data-project-menu="' + esc(project.path) + '" title="项目操作" aria-label="项目操作：' + esc(project.name || shortPath(project.path)) + '" aria-haspopup="menu" aria-controls="session-menu" aria-expanded="false">' + icon('more') + '</button>';
+    return '<div class="project-group ' + (open ? 'open ' : '') + (current ? 'current' : '') + '" data-project="' + esc(project.path) + '"><div class="project-row"><button type="button" class="project-toggle" aria-expanded="' + open + '" data-project-toggle="' + esc(project.path) + '" title="' + esc(project.path) + '"><span class="project-chevron">' + icon('chevron') + '</span><span class="project-icon">' + icon('folder') + '</span><span class="project-name">' + esc(project.name || shortPath(project.path)) + '</span><span class="project-count">' + visible.length + '</span></button><button type="button" class="project-new-chat icon-button small" data-project-new="' + esc(project.path) + '" title="在此项目新建会话" aria-label="在 ' + esc(project.name || shortPath(project.path)) + ' 中新建会话">' + icon('newChat') + '</button>' + projectMenu + '</div><div class="session-list">' + (sessions || '<div class="empty-sessions">' + (query ? '没有匹配的会话' : '还没有对话') + '</div>') + '</div></div>';
   }).join('') || '<div class="sidebar-empty">' + (state.historyFilter === 'archived' ? '没有已归档会话' : state.historyFilter === 'trashed' ? '回收站为空' : query ? '没有匹配的项目或会话' : '选择一个文件夹开始') + '</div>';
 }
 function findHistory(path) { return state.history.flatMap((project) => project.sessions.map((session) => ({ ...session, project: project.path }))).find((session) => samePath(session.path, path)); }
@@ -446,6 +525,7 @@ function openSessionMenu(target, anchor) {
   if (state.sessionMenu?.anchor === anchor) { closeSessionMenu(true); return; }
   closeSessionMenu(); closeCommandPicker(); closeModelPicker(); closeModePicker(); closeContext();
   state.sessionMenu = { target, anchor }; anchor.setAttribute('aria-expanded', 'true');
+  $('session-menu').setAttribute('aria-label', '会话操作');
   const items = [['rename', 'rename', '重命名']];
   if (target.saved !== false) {
     if (target.status !== 'trashed') items.push([target.pinned ? 'unpin' : 'pin', 'pin', target.pinned ? '取消置顶' : '置顶'], [target.status === 'archived' ? 'restore' : 'archive', target.status === 'archived' ? 'restore' : 'archive', target.status === 'archived' ? '恢复会话' : '归档']);
@@ -455,6 +535,36 @@ function openSessionMenu(target, anchor) {
   if (target.path) items.push(['export-markdown', 'download', '导出 Markdown'], ['export-json', 'download', '导出 JSON']);
   $('session-menu').innerHTML = items.map(([action, symbol, label]) => '<button type="button" role="menuitem" data-history-action="' + action + '" class="' + (action === 'trash' ? 'danger' : '') + '">' + icon(symbol) + '<span>' + label + '</span></button>').join('');
   $('session-menu').classList.remove('hidden'); positionSessionMenu(); $('session-menu').querySelector('button').focus();
+}
+function openProjectMenu(path, anchor) {
+  if (historyLocked()) return;
+  if (state.sessionMenu?.anchor === anchor) { closeSessionMenu(true); return; }
+  closeSessionMenu(); closeCommandPicker(); closeModelPicker(); closeModePicker(); closeContext();
+  state.sessionMenu = { target: { kind: 'project', path, name: state.projects.find((project) => samePath(project.path, path))?.name || shortPath(path) }, anchor };
+  anchor.setAttribute('aria-expanded', 'true');
+  const menu = $('session-menu'); menu.setAttribute('aria-label', '项目操作');
+  menu.innerHTML = '<button type="button" role="menuitem" class="danger" data-project-action="remove">' + icon('trash') + '<span>移除项目</span></button><div class="project-menu-note">保留本机文件与会话，重新打开文件夹即可恢复。</div>';
+  menu.classList.remove('hidden'); positionSessionMenu(); menu.querySelector('button').focus();
+}
+async function removeProject(target) {
+  if (historyLocked() || !target?.path) return;
+  state.historyBusy = true; closeSessionMenu(); setRunning(state.running);
+  try {
+    await api('/api/projects', { method: 'DELETE', body: JSON.stringify({ path: target.path }) });
+    ++projectsRequest; // Discard list requests started before removal.
+    if (samePath(state.project?.path, target.path)) { resetSessionView(); setProject(null); restoreDraft(); showStart(); }
+    state.projects = state.projects.filter((project) => !samePath(project.path, target.path));
+    state.history = state.history.filter((project) => !samePath(project.path, target.path));
+    for (const path of state.expandedProjects) if (samePath(path, target.path)) state.expandedProjects.delete(path);
+    saveStored('pforge.expandedProjects', [...state.expandedProjects]);
+    const recent = stored('pforge.recentProjects', []);
+    saveStored('pforge.recentProjects', (Array.isArray(recent) ? recent : []).filter((project) => !samePath(project.path, target.path)));
+    if (samePath(stored('forge.selectedProject.v1', null), target.path)) saveStored('forge.selectedProject.v1', null);
+    if (samePath(stored('pforge.activeSession', null, sessionStorage)?.project, target.path)) saveStored('pforge.activeSession', null, sessionStorage);
+    renderProjects(); await loadProjects(); $('new-chat-button').focus();
+    toast('已移除 ' + target.name + '，文件与历史会话已保留');
+  } catch (error) { toast(error.message, 'error'); }
+  finally { state.historyBusy = false; setRunning(state.running); }
 }
 async function exportSession(target, format) {
   if (historyLocked() || !target?.path) return;
@@ -537,11 +647,19 @@ async function loadProjects() {
   if (request !== projectsRequest) return;
   const recent = stored('pforge.recentProjects', []);
   state.projects = [...(result[0].projects || [])];
-  for (const project of Array.isArray(recent) ? recent : []) if (typeof project.path === 'string' && !state.projects.some((item) => samePath(item.path, project.path))) state.projects.push(project);
+  state.managedRoot = result[0].managedRoot || ''; state.sessionRoot = result[0].sessionRoot || '';
+  const removed = result[0].removedPaths || [], isRemoved = (path) => path && removed.some((item) => samePath(item, path));
+  const visibleRecent = (Array.isArray(recent) ? recent : []).filter((project) => !isRemoved(project.path));
+  if (visibleRecent.length !== (Array.isArray(recent) ? recent.length : 0)) saveStored('pforge.recentProjects', visibleRecent);
+  for (const project of visibleRecent) if (typeof project.path === 'string' && !state.projects.some((item) => samePath(item.path, project.path))) state.projects.push(project);
   state.history = result[1].projects || [];
-  const saved = stored('pforge.project', null);
+  for (const group of state.history) if (!state.projects.some((project) => samePath(project.path, group.path))) state.projects.push({ path: group.path, name: group.name });
+  if (isRemoved(state.project?.path) && !state.running) { resetSessionView(); setProject(null); restoreDraft(); showStart(); }
+  if (isRemoved(stored('forge.selectedProject.v1', null))) saveStored('forge.selectedProject.v1', null);
+  if (isRemoved(stored('pforge.activeSession', null, sessionStorage)?.project)) saveStored('pforge.activeSession', null, sessionStorage);
+  const saved = stored('forge.selectedProject.v1', null);
   const savedProject = saved && state.projects.find((project) => project.path === saved);
-  if (!state.project) { setProject(savedProject || state.projects[0] || (saved ? { path: saved, name: shortPath(saved) } : null)); if (state.project) state.expandedProjects.add(state.project.path); }
+  if (!state.project) { setProject(savedProject?.available === false ? null : savedProject || (saved && state.history.some((group) => samePath(group.path, saved)) ? { path: saved, name: shortPath(saved) } : null)); if (state.project) state.expandedProjects.add(state.project.path); }
   if (state.project) await loadTrust(state.project.path);
   renderProjects();
 }
@@ -676,22 +794,129 @@ function appendThinking(text) {
   state.thinking.querySelector('.turn-text').textContent += text;
   scrollTimeline();
 }
-function toolSummary(input) { if (!input || typeof input !== 'object') return ''; return input.command || input.path || input.pattern || input.query || Object.keys(input).slice(0, 2).join(', '); }
+function toolSummary(input) { if (!input || typeof input !== 'object') return ''; if (Array.isArray(input.tasks)) return input.tasks.map((task) => task.title).join(' · '); return input.command || input.path || input.pattern || input.query || Object.keys(input).slice(0, 2).join(', '); }
 function addTool(event, pending = true) {
   const id = event.toolCallId || event.toolName;
   if (state.tools.has(id)) return state.tools.get(id);
   const row = document.createElement('details'); row.className = 'tool-row';
-  row.innerHTML = '<summary><span class="tool-name">' + esc(event.toolName || 'tool') + '</span><span class="tool-summary">' + esc(toolSummary(event.args)) + '</span><span class="tool-state">' + (pending ? '运行中' : '已记录') + '</span></summary><pre class="tool-args"></pre><pre class="tool-output"></pre>';
+  row.innerHTML = '<summary><span class="tool-name">' + esc(event.toolName === 'subagent' ? '委派子任务' : event.toolName || 'tool') + '</span><span class="tool-summary">' + esc(toolSummary(event.args)) + '</span><span class="tool-state">' + (pending ? '运行中' : '已记录') + '</span></summary><pre class="tool-args"></pre><pre class="tool-output"></pre>';
   row.querySelector('.tool-args').textContent = JSON.stringify(event.args ?? {}, null, 2);
   appendProcessNode(row); state.tools.set(id, row); scrollTimeline(); return row;
 }
 function endTool(event) {
   const row = state.tools.get(event.toolCallId || event.toolName) || addTool(event, false);
   const status = row.querySelector('.tool-state'); status.textContent = event.isError ? '失败' : '完成'; status.className = 'tool-state ' + (event.isError ? 'failed' : 'done');
-  row.querySelector('.tool-output').textContent = textContent(event.result?.content) || '(无文本输出)';
+  const output = textContent(event.result?.content) || '(无文本输出)';
+  let summary = output;
+  if (event.toolName === 'subagent') try { const data = JSON.parse(output); if (Array.isArray(data.agents)) summary = data.agents.map((agent) => agent.title + ' · ' + (SUBAGENT_STATUS[agent.status] || agent.status) + '\n' + (agent.result || agent.error || '')).join('\n\n'); } catch {}
+  row.querySelector('.tool-output').textContent = summary;
   if (event.isError) row.open = true;
 }
-function updateElapsed() { if (!state.runStartedAt) { $('run-elapsed').textContent = ''; return; } const end = state.running ? Date.now() : state.runFinishedAt || state.runStartedAt; const seconds = Math.max(0, Math.floor((end - state.runStartedAt) / 1000)); $('run-elapsed').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); }
+function durationLabel(milliseconds) { const seconds = Math.max(0, Math.floor(milliseconds / 1000)); return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); }
+function renderBudget(budget = state.budget) {
+  const node = $('task-budget');
+  if (!node) return;
+  const visible = Boolean(budget && state.task && !['answer', 'explore'].includes(state.task.kind));
+  node.classList.toggle('hidden', !visible);
+  if (!visible) { node.textContent = ''; return; }
+  const limits = budget.limits || {}, ended = budget.endedAt ? Date.parse(budget.endedAt) : NaN;
+  const started = Date.parse(budget.startedAt), elapsed = Number.isFinite(started) ? (Number.isFinite(ended) ? ended : Date.now()) - started : 0;
+  const status = { running: '预算监控中', completed: '预算已完成', aborted: '预算已停止', exceeded: '预算已用尽' }[budget.status] || '预算';
+  node.dataset.status = budget.status || 'running';
+  node.innerHTML = '<span>' + esc(status) + '</span>'
+    + '<span>回合 ' + formatNumber(budget.modelTurns) + '/' + formatNumber(limits.maxModelTurns) + '</span>'
+    + '<span>工具 ' + formatNumber(budget.toolCalls) + '/' + formatNumber(limits.maxToolCalls) + '</span>'
+    + '<span>Token ' + formatNumber(budget.totalTokens) + '/' + formatNumber(limits.maxTotalTokens) + '</span>'
+    + '<span>$' + Number(budget.costUsd || 0).toFixed(2) + '/$' + Number(limits.maxCostUsd || 0).toFixed(2) + '</span>'
+    + '<span>耗时 ' + durationLabel(elapsed) + '/' + durationLabel(limits.maxDurationMs || 0) + '</span>';
+}
+function updateElapsed() { updateSubagentTiming(); if (!state.runStartedAt) { $('run-elapsed').textContent = ''; renderBudget(); return; } const end = state.running ? Date.now() : state.runFinishedAt || state.runStartedAt; const seconds = Math.max(0, Math.floor((end - state.runStartedAt) / 1000)); $('run-elapsed').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); renderBudget(); }
+const SUBAGENT_STATUS = { starting: '启动中', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已停止', interrupted: '已中断' };
+function subagentRunning(agent) { return ['starting', 'running'].includes(agent.status); }
+function subagentTime(agent) { const seconds = Math.max(0, Math.floor(((agent.endedAt ? Date.parse(agent.endedAt) : Date.now()) - Date.parse(agent.startedAt)) / 1000)); return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); }
+function updateSubagentTiming() {
+  document.querySelectorAll('[data-subagent-time]').forEach((node) => { const agent = state.subagents.find((item) => item.id === node.dataset.subagentTime); if (agent) node.textContent = subagentTime(agent); });
+}
+function positionSubagents() { if (!$('subagent-menu').classList.contains('hidden')) positionPicker($('subagent-menu'), $('subagents-button'), 360); }
+function closeSubagentMenu(focus = false) { $('subagent-menu').classList.add('hidden'); $('subagents-button').setAttribute('aria-expanded', 'false'); if (focus) $('subagents-button').focus(); }
+function renderSubagents(agents) {
+  state.subagents = Array.isArray(agents) ? agents : [];
+  const running = state.subagents.filter(subagentRunning).length, button = $('subagents-button');
+  button.classList.toggle('hidden', !state.subagents.length); button.classList.toggle('running', running > 0);
+  button.setAttribute('aria-label', '子任务 ' + state.subagents.length + (running ? '，' + running + ' 个运行中' : ''));
+  $('subagents-count').textContent = running ? running + ' / ' + state.subagents.length : String(state.subagents.length);
+  button.title = '子任务 ' + state.subagents.length + ' · ' + running + ' 个运行中';
+  const list = $('subagent-list'), focusId = document.activeElement?.dataset.subagentOpen;
+  list.innerHTML = state.subagents.map((agent) => '<button type="button" class="subagent-row" data-subagent-open="' + esc(agent.id) + '"><span class="subagent-dot ' + esc(agent.status) + '" aria-hidden="true"></span><span class="subagent-row-label"><strong>' + esc(agent.title) + '</strong><small>' + (agent.role === 'reviewer' ? '审阅' : '探索') + ' · ' + esc(SUBAGENT_STATUS[agent.status] || agent.status) + '</small></span><span class="subagent-row-usage"><span>' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens</span><span data-subagent-time="' + esc(agent.id) + '">' + subagentTime(agent) + '</span></span><span aria-hidden="true">↗</span></button>').join('');
+  if (focusId) [...list.querySelectorAll('[data-subagent-open]')].find((node) => node.dataset.subagentOpen === focusId)?.focus();
+  if (!state.subagents.length) { closeSubagentMenu(); closeSubagent(); }
+  if (state.subagentSelected) {
+    const selected = state.subagents.find((agent) => agent.id === state.subagentSelected);
+    if (!selected) closeSubagent();
+    else { renderSubagentStatus(selected); if (!subagentRunning(selected)) { clearInterval(state.subagentTimer); state.subagentTimer = null; void loadSubagent(); } }
+  }
+  positionSubagents();
+}
+function renderSubagentStatus(agent) {
+  $('subagent-heading').textContent = agent.title;
+  $('subagent-status').textContent = SUBAGENT_STATUS[agent.status] || agent.status;
+  $('subagent-meta').textContent = (agent.role === 'reviewer' ? '审阅' : '探索') + ' · 只读 · ' + agent.model + ' · ' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens';
+  $('subagent-activity').textContent = subagentRunning(agent) ? agent.activity || '正在处理子任务…' : agent.error || '结果已返回主 Agent';
+  $('subagent-stop').classList.toggle('hidden', !subagentRunning(agent));
+}
+function syncSubagentLayout() {
+  const open = Boolean(state.subagentSelected), overlay = open && Boolean(changesMedia?.matches), panel = $('subagent-panel');
+  panel.classList.toggle('hidden', !open); $('workspace-body').classList.toggle('subagent-open', open);
+  $('subagent-backdrop').classList.toggle('hidden', !overlay);
+  if (overlay) { panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); }
+  else { panel.removeAttribute('role'); panel.removeAttribute('aria-modal'); }
+  ['chat-pane', 'workspace-header', 'sidebar'].forEach((id) => { $(id).inert = overlay || Boolean(state.changes.open && changesMedia?.matches); });
+}
+function closeSubagent(focus = false) {
+  state.subagentSelected = null; state.subagentRequest++; clearInterval(state.subagentTimer); state.subagentTimer = null;
+  syncSubagentLayout(); if (focus) $('subagents-button').focus();
+}
+async function openSubagent(id) {
+  if (!state.subagents.some((agent) => agent.id === id)) return;
+  toggleChanges(false); closeSubagentMenu(); closeModelPicker(); closeModePicker();
+  state.subagentSelected = id; syncSubagentLayout(); $('subagent-detail').textContent = '正在读取子会话…'; $('subagent-close').focus();
+  renderSubagentStatus(state.subagents.find((agent) => agent.id === id));
+  clearInterval(state.subagentTimer);
+  state.subagentTimer = setInterval(() => { if (!document.hidden) void loadSubagent(); }, 2000);
+  await loadSubagent();
+}
+async function loadSubagent() {
+  const sessionId = state.sessionId, id = state.subagentSelected, request = ++state.subagentRequest;
+  if (!sessionId || !id) return;
+  try {
+    const data = await api('/api/sessions/' + sessionId + '/subagents?agent=' + encodeURIComponent(id));
+    if (request !== state.subagentRequest || state.sessionId !== sessionId || state.subagentSelected !== id) return;
+    renderSubagentStatus(data.agent);
+    const container = $('subagent-detail'), scroll = container.scrollTop, nearEnd = container.scrollHeight - scroll - container.clientHeight < 100;
+    const expanded = new Set([...container.querySelectorAll('details[open]')].map((node) => node.dataset.key));
+    container.replaceChildren();
+    const task = document.createElement('details'); task.className = 'subagent-task'; task.dataset.key = 'task';
+    const summary = document.createElement('summary'); summary.textContent = '任务说明'; task.append(summary);
+    const prompt = document.createElement('div'); prompt.textContent = data.prompt || ''; task.append(prompt); container.append(task);
+    for (const [index, message] of (data.messages || []).entries()) {
+      if (message.role === 'user') continue;
+      for (const [partIndex, part] of (typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content || []).entries()) {
+        if (part.type === 'text' && message.role === 'assistant') { const row = document.createElement('div'); row.className = 'subagent-response markdown'; renderMarkdown(row, part.text); container.append(row); }
+        else {
+          const fold = document.createElement('details'); fold.className = 'subagent-process'; fold.dataset.key = index + '-' + partIndex;
+          const label = document.createElement('summary'); label.textContent = part.type === 'thinking' ? '思考过程' : part.type === 'toolCall' ? part.name : (message.toolName || '工具') + (message.isError ? ' · 失败' : ' · 输出');
+          const text = document.createElement('pre'); text.textContent = part.type === 'toolCall' ? part.arguments : part.text || '';
+          fold.append(label, text); container.append(fold);
+        }
+      }
+    }
+    if (data.partialText) { const partial = document.createElement('div'); partial.className = 'subagent-response markdown'; renderMarkdown(partial, data.partialText); container.append(partial); }
+    if (data.historyError) { const note = document.createElement('p'); note.textContent = data.historyError; container.append(note); }
+    container.querySelectorAll('details').forEach((node) => { node.open = expanded.has(node.dataset.key); });
+    container.scrollTop = nearEnd ? container.scrollHeight : scroll;
+    if (!subagentRunning(data.agent)) { clearInterval(state.subagentTimer); state.subagentTimer = null; }
+  } catch (error) { if (request === state.subagentRequest) $('subagent-detail').textContent = '读取失败：' + error.message; }
+}
 function renderSessionMeta(data = {}) { const model = data.model || state.model; $('conversation-meta').textContent = model ? (model.providerName || model.provider) + ' · ' + model.name : ''; }
 function tokenLabel(value) { return value >= 1_000_000 ? Number((value / 1_000_000).toFixed(1)) + 'M' : value >= 1000 ? Number((value / 1000).toFixed(1)) + 'k' : formatNumber(value); }
 function contextPercent(value) { return value > 0 && value < 0.1 ? '<0.1%' : (value < 10 ? Number(value.toFixed(1)) : Math.round(value)) + '%'; }
@@ -1004,14 +1229,16 @@ async function changeWorkflow(value) {
 }
 function renderTask(task) {
   state.task = task || null;
+  if (task?.budget) state.budget = task.budget;
   const showTaskPanel = Boolean(task && !['answer', 'explore'].includes(task.kind));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
-  if (!task) { renderComposerControl(); return; }
-  const phases = task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
+  if (!task) { renderBudget(null); renderComposerControl(); return; }
+  const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  $('task-note').textContent = task.status === 'running' ? '正在' + TASK_LABELS[task.phase] + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'budget_exceeded' ? '执行预算已用尽，可以调整设置后重新检查。' : task.status === 'completed' ? task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
+  $('task-note').textContent = task.status === 'running' ? (task.workflow === 'direct' ? '正在自适应执行' : '正在' + TASK_LABELS[task.phase]) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'budget_exceeded' ? '执行预算已用尽，可以调整设置后重新检查。' : task.status === 'completed' ? task.workflow === 'direct' ? '自适应执行完成。' : task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
   $('task-review').textContent = task.review ? '模型审阅：' + task.review.summary + (task.review.issues?.length ? '\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '') : '审阅尚未完成。';
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
+  renderBudget(task.budget || state.budget);
   setRunning(state.running);
 }
 function renderChangeDiff(text, preserveScroll = false) {
@@ -1042,11 +1269,12 @@ function syncChangesLayout() {
   $('changes-backdrop').classList.toggle('hidden', !overlay);
   if (overlay) { panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); }
   else { panel.removeAttribute('role'); panel.removeAttribute('aria-modal'); }
-  ['chat-pane', 'workspace-header', 'sidebar'].forEach((id) => { $(id).inert = overlay; });
+  ['chat-pane', 'workspace-header', 'sidebar'].forEach((id) => { $(id).inert = overlay || Boolean(state.subagentSelected && changesMedia?.matches); });
   if (overlay && !panel.contains(document.activeElement) && !state.authRequired && !state.uiRequest) $('changes-close').focus();
 }
 function toggleChanges(open, restoreFocus = false) {
   open = Boolean(open && state.sessionId);
+  if (open) closeSubagent();
   if (open) { closeModelPicker(); closeModePicker(); toggleSidebar(false); syncChangesSession(); }
   state.changes.open = open; syncChangesLayout();
   if (open) { renderReviewView(); if (state.changes.reviewView === 'files') void loadProjectFiles(); else if (state.changes.reviewView === 'changes') void loadChanges(); }
@@ -1182,7 +1410,7 @@ async function runReviewTerminal() {
   finally { state.changes.terminalBusy = false; button.disabled = false; $('review-terminal-command').disabled = false; $('review-terminal-timeout').disabled = false; }
 }
 function draftKey() { return 'pforge.draft.' + (state.sessionPath || state.sessionId || 'new@' + (state.project?.path || '')); }
-function rememberDraft() { const input = state.sessionId ? $('followup-prompt') : $('prompt'); const files = state.attachments.filter((item) => item.type === 'file').map((item) => ({ type: 'file', path: item.path })); saveStored(draftKey(), input.value || files.length ? files.length ? { text: input.value || '', attachments: files } : input.value : null, sessionStorage); }
+function rememberDraft() { resizeComposerInputs(); const input = state.sessionId ? $('followup-prompt') : $('prompt'); const files = state.attachments.filter((item) => item.type === 'file').map((item) => ({ type: 'file', path: item.path })); saveStored(draftKey(), input.value || files.length ? files.length ? { text: input.value || '', attachments: files } : input.value : null, sessionStorage); }
 function restoreDraft() {
   const key = draftKey();
   const value = stored(key, '', sessionStorage);
@@ -1198,6 +1426,8 @@ function renderRunStatus(data = state) {
 }
 function applySnapshot(data) {
   if (data.id && data.id !== state.sessionId) return;
+  if (state.subagentSession !== state.sessionId) { closeSubagent(); closeSubagentMenu(); state.subagentSession = state.sessionId; }
+  renderSubagents(data.subagents || []);
   state.outcome = data.outcome || 'idle'; state.error = data.error || null;
   state.sessionPath = data.sessionFile || state.sessionPath;
   if (data.history) state.sessionHistory = data.history;
@@ -1207,6 +1437,8 @@ function applySnapshot(data) {
   state.runStartedAt = data.runningSince || null;
   state.runFinishedAt = data.finishedAt || null;
   if (data.context) state.context = data.context;
+  if ('budget' in data) state.budget = data.budget || data.task?.budget || null;
+  else if (data.task?.budget) state.budget = data.task.budget;
   else if (data.state?.contextUsage) state.context = { usage: data.state.contextUsage, stats: data.state };
   state.compacting = Boolean(state.context?.compacting);
   if (Array.isArray(data.commands)) state.runtimeCommands = data.commands;
@@ -1229,8 +1461,10 @@ function applySnapshot(data) {
 function handleEvent(event) {
   if (event.type === 'pforge_history_changed') { loadProjects().catch(() => {}); return; }
   if (event.type === 'pforge_snapshot') { applySnapshot(event.snapshot); return; }
+  if (event.type === 'forge_subagents') { renderSubagents(event.agents); return; }
   if (event.type === 'pforge_context') { state.context = event.context; state.compacting = Boolean(event.context?.compacting); setRunning(state.running); return; }
-  if (event.type === 'pforge_task') { renderTask(event.task); renderRunStatus(); loadTasks().catch(() => {}); return; }
+  if (event.type === 'pforge_task') { if (event.task?.budget) state.budget = event.task.budget; renderTask(event.task); renderRunStatus(); loadTasks().catch(() => {}); return; }
+  if (event.type === 'pforge_budget') { state.budget = event.budget || null; renderBudget(); return; }
   if (event.type === 'message_start' && event.message?.role === 'user') { renderMessage(event.message); return; }
   if (event.type === 'message_update') { const update = event.assistantMessageEvent; if (update && update.type === 'text_delta') appendAssistant(update.delta, state.task?.phase); if (update && update.type === 'thinking_delta') appendThinking(update.delta); return; }
   if (event.type === 'message_start' && event.message?.role === 'assistant') { flushStreamedMarkdown(); state.assistant = null; state.thinking = null; return; }
@@ -1301,9 +1535,9 @@ function connect(sessionId) {
 }
 async function createSession(sessionFile, title, preserveSessionConfig = false, connectEvents = true) {
   if (state.sessionId) rememberDraft();
-  if (!state.project) throw new Error('请先选择项目文件夹');
   if (!state.model && !sessionFile) throw new Error('请先在设置里配置可用模型');
-  const payload = { project: state.project.path, sessionFile, title };
+  const payload = { ...(state.project ? { project: state.project.path } : {}), sessionFile, title };
+  if (!state.project && !sessionFile) { state.projectRequestId ||= newRequestId(); payload.requestId = state.projectRequestId; }
   if (!sessionFile) payload.mode = state.mode;
   if (!preserveSessionConfig && state.model) { payload.model = state.model.key; payload.thinkingLevel = state.thinkingLevel; }
   if (!sessionFile && state.mode === 'agent') payload.workflow = state.workflow;
@@ -1312,7 +1546,8 @@ async function createSession(sessionFile, title, preserveSessionConfig = false, 
   state.sessionId = created.id;
   state.sessionPath = created.sessionFile || sessionFile || null;
   state.pendingModelKey = null; state.pendingThinkingLevel = null;
-  setProject({ path: created.project, name: shortPath(created.project) });
+  if (!state.projects.some((project) => samePath(project.path, created.project))) await loadProjects();
+  setProject(state.projects.find((project) => samePath(project.path, created.project)) || { path: created.project, name: shortPath(created.project) });
   applySnapshot(created); if (connectEvents) connect(created.id); renderProjects();
   restoreDraft();
   showChat();
@@ -1335,7 +1570,8 @@ async function refreshSessionState() {
   applySnapshot(data);
 }
 async function sendPrompt(prompt, command = false) {
-  if (!prompt.trim() || state.compacting || state.compactRequest || state.running || state.loadingSession || state.changingMode || state.changingConfig) return false;
+  if ((!prompt.trim() && !state.attachments.length) || state.attachmentReading || state.compacting || state.compactRequest || state.running || state.loadingSession || state.changingMode || state.changingConfig) return false;
+  prompt = prompt.trim() ? prompt : '请查看这些附件，并帮助我分析。';
   closeCommandPicker(); closeContext(); closeModelPicker();
   state.loadingSession = true; $('run-button').disabled = true;
   let createdId; const attachments = [...state.attachments];
@@ -1346,7 +1582,7 @@ async function sendPrompt(prompt, command = false) {
     await api('/api/sessions/' + session.id + '/prompt', { method: 'POST', body: JSON.stringify({ message: prompt, workflow: !command && state.mode === 'agent' ? state.workflow : 'direct', ...(command ? { command: true } : {}), ...(attachments.length ? { attachments } : {}) }) });
     state.attachments = []; renderAttachments();
     loadProjects().catch(() => {}); return true;
-  } catch (error) { setRunning(false); toast(error.message, 'error'); if (!state.model) openSettings(); return false; } finally { if (createdId && state.sessionId === createdId) connect(createdId); state.loadingSession = false; setRunning(state.running); }
+  } catch (error) { state.attachments = attachments; renderAttachments(); setRunning(false); toast(error.message, 'error'); if (!state.model) openSettings(); return false; } finally { if (createdId && state.sessionId === createdId) connect(createdId); state.loadingSession = false; setRunning(state.running); }
 }
 async function applyPendingSessionConfig() {
   if (!state.sessionId || state.readOnly) return;
@@ -1359,7 +1595,8 @@ async function applyPendingSessionConfig() {
   state.thinkingLevel = state.activeThinkingLevel; setModel(modelByKey(state.activeModelKey) || state.model);
 }
 async function sendFollowup(prompt, command = false) {
-  if (!prompt.trim() || state.compacting || state.compactRequest || state.running || state.loadingSession || state.changingMode || state.changingConfig || state.sending || state.runControl || state.readOnly || historyReadOnly() || !state.sessionId) return false;
+  if ((!prompt.trim() && !state.attachments.length) || state.attachmentReading || state.compacting || state.compactRequest || state.running || state.loadingSession || state.changingMode || state.changingConfig || state.sending || state.runControl || state.readOnly || historyReadOnly() || !state.sessionId) return false;
+  prompt = prompt.trim() ? prompt : '请查看这些附件，并帮助我分析。';
   closeCommandPicker(); closeContext(); closeModelPicker();
   state.sending = true; setRunning(state.running);
   const attachments = [...state.attachments];
@@ -1405,13 +1642,30 @@ async function openFolder(path = state.project && state.project.path) {
   try {
     const data = await api('/api/directories' + (path ? '?path=' + encodeURIComponent(path) : ''));
     state.folderPath = data.path; state.folderParent = data.parent; $('folder-path').textContent = data.path;
+    $('folder-location').value = data.path;
     $('folder-list').innerHTML = (data.directories || []).map((dir) => '<button class="folder-row" data-folder="' + esc(dir.path) + '"><span>' + icon('folder') + '</span><span>' + esc(dir.name) + '</span><span>›</span></button>').join('') || '<div class="empty-sessions">没有子文件夹</div>';
     $('folder-modal').classList.remove('hidden');
   } catch (error) { toast(error.message, 'error'); }
 }
 function openProjectFolderPicker() {
   if (state.sessionId) { toast('当前对话已绑定项目，请新建对话后切换项目'); return; }
-  return openFolder();
+  $('managed-root-label').textContent = state.managedRoot;
+  $('managed-project-name').value = '';
+  $('folder-error').textContent = '';
+  $('folder-external').classList.add('hidden');
+  $('folder-recent').innerHTML = state.projects.filter((project) => project.available !== false).map((project) => '<button type="button" class="recent-project" data-use-project="' + esc(project.path) + '">' + icon('folder') + '<span><strong>' + esc(project.name) + '</strong><small>' + (project.kind === 'managed' ? 'Forge 管理 · ' : '本机文件夹 · ') + esc(project.path) + '</small></span></button>').join('') || '<p class="settings-note">项目会统一出现在这里和左侧列表。</p>';
+  $('folder-modal').classList.remove('hidden'); $('managed-project-name').focus();
+}
+async function chooseProject(project) {
+  if (!canChangeProject(project?.path)) return;
+  const draft = $('prompt').value;
+  const attachments = state.attachments.filter((item) => item.type !== 'file' || samePath(state.project?.path, project?.path));
+  rememberDraft(); setProject(project); restoreDraft();
+  // Choosing where to send a new message must not discard its text or uploads.
+  // Only references to files in the previous project are tied to that directory.
+  if (draft || attachments.length) { $('prompt').value = draft; state.attachments = attachments; renderAttachments(); rememberDraft(); }
+  if (project) { await loadTrust(project.path); state.expandedProjects.add(project.path); }
+  $('folder-modal').classList.add('hidden'); await loadProjects(); toggleSidebar(false); $('prompt').focus();
 }
 function providerOptions() {
   const ids = Array.from(new Set(state.providers.map((provider) => provider.id)));
@@ -1454,12 +1708,15 @@ async function openSettings(tab, editModel) {
   try {
     state.mcpSettings?.dispose(); state.skillsSettings?.dispose();
     const projectQuery = state.project ? '?project=' + encodeURIComponent(state.project.path) : '';
-    const memoryQuery = state.project ? '?project=' + encodeURIComponent(state.project.path) + (state.sessionId ? '&session=' + encodeURIComponent(state.sessionId) : '') : '';
-    const [config, credentials, settings, mcp, memory] = await Promise.all([api('/api/config' + projectQuery), api('/api/credentials'), api('/api/settings'), api('/api/mcp' + projectQuery), api('/api/memory' + memoryQuery)]);
+    const memoryQuery = state.project ? '?project=' + encodeURIComponent(state.project.path) + (state.sessionId ? '&session=' + encodeURIComponent(state.sessionId) : '') : '?scope=global';
+    const [config, credentials, settings, mcp, memory] = await Promise.all([api('/api/config' + projectQuery), api('/api/credentials'), api('/api/settings'), state.project ? api('/api/mcp' + projectQuery) : Promise.resolve(null), api('/api/memory' + memoryQuery)]);
+    if (!state.project) config.verify = [];
     state.providers = settings.providers || [];
     state.models = settings.models || [];
     const models = settings.models || [];
     const budget = settings.budget || { maxDurationMs: 900000, maxModelTurns: 50, maxToolCalls: 300, maxTotalTokens: 750000, maxCostUsd: 25 };
+    const budgetDiagnostic = settings.budgetValid === false ? settings.budgetDiagnostic || '执行预算配置无效，请重新保存。' : '';
+    const configWarningMarkup = (config.configWarnings || []).length ? '<p class="settings-note warning">' + config.configWarnings.map((warning) => esc(warning)).join('<br>') + '</p>' : '';
     const credentialRows = (credentials.credentials || []).map((item) => '<div class="credential-row"><span>' + esc(item.provider) + '</span><small>' + esc(item.type) + '</small><button class="text-button" data-remove-provider="' + esc(item.provider) + '">移除</button></div>').join('');
     const currentDefault = models.find((model) => model.key === settings.model);
     $('drawer-body').innerHTML =
@@ -1469,8 +1726,8 @@ async function openSettings(tab, editModel) {
       '<div data-settings-panel="memory"><div id="memory-settings"></div></div>' +
       '<div data-settings-panel="mcp"><div id="mcp-settings"></div></div>' +
       '<div data-settings-panel="skills"><div id="skills-settings"></div></div>' +
-      '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify 与 verifyRetries。</p><pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
-      '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section><section class="settings-block" id="execution-budget"><div class="settings-heading"><div><h3>执行预算</h3><p>限制单次 Agent 执行的时长、模型回合、工具调用、token 和费用。只影响下一次执行，运行中的任务不会被静默改写。</p></div></div><div class="budget-grid"><label>最长时长（分钟）<input id="budget-duration" type="number" min="1" max="1440" value="' + esc(Math.round((budget.maxDurationMs || 900000) / 60000)) + '"></label><label>模型回合<input id="budget-turns" type="number" min="1" max="1000" value="' + esc(budget.maxModelTurns) + '"></label><label>工具调用<input id="budget-tools" type="number" min="1" max="10000" value="' + esc(budget.maxToolCalls) + '"></label><label>累计 token<input id="budget-tokens" type="number" min="1000" max="100000000" value="' + esc(budget.maxTotalTokens) + '"></label><label>费用上限（美元）<input id="budget-cost" type="number" min="0" max="100000" step="0.01" value="' + esc(budget.maxCostUsd) + '"></label></div><p class="settings-note">token 和费用以模型服务返回的 usage 为准；单次请求可能略微超过上限。超限后 Pi 会停止后续回合，并在任务中心显示原因。</p><button class="button primary small" id="save-agent-budget">保存执行预算</button></section></div>';
+      '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify 与 verifyRetries。</p>' + configWarningMarkup + '<pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
+      '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section><section class="settings-block" id="execution-budget"><div class="settings-heading"><div><h3>执行预算</h3><p>限制单次 Agent 执行的时长、模型回合、工具调用、token 和费用。只影响下一次执行，运行中的任务不会被静默改写。</p></div></div>' + (budgetDiagnostic ? '<p class="settings-note warning">' + esc(budgetDiagnostic) + '</p>' : '') + '<div class="budget-grid"><label>最长时长（分钟）<input id="budget-duration" type="number" min="1" max="1440" value="' + esc(Math.round((budget.maxDurationMs || 900000) / 60000)) + '"></label><label>模型回合<input id="budget-turns" type="number" min="1" max="1000" value="' + esc(budget.maxModelTurns) + '"></label><label>工具调用<input id="budget-tools" type="number" min="1" max="10000" value="' + esc(budget.maxToolCalls) + '"></label><label>累计 token<input id="budget-tokens" type="number" min="1000" max="100000000" value="' + esc(budget.maxTotalTokens) + '"></label><label>费用上限（美元）<input id="budget-cost" type="number" min="0" max="100000" step="0.01" value="' + esc(budget.maxCostUsd) + '"></label></div><p class="settings-note">token 和费用以模型服务返回的 usage 为准；单次请求可能略微超过上限。超限后 Pi 会停止后续回合，并在任务中心显示原因。</p><button class="button primary small" id="save-agent-budget">保存执行预算</button></section></div>';
     const activateTab = (name) => {
       state.settingsTab = name;
       document.querySelectorAll('[data-settings-panel]').forEach((node) => node.classList.toggle('hidden', node.dataset.settingsPanel !== name));
@@ -1478,6 +1735,9 @@ async function openSettings(tab, editModel) {
     };
     $('drawer-body').querySelectorAll('[data-settings-tab]').forEach((button) => { button.onclick = () => activateTab(button.dataset.settingsTab); });
     activateTab(state.settingsTab);
+    const storageInfo = document.createElement('section'); storageInfo.className = 'settings-block';
+    storageInfo.innerHTML = '<h3>项目与会话存储</h3><p>新建对话不预选目录。未选项目就发送时，会在下方创建独立项目；主动打开的本机文件夹在原位置工作。</p><div class="config-row block"><span>Forge 项目目录</span><code>' + esc(state.managedRoot || config.managedProjectsRoot) + '</code></div><div class="config-row block"><span>统一会话目录</span><code>' + esc(state.sessionRoot || config.sessionRoot) + '</code></div>';
+    $('drawer-body').querySelector('[data-settings-panel="project"]').prepend(storageInfo);
     const saveBudget = $('save-agent-budget');
     if (saveBudget) saveBudget.onclick = async () => {
       const value = { maxDurationMs: Number($('budget-duration').value) * 60000, maxModelTurns: Number($('budget-turns').value), maxToolCalls: Number($('budget-tools').value), maxTotalTokens: Number($('budget-tokens').value), maxCostUsd: Number($('budget-cost').value) };
@@ -1491,10 +1751,12 @@ async function openSettings(tab, editModel) {
       project: memory?.project || emptyMemoryDocument('project', state.project?.path || ''),
       session: memory?.session || emptyMemoryDocument('session', state.sessionId || '')
     };
+    const memoryBudget = Array.isArray(memory?.promptBudget) ? memory.promptBudget : [];
+    const memoryBudgetMarkup = memoryBudget.length ? '<div class="memory-budget">本轮注入预算：' + memoryBudget.map((item) => esc(item.layer) + ' ' + esc(String(item.chars)) + '/' + esc(String(item.budget)) + (item.truncated ? '（已截断）' : '')).join(' · ') + '</div>' : '';
     const sessionMemoryEditable = Boolean(state.sessionId && !state.readOnly && !historyReadOnly());
     const renderMemory = () => {
       const compaction = settings.compaction || { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 };
-      $('memory-settings').innerHTML = '<section class="memory-section"><div class="memory-summary"><strong>三层记忆 + Pi 原生上下文</strong><br>全局记忆跨项目复用，项目记忆按文件夹隔离，会话记忆跟随 Pi 会话树和分支。记忆只作为用户参考资料注入，不会获得工具权限。Pi 负责自动压缩，压缩摘要会保留在会话历史中。</div><section class="settings-block memory-compaction"><div class="settings-heading"><div><h3>自动上下文压缩</h3><p>上下文接近窗口上限时由 Pi 自动整理较早内容；原始历史仍可在会话树中查看。</p></div><label class="switch-label"><input type="checkbox" id="memory-auto-compaction" ' + (compaction.enabled !== false ? 'checked' : '') + '> <span>自动压缩</span></label></div><div class="memory-compaction-facts"><span>预留阈值 <strong>' + formatNumber(compaction.reserveTokens) + '</strong> tokens</span><span>保留最近 <strong>' + formatNumber(compaction.keepRecentTokens) + '</strong> tokens</span><span>本会话已压缩 <strong>' + formatNumber(memory?.compaction?.count || 0) + '</strong> 次</span></div><p class="settings-note">关闭后不会触发新的自动压缩，但仍可以在聊天框下方手动压缩。修改设置需要所有会话空闲。</p></section>' + memoryLayerMarkup('global', memoryDocuments.global, true) + memoryLayerMarkup('project', memoryDocuments.project, true) + memoryLayerMarkup('session', memoryDocuments.session, sessionMemoryEditable) + '</section>';
+      $('memory-settings').innerHTML = '<section class="memory-section"><div class="memory-summary"><strong>三层记忆 + Pi 原生上下文</strong><br>全局记忆跨项目复用，项目记忆按文件夹隔离，会话记忆跟随 Pi 会话树和分支。记忆只作为用户参考资料注入，不会获得工具权限。Pi 负责自动压缩，压缩摘要会保留在会话历史中。' + memoryBudgetMarkup + '</div><section class="settings-block memory-compaction"><div class="settings-heading"><div><h3>自动上下文压缩</h3><p>上下文接近窗口上限时由 Pi 自动整理较早内容；原始历史仍可在会话树中查看。</p></div><label class="switch-label"><input type="checkbox" id="memory-auto-compaction" ' + (compaction.enabled !== false ? 'checked' : '') + '> <span>自动压缩</span></label></div><div class="memory-compaction-facts"><span>预留阈值 <strong>' + formatNumber(compaction.reserveTokens) + '</strong> tokens</span><span>保留最近 <strong>' + formatNumber(compaction.keepRecentTokens) + '</strong> tokens</span><span>本会话已压缩 <strong>' + formatNumber(memory?.compaction?.count || 0) + '</strong> 次</span></div><p class="settings-note">关闭后不会触发新的自动压缩，但仍可以在聊天框下方手动压缩。修改设置需要所有会话空闲。</p></section>' + memoryLayerMarkup('global', memoryDocuments.global, true) + (state.project ? memoryLayerMarkup('project', memoryDocuments.project, true) : '<p class="settings-note">选择项目后可管理项目记忆。</p>') + memoryLayerMarkup('session', memoryDocuments.session, sessionMemoryEditable) + '</section>';
       const toggle = $('memory-auto-compaction');
       toggle.onchange = async () => {
         toggle.disabled = true;
@@ -1557,8 +1819,13 @@ async function openSettings(tab, editModel) {
     $('toggle-trust').disabled = state.running || !state.project;
     action('toggle-trust', '更新中…', async () => { if (!state.project) throw new Error('请先选择项目'); const result = await api('/api/projects/trust', { method: 'POST', body: JSON.stringify({ path: state.project.path, trusted: !state.trust?.trusted }) }); state.trust = result.trust; renderTrust(); if (state.sessionId) await refreshSessionState(); await loadProjects(); await openSettings(); });
     await mountCustomProviders($('custom-providers'), { api, esc, setBusy, initialProvider: editModel?.provider, initialModel: editModel?.id, onSaved: async () => { await loadModels(); if (state.sessionId) await refreshSessionState(); await openSettings('provider'); toast('服务已保存，在聊天框下方选择模型与推理强度'); } });
-    state.mcpSettings = mountMcp($('mcp-settings'), { api, esc, initial: mcp, projectPath: state.project?.path || config.cwd, runtimeEnabled: true, isVisible: () => !$('drawer').classList.contains('hidden') && state.settingsTab === 'mcp', onChanged: async () => { await loadProjects(); if (state.sessionId) await refreshSessionState(); } });
-    state.skillsSettings = mountSkills($('skills-settings'), { api, esc, projectPath: state.project?.path || config.cwd, onChanged: async () => { if (state.sessionId) await refreshSessionState(); } });
+    if (state.project) {
+      state.mcpSettings = mountMcp($('mcp-settings'), { api, esc, initial: mcp, projectPath: state.project.path, runtimeEnabled: true, isVisible: () => !$('drawer').classList.contains('hidden') && state.settingsTab === 'mcp', onChanged: async () => { await loadProjects(); if (state.sessionId) await refreshSessionState(); } });
+      state.skillsSettings = mountSkills($('skills-settings'), { api, esc, projectPath: state.project.path, onChanged: async () => { if (state.sessionId) await refreshSessionState(); } });
+    } else {
+      ['mcp-settings', 'skills-settings'].forEach((id) => { $(id).innerHTML = '<section class="settings-block"><h3>先选择一个项目</h3><p>创建或打开项目后，可管理全局与项目资源，并查看实际加载结果。</p><button type="button" class="button quiet" data-settings-choose-project>选择项目</button></section>'; });
+      document.querySelectorAll('[data-settings-choose-project]').forEach((button) => { button.onclick = () => { closeSettings(); openProjectFolderPicker(); }; });
+    }
   } catch (error) { $('drawer-body').textContent = '读取设置失败：' + error.message; toast(error.message, 'error'); }
   finally { state.openingSettings = false; }
 }
@@ -1705,22 +1972,23 @@ async function loadConfig() {
 function resetSessionView() {
   closeSessionMenu(); state.sessionHistory = { status: 'active', pinned: false }; state.forkOrigin = null; state.forkableEntries.clear(); renderHistoryNotice();
   closeCommandPicker(); closeContext();
-  state.context = null; state.runtimeCommands = []; state.compacting = false; state.runStartedAt = null; state.runFinishedAt = null;
+  state.context = null; state.budget = null; state.runtimeCommands = []; state.compacting = false; state.runStartedAt = null; state.runFinishedAt = null;
   cancelStreamedMarkdown();
   rememberDraft(); renderTask(null); toggleChanges(false);
   state.runMode = undefined;
   setWorkflow('direct');
   setMode(stored('pforge.mode', 'agent'));
   state.sessionId = null; state.sessionPath = null; state.lastUserEntryId = null; state.readOnly = false; state.outcome = 'idle'; state.error = null; state.lastEventId = 0; state.uiQueue = []; state.widgets.clear(); state.executionProcess = null; state.turnAnswer = null; state.attachments = [];
+  state.attachmentGeneration++; state.projectRequestId = null;
   if (state.eventSource) state.eventSource.close(); state.eventSource = null;
   saveStored('pforge.activeSession', null, sessionStorage);
   $('prompt').value = ''; $('followup-prompt').value = ''; $('timeline').innerHTML = ''; $('extension-widgets').textContent = ''; renderAttachments(); renderVerification(null); closeUiModal(); setRunning(false); renderProjects();
   restoreDraft();
 }
-async function newConversation() {
+async function newConversation(keepProject = false) {
   if (state.compacting || state.compactRequest || state.running || state.loadingSession || state.changingConfig || state.changingMode || state.sending) { toast('请等待当前操作完成，或先停止正在运行的会话'); return; }
   closeModelPicker(); closeModePicker();
-  resetSessionView(); showStart(); toggleSidebar(false);
+  resetSessionView(); if (keepProject !== true) { setProject(null); restoreDraft(); renderProjects(); } showStart(); toggleSidebar(false);
   try { await loadModels(); } catch (error) { toast(error.message, 'error'); }
   $('prompt').focus();
 }
@@ -1767,10 +2035,18 @@ $('composer').addEventListener('submit', async (event) => {
   event.preventDefault(); if (await handleCommandSubmit($('prompt'))) return; const prompt = $('prompt').value;
   if (await sendPrompt(prompt)) { $('prompt').value = ''; saveStored('pforge.draft.new@' + (state.project?.path || ''), null, sessionStorage); }
   else if (state.sessionId) $('followup-prompt').value = prompt;
+  resizeComposerInputs();
 });
-$('followup-form').addEventListener('submit', async (event) => { event.preventDefault(); if (await handleCommandSubmit($('followup-prompt'))) return; const prompt = $('followup-prompt').value; if (!prompt.trim()) { await resumeExecution(); return; } if (await sendFollowup(prompt)) { $('followup-prompt').value = ''; rememberDraft(); renderComposerControl(); } });
+$('followup-form').addEventListener('submit', async (event) => { event.preventDefault(); if (await handleCommandSubmit($('followup-prompt'))) return; const prompt = $('followup-prompt').value; if (!prompt.trim() && !state.attachments.length) { await resumeExecution(); return; } if (await sendFollowup(prompt)) { $('followup-prompt').value = ''; rememberDraft(); renderComposerControl(); } });
 ['prompt', 'followup-prompt'].forEach((id) => $(id).addEventListener('input', () => { rememberDraft(); renderComposerControl(); state.commandIndex = 0; updateCommandPicker($(id)); }));
 window.addEventListener('pagehide', rememberDraft);
+window.addEventListener('resize', () => resizeComposerInputs());
+window.visualViewport?.addEventListener('resize', () => resizeComposerInputs(true));
+if (window.ResizeObserver) {
+  const composerObserver = new ResizeObserver(() => resizeComposerInputs());
+  ['prompt', 'followup-prompt'].forEach((id) => composerObserver.observe($(id)));
+}
+document.fonts?.ready.then(() => resizeComposerInputs(true));
 ['prompt', 'followup-prompt'].forEach((id) => $(id).addEventListener('keydown', (event) => {
   if (commandKeydown(event, $(id))) return;
   if (event.key === 'Tab' && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) { event.preventDefault(); const modes = Object.keys(MODES); void changeMode(modes[(modes.indexOf(state.mode) + 1) % modes.length]); }
@@ -1792,7 +2068,7 @@ $('mode-picker').addEventListener('keydown', (event) => {
 });
 $('mode-picker').addEventListener('click', async (event) => { const option = event.target.closest('[data-choose-mode]'); if (!option) return; closeModePicker(true); await changeModeSelection(option.dataset.chooseMode); });
 ['workflow-select', 'followup-workflow-select'].forEach((id) => $(id)?.addEventListener('change', (event) => setWorkflow(event.target.value)));
-document.querySelectorAll('.suggestion').forEach((button) => button.addEventListener('click', () => { $('prompt').value = button.textContent; $('prompt').focus(); }));
+document.querySelectorAll('.suggestion').forEach((button) => button.addEventListener('click', () => { $('prompt').value = button.textContent; rememberDraft(); $('prompt').focus(); }));
 $('model-picker-button').addEventListener('click', (event) => toggleModelPicker(event.currentTarget));
 $('followup-model-picker-button').addEventListener('click', (event) => toggleModelPicker(event.currentTarget));
 $('chat-model-search').addEventListener('input', renderModelOptions);
@@ -1815,19 +2091,35 @@ $('add-project-button').addEventListener('click', openProjectFolderPicker);
 $('folder-close').addEventListener('click', () => $('folder-modal').classList.add('hidden'));
 $('folder-up').addEventListener('click', () => state.folderParent && openFolder(state.folderParent));
 $('folder-list').addEventListener('click', (event) => { const button = event.target.closest('[data-folder]'); if (button) openFolder(button.dataset.folder); });
-$('folder-use').addEventListener('click', async () => { if (!state.folderPath || !canChangeProject(state.folderPath)) return; setProject({ path: state.folderPath, name: shortPath(state.folderPath) }); await loadTrust(state.folderPath); state.expandedProjects.add(state.folderPath); $('folder-modal').classList.add('hidden'); await loadProjects(); toggleSidebar(false); });
+$('folder-use').addEventListener('click', async () => {
+  if (!state.folderPath || !canChangeProject(state.folderPath)) return;
+  setBusy($('folder-use'), true, '打开中…'); $('folder-error').textContent = '';
+  try { const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({ kind: 'external', path: state.folderPath }) }); await chooseProject(result.project); }
+  catch (error) { $('folder-error').textContent = error.message; } finally { setBusy($('folder-use'), false); }
+});
+$('folder-auto').addEventListener('click', () => void chooseProject(null));
+$('folder-browse').addEventListener('click', () => { $('folder-external').classList.remove('hidden'); void openFolder(); });
+$('folder-location-form').addEventListener('submit', (event) => { event.preventDefault(); void openFolder($('folder-location').value.trim()); });
+$('folder-recent').addEventListener('click', (event) => { const button = event.target.closest('[data-use-project]'); if (button) void chooseProject(state.projects.find((project) => samePath(project.path, button.dataset.useProject))); });
+$('managed-project-form').addEventListener('submit', async (event) => {
+  event.preventDefault(); setBusy($('create-managed-project'), true, '创建中…'); $('folder-error').textContent = '';
+  try { const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({ kind: 'managed', name: $('managed-project-name').value.trim() || '新项目', requestId: newRequestId() }) }); await chooseProject(result.project); }
+  catch (error) { $('folder-error').textContent = error.message; } finally { setBusy($('create-managed-project'), false); }
+});
 $('settings-button').addEventListener('click', () => openSettings());
 $('manage-skills').addEventListener('click', () => openSettings('skills'));
 $('setup-model-button').addEventListener('click', () => openSettings('provider'));
 $('drawer-close').addEventListener('click', closeSettings);
 $('drawer-backdrop').addEventListener('click', closeSettings);
 $('project-list').addEventListener('click', (event) => {
+  const projectMenu = event.target.closest('[data-project-menu]');
+  if (projectMenu) { openProjectMenu(projectMenu.dataset.projectMenu, projectMenu); return; }
   const projectNew = event.target.closest('[data-project-new]');
   if (projectNew) {
     const path = projectNew.dataset.projectNew;
     if (state.running || state.loadingSession || state.changingConfig || state.changingMode || state.sending) return;
     const project = state.projects.find((item) => samePath(item.path, path)) || { path, name: shortPath(path) };
-    setProject(project); void loadTrust(path); state.expandedProjects.add(path); saveStored('pforge.expandedProjects', [...state.expandedProjects]); void newConversation();
+    setProject(project); void loadTrust(path); state.expandedProjects.add(path); saveStored('pforge.expandedProjects', [...state.expandedProjects]); void newConversation(true);
     return;
   }
   const more = event.target.closest('[data-session-menu]');
@@ -1843,12 +2135,15 @@ $('project-list').addEventListener('click', (event) => {
   renderProjects();
 });
 $('project-list').addEventListener('contextmenu', (event) => {
+  const projectRow = event.target.closest('.project-row');
+  if (projectRow) { event.preventDefault(); const more = projectRow.querySelector('[data-project-menu]'); openProjectMenu(more.dataset.projectMenu, more); return; }
   const row = event.target.closest('.session-row'); if (!row) return;
   event.preventDefault(); const more = row.querySelector('[data-session-menu]'); openSessionMenu(findHistory(more.dataset.sessionMenu), more);
 });
 $('history-filter').addEventListener('change', (event) => { closeSessionMenu(); state.historyFilter = event.target.value; renderProjects(); });
 $('conversation-menu-button').addEventListener('click', (event) => openSessionMenu(currentHistory(), event.currentTarget));
 $('session-menu').addEventListener('click', (event) => {
+  if (event.target.closest('[data-project-action="remove"]')) { void removeProject(state.sessionMenu?.target); return; }
   const button = event.target.closest('[data-history-action]'), target = state.sessionMenu?.target;
   if (!button || !target) return;
   if (button.dataset.historyAction === 'rename') openRename(target);
@@ -1870,6 +2165,41 @@ $('stop-button').addEventListener('click', () => void stopExecution());
 $('resume-task-button').addEventListener('click', () => void resumeExecution());
 $('edit-retry-button').addEventListener('click', () => { if (state.lastUserEntryId) void forkConversation(state.lastUserEntryId); });
 $('toggle-changes').addEventListener('click', () => toggleChanges(!state.changes.open));
+$('subagents-button').addEventListener('click', () => {
+  const open = $('subagent-menu').classList.contains('hidden');
+  $('subagent-menu').classList.toggle('hidden', !open); $('subagents-button').setAttribute('aria-expanded', String(open));
+  if (open) { positionSubagents(); $('subagent-list').querySelector('button')?.focus(); }
+});
+$('subagent-list').addEventListener('click', (event) => { const row = event.target.closest('[data-subagent-open]'); if (row) void openSubagent(row.dataset.subagentOpen); });
+$('subagent-menu').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeSubagentMenu(true); return; }
+  const rows = [...$('subagent-list').querySelectorAll('button')], index = rows.indexOf(document.activeElement);
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); rows[event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + rows.length) % rows.length]?.focus(); }
+});
+$('subagent-close').addEventListener('click', () => closeSubagent(true));
+$('subagent-backdrop').addEventListener('click', () => closeSubagent(true));
+$('subagent-refresh').addEventListener('click', () => { void loadSubagent(); });
+$('subagent-stop').addEventListener('click', async () => {
+  const sessionId = state.sessionId, id = state.subagentSelected, button = $('subagent-stop'); if (!id) return;
+  setBusy(button, true);
+  try { const data = await api('/api/sessions/' + sessionId + '/subagents', { method: 'POST', body: JSON.stringify({ action: 'stop', id }) }); if (state.sessionId === sessionId) renderSubagents(data.agents); }
+  catch (error) { toast(error.message, 'error'); }
+  finally { setBusy(button, false); }
+});
+$('subagent-panel').addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab' || !changesMedia?.matches) return;
+  const nodes = [...$('subagent-panel').querySelectorAll('button:not(:disabled),[tabindex="0"]')].filter((node) => !node.classList.contains('hidden'));
+  if (event.shiftKey && document.activeElement === nodes[0]) { event.preventDefault(); nodes.at(-1)?.focus(); }
+  else if (!event.shiftKey && document.activeElement === nodes.at(-1)) { event.preventDefault(); nodes[0]?.focus(); }
+});
+document.addEventListener('pointerdown', (event) => { if (!$('subagent-menu').contains(event.target) && !$('subagents-button').contains(event.target)) closeSubagentMenu(); });
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!$('subagent-menu').classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeSubagentMenu(true); }
+  else if (state.subagentSelected && !state.uiRequest && $('drawer').classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeSubagent(true); }
+});
+window.addEventListener('resize', positionSubagents);
+changesMedia?.addEventListener('change', syncSubagentLayout);
 $('changes-close').addEventListener('click', () => toggleChanges(false, true));
 $('changes-backdrop').addEventListener('click', () => toggleChanges(false, true));
 $('refresh-changes').addEventListener('click', () => {
@@ -1971,8 +2301,23 @@ $('file-picker-close').addEventListener('click', closeFilePicker);
 $('file-options').addEventListener('click', (event) => { const option = event.target.closest('[data-file-path]'); if (option) addFileAttachment(option.dataset.filePath); });
 $('file-search').addEventListener('input', () => { void renderFileOptions($('file-search').value); });
 document.querySelectorAll('[data-file-picker]').forEach((button) => button.addEventListener('click', () => openFilePicker(button.dataset.filePicker)));
-document.querySelectorAll('[data-image-picker]').forEach((button) => button.addEventListener('click', () => $(button.dataset.imagePicker + '-image-input').click()));
-['prompt', 'followup'].forEach((name) => $(name + '-image-input').addEventListener('change', async (event) => { try { await addImageAttachment(event.target.files?.[0]); } catch (error) { toast('图片读取失败：' + error.message, 'error'); } finally { event.target.value = ''; } }));
+document.querySelectorAll('[data-upload-picker]').forEach((button) => button.addEventListener('click', () => $(button.dataset.uploadPicker + '-upload-input').click()));
+['prompt', 'followup'].forEach((name) => {
+  $(name + '-upload-input').addEventListener('change', async (event) => { try { await addLocalAttachments(event.target.files); } finally { event.target.value = ''; } });
+  const form = $(name === 'prompt' ? 'composer' : 'followup-form');
+  let dragDepth = 0;
+  form.addEventListener('dragenter', (event) => { if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return; event.preventDefault(); dragDepth++; if (!historyLocked()) form.classList.add('drag-over'); });
+  form.addEventListener('dragover', (event) => { if (Array.from(event.dataTransfer?.types || []).includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = historyLocked() ? 'none' : 'copy'; } });
+  form.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; form.classList.remove('drag-over'); } });
+  form.addEventListener('drop', (event) => { event.preventDefault(); dragDepth = 0; form.classList.remove('drag-over'); void addLocalAttachments(event.dataTransfer?.files); });
+  $(name === 'prompt' ? 'prompt' : 'followup-prompt').addEventListener('paste', (event) => {
+    const images = Array.from(event.clipboardData?.items || []).filter((item) => item.kind === 'file' && item.type.startsWith('image/')).map((item) => item.getAsFile()).filter(Boolean);
+    if (images.length) { event.preventDefault(); void addLocalAttachments(images); }
+  });
+});
+// Keep a file dropped outside the composer from navigating away and losing the draft.
+document.addEventListener('dragover', (event) => { if (Array.from(event.dataTransfer?.types || []).includes('Files')) event.preventDefault(); });
+document.addEventListener('drop', (event) => { if (event.dataTransfer?.files?.length) event.preventDefault(); });
 document.querySelectorAll('.attachment-tray').forEach((tray) => tray.addEventListener('click', (event) => { const button = event.target.closest('[data-remove-attachment]'); if (button) removeAttachment(Number(button.dataset.removeAttachment)); }));
 $('history-search-button').addEventListener('click', () => { $('history-search').classList.toggle('hidden'); $('history-query').focus(); });
 $('history-search-close').addEventListener('click', () => { $('history-query').value = ''; state.historyQuery = ''; $('history-search').classList.add('hidden'); renderProjects(); });

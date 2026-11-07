@@ -9,15 +9,26 @@ answer different questions and must not be combined into a frontier-performance 
 | `npm run check` | Types, active regression tests, build and CLI/bin integration. |
 | `npm run test:web` | A real Chromium browser can operate the local Web client against a local fixture model. |
 | `npm run eval:smoke` | Five scripted solutions execute through actual Pi tools and forge-agent's workflow, then pass independent assertions and completion checks. No model coding judgment is measured. |
-| `npm run eval:agent -- --model provider/model --workflow direct` | Runs the five public tasks through adaptive/direct execution against the selected real model, using configured Pi credentials. This sends task content to that provider and incurs its usage. |
+| `npm run eval:agent -- --model provider/model --workflow direct` | Runs the five public tasks through adaptive/direct execution against the selected real model. The evaluator copies the selected Forge model catalog and credentials into an isolated evaluation home, sends task content to that provider, and incurs its usage. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | Runs the same tasks through the explicit staged workflow for comparison. |
 | `npm run eval:agent -- --model provider/model --workflow both --repeat 3` | Repeats both workflows with the same task set and records run number, variance-relevant metadata, and aggregate metrics. |
+
+Before a real run starts, the harness performs one model-availability check. By
+default it reads the current Forge home; use `--config-home <path>` to choose a
+different source. It copies only `models.json` and `auth.json` into the isolated
+home, never reuses the source session or task directories, and fails before the
+first task when the requested model is unavailable. Credentials are not printed
+or included in the report. Pass `--home <path>` when the isolated evaluation
+home itself should be retained; with an explicit `--home`, populate it first or
+combine it with `--config-home`.
 
 Results are written to `.forge-agent/evals/<timestamp>/report.json`, with one evidence
 file per task. Reports distinguish `scripted-smoke` and `real-model` explicitly.
 Each task reports `heldOutPass`, `verificationGate`, `workspaceIntegrity`,
 `taskCompletion`, and `qualityPass`, alongside latency, repairs, tool calls,
-tokens, cost, and Pi session statistics. The report also includes the Git
+tokens, cost, and Pi session statistics. Execution budget totals include model
+turns, tool calls, tokens, and cost charged by managed read-only child agents;
+the parent Pi transcript statistics remain available separately. The report also includes the Git
 revision, suite version and fingerprint, Node/platform/Pi versions, workflow,
 repeat number, p50/p95 latency, and aggregate rates for these gates. The
 workspace and evaluation home are isolated by default; use `--home` when a
@@ -38,6 +49,9 @@ repeat them when variance matters:
 npm run eval:agent -- --model provider/model --workflow direct
 npm run eval:agent -- --model provider/model --workflow planned
 npm run eval:agent -- --model provider/model --workflow both --repeat 3
+
+# If the credentials live in another Forge home:
+npm run eval:agent -- --model provider/model --config-home C:\path\to\forge-home --workflow both
 ```
 
 Compare actual task assertions, unrelated changes, gate failures, repair count,

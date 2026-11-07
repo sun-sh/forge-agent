@@ -83,6 +83,9 @@ describe('Web working modes with real Pi sessions', () => {
       expect(system(index)).toContain('in the user\'s browser');
       expect(system(index)).not.toContain('operating inside pi, a coding agent harness');
       expect(system(index)).toContain('Pi Coding Agent runtime');
+      expect(system(index)).toContain('Do not turn a greeting into a product introduction');
+      expect(system(index)).toContain('Do not volunteer absolute project paths');
+      expect(system(index)).toContain('Provide these details accurately when the user asks for them');
       expect(system(index)).toContain('PROJECT_IDENTITY_CONTEXT');
       expect(system(index)).toContain('<rules>');
     }
@@ -101,6 +104,9 @@ describe('Web working modes with real Pi sessions', () => {
     expect(system(3)).toContain('You are Forge Agent');
     expect(system(3)).toContain('Pi Coding Agent runtime');
     expect(system(3)).toContain('in the user\'s browser');
+    expect(system(3)).toContain('Do not turn a greeting into a product introduction');
+    expect(system(3)).toContain('Do not volunteer absolute project paths');
+    expect(system(3)).toContain('Provide these details accurately when the user asks for them');
     expect(system(3)).not.toContain('operating inside pi, a coding agent harness');
     expect(f.requests[3].tools.map((tool: any) => tool.function.name)).not.toContain('write');
   });
@@ -235,7 +241,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(session.workflow).toBe('direct');
     await f.api('sessions/' + session.id + '/prompt', { message: 'Fix the task' });
     const state = await f.settled(session.id);
-    expect(state.task).toBeUndefined(); expect(f.requests).toHaveLength(1);
+    expect(state.task).toMatchObject({ workflow: 'direct', kind: 'change', status: 'completed', phase: 'complete', budget: { status: 'completed' } }); expect(f.requests).toHaveLength(1);
     expect(f.requests[0].tools.map((tool: any) => tool.function.name)).toContain('write');
     expect(state.verification.status).toBe('passed');
   });
@@ -259,7 +265,7 @@ describe('Web working modes with real Pi sessions', () => {
     await f.api('sessions/' + restored.id + '/prompt', { message: 'Fix the next task' });
     const adaptive = await f.settled(restored.id);
     expect(adaptive.workflow).toBe('direct');
-    expect(adaptive.task).toBeUndefined();
+    expect(adaptive.task).toMatchObject({ workflow: 'direct', kind: 'change', status: 'completed', phase: 'complete' });
     expect(f.requests).toHaveLength(2);
   });
   it.each([false, true])('runs verification-only tasks with fresh evidence and no model turns (untrusted: %s)', async (untrusted) => {

@@ -68,6 +68,75 @@ async function mockService() {
 }
 
 describe('Pi third-party provider configuration', () => {
+  it('does not offer or execute built-in models enabled only by inherited environment credentials', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'inherited-test-key');
+    const web = await gateway();
+    const catalog = (await web.request('/api/models')).body;
+    const inherited = catalog.models.find((item: any) => item.provider === 'anthropic');
+    expect(inherited).toBeDefined();
+    expect(inherited.available).toBe(false);
+    expect(catalog.providers.find((item: any) => item.id === 'anthropic').auth).toMatchObject({ configured: false, hasCredential: false });
+    expect((await web.request('/api/settings')).body).toMatchObject({ models: [], model: null });
+    expect((await web.request('/api/settings', { model: inherited.key })).status).toBe(400);
+    expect((await web.request('/api/session', { project, model: inherited.key })).status).toBe(503);
+    expect((await web.request('/api/session', { requestId: 'unconfigured-first-message' })).status).toBe(503);
+    expect(await readdir(home)).not.toContain('projects');
+    expect(await readFile(join(home, 'auth.json'), 'utf8').catch(() => '')).not.toContain('inherited-test-key');
+  });
+
+  it('keeps configured models across refresh and restart without selecting inherited defaults', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'inherited-test-key');
+    await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { 'third-party': {
+      baseUrl: 'http://127.0.0.1:9/v1', api: 'openai-completions', apiKey: 'explicit-test-key', models: [{ id: 'coder-a' }, { id: 'coder-b' }, { id: 'coder-c' }]
+    } } }));
+    const web = await gateway();
+    const inherited = (await web.request('/api/models')).body.models.find((item: any) => item.provider === 'anthropic');
+    await writeFile(join(home, 'settings.json'), JSON.stringify({ defaultProvider: 'anthropic', defaultModel: inherited.id }));
+    const expected = ['third-party/coder-a', 'third-party/coder-b', 'third-party/coder-c'];
+    const settings = (await web.request('/api/settings')).body;
+    expect(settings.models.map((item: any) => item.key)).toEqual(expected);
+    expect(settings.model).toBe(expected[0]);
+    const session = await web.request('/api/session', { project });
+    expect(session.status).toBe(201);
+    expect(session.body.model.provider).toBe('third-party');
+    expect((await web.request('/api/session', { project, model: inherited.key })).status).toBe(409);
+    expect((await web.request('/api/sessions/' + session.body.id + '/model', { model: inherited.key })).status).toBe(400);
+    const originalRefresh = ModelRuntime.prototype.refresh;
+    const refresh = vi.spyOn(ModelRuntime.prototype, 'refresh').mockImplementation(function (this: ModelRuntime, options) {
+      return originalRefresh.call(this, { ...options, allowNetwork: false });
+    });
+    expect((await web.request('/api/models/refresh', {})).body.models.map((item: any) => item.key)).toEqual(expected);
+    expect(refresh.mock.calls.find(([options]) => options?.force)?.[0]?.providers).toEqual(['third-party']);
+    refresh.mockRestore();
+    await web.server.close();
+    const restarted = await gateway();
+    expect((await restarted.request('/api/settings')).body.models.map((item: any) => item.key)).toEqual(expected);
+  });
+
+  it('preserves explicitly configured environment references in models.json', async () => {
+    vi.stubEnv('FORGE_EXPLICIT_TEST_KEY', 'explicit-environment-test-key');
+    await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { 'third-party': {
+      baseUrl: 'http://127.0.0.1:9/v1', api: 'openai-completions', apiKey: '$FORGE_EXPLICIT_TEST_KEY', models: [{ id: 'coder' }]
+    } } }));
+    const web = await gateway();
+    const settings = (await web.request('/api/settings')).body;
+    expect(settings.models.map((item: any) => item.key)).toEqual(['third-party/coder']);
+    expect(settings.providers.find((item: any) => item.id === 'third-party').auth.configured).toBe(true);
+    expect(JSON.stringify(settings)).not.toContain('explicit-environment-test-key');
+  });
+
+  it('enables deliberately saved built-in credentials and removes their models after logout even if environment keys remain', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'inherited-test-key');
+    const web = await gateway();
+    const saved = await web.request('/api/credentials', { provider: 'anthropic', apiKey: 'explicitly-saved-test-key' });
+    expect(saved.status).toBe(200);
+    expect(saved.body.models.some((item: any) => item.provider === 'anthropic')).toBe(true);
+    const response = await fetch(web.origin + '/api/credentials?provider=anthropic', { method: 'DELETE', headers: { 'x-pforge-token': web.server.token } });
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).models).toEqual([]);
+    expect((await web.request('/api/settings')).body.models).toEqual([]);
+  });
+
   it('retains explicit discovery metadata and offers exact catalog templates without guessing capabilities from names', async () => {
     const map = { off: null, minimal: null, low: 'low', medium: null, high: 'high', xhigh: null, max: null };
     const origin = await listen(createServer((_request, response) => response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ data: [

@@ -134,6 +134,11 @@ export class CustomProviders {
     return { source: source.replace(/^\uFEFF/, ''), config };
   }
 
+  async configuredProviderIds(): Promise<string[]> {
+    const { config } = await this.read();
+    return Object.keys(config['providers']);
+  }
+
   async list() {
     const { config } = await this.read();
     return Object.entries(config['providers'] as JsonObject).map(([id, value]) => {

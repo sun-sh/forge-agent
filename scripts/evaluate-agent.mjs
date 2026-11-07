@@ -2,13 +2,15 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { VERSION } from '@earendil-works/pi-coding-agent';
+import { ModelRuntime, VERSION } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../dist/web/server.js';
+import { pforgeHome } from '../dist/pforge-home.js';
 import { tasks } from './eval-tasks.mjs';
 
 const args = process.argv.slice(2), real = args.includes('--real');
@@ -25,14 +27,56 @@ const output = resolve(option('--output', '.forge-agent/evals/' + new Date().toI
 await mkdir(output, { recursive: true });
 const evalHome = resolve(option('--home', join(root, 'home')));
 await mkdir(evalHome, { recursive: true });
+const explicitHome = args.includes('--home');
+const configHome = resolve(option('--config-home', pforgeHome()));
 process.env.FORGE_AGENT_HOME = evalHome; process.env.PFORGE_HOME = evalHome;
 process.env.PI_CODING_AGENT_DIR = evalHome; process.env.PI_CODING_AGENT_SESSION_DIR = join(evalHome, 'sessions');
+let mock;
+
+// The default evaluation home is inside the temporary workspace, so copied
+// credentials and session data disappear with it. An explicitly supplied
+// --home is retained for inspection, but the generated task workspace is
+// still removed after the run.
+const evalHomeIsInsideGeneratedRoot = evalHome === root || evalHome.startsWith(root + '\\') || evalHome.startsWith(root + '/');
+const removeGeneratedRoot = !explicitHome || !evalHomeIsInsideGeneratedRoot;
+let cleanupStarted = false;
+async function cleanup() {
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  if (mock) await new Promise((done) => { mock.close(done); mock.closeAllConnections(); }).catch(() => {});
+  if (removeGeneratedRoot) await rm(root, { recursive: true, force: true }).catch(() => {});
+}
+process.once('exit', () => {
+  // The hook covers failures during model preflight, before the main
+  // evaluation try/finally is entered. Normal completion uses awaited cleanup
+  // below so recursive deletion is allowed to finish.
+  if (cleanupStarted) return;
+  mock?.closeAllConnections?.();
+  if (removeGeneratedRoot) {
+    try { rmSync(root, { recursive: true, force: true }); } catch { /* best effort during process exit */ }
+  }
+});
+
+async function copyIfPresent(name) {
+  try {
+    // Only the model catalog and credential store cross the evaluation
+    // boundary. Sessions, tasks, MCP state and projects remain isolated.
+    await copyFile(join(configHome, name), join(evalHome, name));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw new Error(`无法复制评测配置 ${name}：${error.message}`);
+  }
+}
+
+if (real && (!explicitHome || args.includes('--config-home'))) {
+  await copyIfPresent('models.json');
+  await copyIfPresent('auth.json');
+}
 
 let gitRevision = 'unavailable';
 try { gitRevision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: process.cwd(), windowsHide: true })).stdout.trim() || gitRevision; } catch { /* evaluation can run from a source archive */ }
 const suiteVersion = 'forge-eval-small-repo-v3';
 const suiteFingerprint = createHash('sha256').update(JSON.stringify(tasks)).digest('hex').slice(0, 16);
-let mock, activeTask, requests = 0;
+let activeTask, requests = 0;
 if (!real) {
   mock = createServer(async (request, response) => {
     let raw = ''; for await (const chunk of request) raw += chunk;
@@ -48,6 +92,28 @@ if (!real) {
   });
   await new Promise((done) => mock.listen(0, '127.0.0.1', done));
   await writeFile(join(evalHome, 'models.json'), JSON.stringify({ providers: { eval: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${mock.address().port}/v1`, apiKey: 'isolated-eval-only', models: [{ id: 'mock' }] } } }));
+}
+
+if (real) {
+  const slash = model.indexOf('/');
+  const provider = slash > 0 ? model.slice(0, slash) : '';
+  const modelId = slash > 0 ? model.slice(slash + 1) : '';
+  if (!provider || !modelId) throw new Error(`模型标识无效：${model}。请使用 provider/model，并用 --config-home 指向包含 models.json 与认证信息的 Forge 数据目录。`);
+  let runtime;
+  try {
+    runtime = await ModelRuntime.create({ authPath: join(evalHome, 'auth.json'), modelsPath: join(evalHome, 'models.json'), refreshOnCreate: false });
+    const available = await runtime.getAvailable();
+    if (!available.some((item) => item.provider === provider && item.id === modelId)) {
+      const credentials = await runtime.listCredentials();
+      let configured = credentials.some((item) => item.providerId === provider);
+      try { configured ||= Boolean(runtime.getProviderAuthStatus(provider).configured); } catch { /* Unknown providers are reported below without leaking config. */ }
+      throw new Error(configured
+        ? `模型不可用：${model}。请检查 ${provider} 的 models.json 模型 ID、接口配置或认证状态。`
+        : `没有可用的模型认证：${model}。评测使用隔离副本，请设置 --config-home 指向包含已配置 models.json/auth.json 的数据目录。`);
+    }
+  } catch (error) {
+    throw new Error(`真实模型评测启动检查失败：${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 const results = [];
@@ -92,21 +158,27 @@ try {
     } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
     finally { await gateway.close(); }
     const stats = snapshot?.state ?? null;
+    // Pi's session stats describe the parent transcript. The host budget is
+    // scoped to this execution and includes child-agent turns/tool calls, so
+    // use it as the evaluation total whenever it is available.
+    const executionBudget = snapshot?.budget ?? null;
     const qualityPass = !error && heldOutPass && verificationGate && workspaceIntegrity && taskCompletion;
     const latencyMs = Math.round(performance.now() - started);
     const result = {
       id: task.id, run, workflow, passed: qualityPass, qualityPass, heldOutPass, verificationGate, workspaceIntegrity, taskCompletion, error,
-      durationMs: latencyMs, latencyMs, modelRequests: real ? stats?.assistantMessages ?? null : requests - beforeRequests,
-      tokenUsage: stats?.tokens ?? null, costUsd: typeof stats?.cost === 'number' ? stats.cost : null,
+      durationMs: latencyMs, latencyMs, modelRequests: executionBudget?.modelTurns ?? (real ? stats?.assistantMessages ?? null : requests - beforeRequests),
+      tokenUsage: executionBudget ? { total: executionBudget.totalTokens } : stats?.tokens ?? null,
+      costUsd: executionBudget?.costUsd ?? (typeof stats?.cost === 'number' ? stats.cost : null),
       taskStatus: snapshot?.task?.status ?? snapshot?.outcome, verification: snapshot?.verification?.status,
-      repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: stats?.toolCalls ?? snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0,
+      repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: executionBudget?.toolCalls ?? stats?.toolCalls ?? snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0,
+      executionBudget,
       stats, workspace: project, sessionFile: snapshot?.sessionFile
     };
     results.push(result);
     console.log((result.passed ? 'PASS ' : 'FAIL ') + result.id + ' · ' + workflow + ' · r' + run + ' · ' + result.durationMs + 'ms' + (error ? ' · ' + error : ''));
     await writeFile(join(output, `${task.id}.${workflow}.r${run}.json`), JSON.stringify({ ...result, task: snapshot?.task, verification: snapshot?.verification }, null, 2));
   }
-} finally { if (mock) await new Promise((done) => { mock.close(done); mock.closeAllConnections(); }); }
+} finally { await cleanup(); }
 
 const sortedLatencies = results.map((result) => result.latencyMs).sort((a, b) => a - b);
 const percentile = (value) => sortedLatencies.length ? sortedLatencies[Math.min(sortedLatencies.length - 1, Math.floor((value / 100) * sortedLatencies.length))] : 0;

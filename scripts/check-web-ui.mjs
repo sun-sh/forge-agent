@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -18,6 +18,8 @@ const temporary = await mkdtemp(join(tmpdir(), 'pforge-web-smoke-'));
 const project = join(temporary, 'project'), home = join(temporary, 'home');
 const output = resolve('.forge-agent/web-audit');
 await Promise.all([mkdir(project), mkdir(home), mkdir(output, { recursive: true })]);
+const projectCanonical = await realpath(project).catch(() => project);
+const projectPathExpression = JSON.stringify([project, projectCanonical]);
 await writeFile(join(home, 'settings.json'), JSON.stringify({ compaction: { keepRecentTokens: 256 } }));
 await mkdir(join(project, '.pi', 'skills', 'smoke-review'), { recursive: true });
 await mkdir(join(project, '.pi', 'prompts'), { recursive: true });
@@ -33,11 +35,14 @@ process.env.PFORGE_HOME = home;
 process.env.PI_CODING_AGENT_DIR = home;
 process.env.PI_CODING_AGENT_SESSION_DIR = join(home, 'sessions');
 for (const key of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL_NAME', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME']) delete process.env[key];
+// Reproduce launchers which provide their own credentials without configuring Forge.
+process.env.ANTHROPIC_AUTH_TOKEN = 'isolated-inherited-environment-fixture';
 
 const reply = '## Smoke check passed\n\n**Markdown** and streamed output work.\n\n- Live headings and lists\n- Tables and code while streaming\n\n| Check | Result |\n|---|---|\n| Local agent | OK |\n\n```diff\n-old\n+new\n```';
 let modelRequests = 0;
 let holdNextModel = false;
 const observedEfforts = [];
+const subagentRequests = [];
 const modelServer = createServer(async (request, response) => {
   let raw = ''; for await (const chunk of request) raw += chunk;
   if (request.url?.endsWith('/models')) { response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'mock', name: 'Local test model', reasoning: true, thinkingLevelMap: { off: 'none', minimal: null, low: 'low', medium: null, high: 'high', xhigh: null, max: null } }, { id: 'mock-alt', name: 'Second test model', reasoning: false }] })); return; }
@@ -49,6 +54,25 @@ const modelServer = createServer(async (request, response) => {
   observedEfforts.push(input.reasoning_effort);
   response.writeHead(200, { 'content-type': 'text/event-stream' });
   const send = (delta, finish_reason) => response.write('data: ' + JSON.stringify({ id: 'smoke', object: 'chat.completion.chunk', created: 1, model: input.model, choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage: { prompt_tokens: 240, completion_tokens: 40, total_tokens: 280 } } : {}) }) + '\n\n');
+  if (JSON.stringify(input.messages).includes('forge-subagent-smoke')) {
+    const delegated = JSON.stringify(input.messages.filter((message) => ['system', 'developer'].includes(message.role))).includes("You are Forge Agent's delegated");
+    subagentRequests.push({ delegated, roles: input.messages.map((message) => message.role), text: JSON.stringify(input.messages).slice(0, 32_000) });
+    const hasResult = input.messages.some((message) => message.role === 'tool');
+    if (!hasResult) {
+      const tool = delegated ? { name: 'read', arguments: { path: 'sample.txt' } } : { name: 'subagent', arguments: { tasks: [
+        { title: '探索项目结构', role: 'explorer', prompt: 'forge-subagent-smoke: inspect sample.txt and report the relevant evidence.' },
+        { title: '审阅潜在风险', role: 'reviewer', prompt: 'forge-subagent-smoke slow: review sample.txt for potential issues.' }
+      ] } };
+      send({ role: 'assistant', tool_calls: [{ index: 0, id: 'child-smoke-' + modelRequests, type: 'function', function: { name: tool.name, arguments: JSON.stringify(tool.arguments) } }] });
+      send({}, 'tool_calls'); response.end('data: [DONE]\n\n'); return;
+    }
+    send({ role: 'assistant', content: delegated ? '## 探索结论\n\nsample.txt:1 包含可核对的文件证据。\n\n' : '## 子任务结果已汇总\n\n探索已完成，审阅由用户停止。结论由主 Agent 汇总，子任务过程保留在右侧。' });
+    if (delegated && JSON.stringify(input.messages).includes('forge-subagent-smoke slow')) {
+      await new Promise((done) => { const timer = setTimeout(done, 20000); response.once('close', () => { clearTimeout(timer); done(); }); });
+      if (response.destroyed) return;
+    }
+    send({}, 'stop'); response.end('data: [DONE]\n\n'); return;
+  }
   const held = holdNextModel; holdNextModel = false;
   const split = held && phase !== 'review' ? content.lastIndexOf('```') : 35;
   send({ role: 'assistant', content: content.slice(0, split) });
@@ -75,7 +99,7 @@ const screenshots = [];
 try {
   server = await startWebConsole({ cwd: project, port: 0 });
   const origin = new URL(server.url).origin;
-  const trusted = await fetch(origin + '/api/projects/trust', { method: 'POST', headers: { 'content-type': 'application/json', 'x-pforge-token': server.token }, body: JSON.stringify({ path: project, trusted: true }) });
+  const trusted = await fetch(origin + '/api/projects/trust', { method: 'POST', headers: { 'content-type': 'application/json', 'x-pforge-token': server.token }, body: JSON.stringify({ path: project, trusted: false }) });
   assert.equal(trusted.status, 200);
   child = spawn(executable, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--user-data-dir=' + join(temporary, 'browser'), 'about:blank'], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
   const endpoint = await new Promise((ready, reject) => {
@@ -112,7 +136,36 @@ try {
     await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
   };
   const screenshot = async (name) => { const result = await cdp('Page.captureScreenshot', { format: 'png' }); await writeFile(join(output, name + '.png'), Buffer.from(result.data, 'base64')); screenshots.push(name); };
-  captureFailure = async (error) => { await screenshot('failure'); await writeFile(join(output, 'failure.json'), JSON.stringify({ error: String(error), pageText: await evaluate('document.body.innerText') }, null, 2)); };
+  const fillComposer = (id, value) => evaluate(`(() => { const input = document.getElementById(${JSON.stringify(id)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('input')); })()`);
+  const composerSize = (id) => evaluate(`(() => { const input = document.getElementById(${JSON.stringify(id)}); const style = getComputedStyle(input); return { height: input.getBoundingClientRect().height, scroll: input.scrollHeight, client: input.clientHeight, overflow: style.overflowY, fontSize: parseFloat(style.fontSize) }; })()`);
+  const checkComposerSizing = async (id, maximum, screenshotName) => {
+    const original = await evaluate(`document.getElementById(${JSON.stringify(id)}).value`);
+    await fillComposer(id, '');
+    const short = await composerSize(id);
+    assert.ok(short.fontSize >= 16);
+    await fillComposer(id, '检查长草稿的内部滚动\n'.repeat(80));
+    assert.ok(Math.abs((await composerSize(id)).height - short.height) < 1); // Typing respects the user's chosen height.
+    const handle = `[aria-controls="${id}"].composer-resize`;
+    const point = await evaluate(`(() => { const rect = document.querySelector(${JSON.stringify(handle)}).getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; })()`);
+    await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+    await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'left', buttons: 1, x: point.x, y: point.y - 96 });
+    await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, x: point.x, y: point.y - 96 });
+    const long = await composerSize(id);
+    assert.ok(Math.abs(long.height - short.height - 96) < 1);
+    assert.ok(long.height <= maximum + 1 && long.scroll > long.client + 200);
+    assert.equal(long.overflow, 'auto');
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('forge.composerHeight.v1'))`), Math.round(long.height));
+    await screenshot(screenshotName);
+    await fillComposer(id, '短消息');
+    assert.ok(Math.abs((await composerSize(id)).height - long.height) < 1);
+    await evaluate(`document.querySelector(${JSON.stringify(handle)}).dispatchEvent(new KeyboardEvent('keydown', {key:'Home',bubbles:true,cancelable:true}))`);
+    assert.equal((await composerSize(id)).height, 64);
+    await evaluate(`document.querySelector(${JSON.stringify(handle)}).dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`);
+    assert.ok(Math.abs((await composerSize(id)).height - short.height) < 1);
+    assert.equal(await evaluate(`localStorage.getItem('forge.composerHeight.v1')`), null);
+    await fillComposer(id, original);
+  };
+  captureFailure = async (error) => { await screenshot('failure'); const current = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession') || 'null')`); const snapshot = current?.id ? await (await fetch(origin + '/api/sessions/' + current.id, { headers: { 'x-pforge-token': server.token } })).json() : undefined; await writeFile(join(output, 'failure.json'), JSON.stringify({ error: String(error), pageText: await evaluate('document.body.innerText'), subagents: snapshot?.subagents, subagentRequests }, null, 2)); };
   await cdp('Runtime.enable'); await cdp('Page.enable');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url: origin + '/?token=' + 'expired'.repeat(5) });
@@ -135,8 +188,42 @@ try {
   await waitFor(`document.getElementById('connection-label')?.textContent.includes('已连接')`);
   assert.equal(await evaluate('location.search'), '');
   await screenshot('start');
+  assert.equal(await evaluate("document.getElementById('project-selector-label').textContent"), '自动创建项目');
+  assert.equal(await evaluate("document.getElementById('model-setup-note').classList.contains('hidden')"), false);
+  assert.equal(await evaluate("document.querySelector('.composer-upload-row')"), null);
+  assert.equal(await evaluate("document.querySelector('[data-upload-picker=prompt]').textContent.trim()"), '');
+  assert.equal(await evaluate("(() => { const upload = document.querySelector('[data-upload-picker=prompt]').getBoundingClientRect(); const send = document.getElementById('run-button').getBoundingClientRect(); return Math.abs((upload.top + upload.bottom - send.top - send.bottom) / 2) < 1 && upload.right <= send.left && upload.width <= 32; })()"), true);
+  await checkComposerSizing('prompt', 420, 'composer-resize-start');
+  await fillComposer('prompt', '检查布局与内容自动换行。'.repeat(22));
+  const wideComposer = await composerSize('prompt');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await waitFor(`document.getElementById('prompt').getBoundingClientRect().width < 600`);
+  assert.equal((await composerSize('prompt')).height, wideComposer.height);
+  assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await waitFor(`Math.abs(document.getElementById('prompt').getBoundingClientRect().height - ${wideComposer.height}) < 1`);
+  await fillComposer('prompt', '');
+  await evaluate(`document.querySelector('#composer .composer-resize').dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowUp',bubbles:true,cancelable:true}))`);
+  const preferredHeight = (await composerSize('prompt')).height;
+  await cdp('Page.reload');
+  await waitFor(`document.getElementById('connection-label')?.textContent.includes('已连接')`);
+  assert.equal((await composerSize('prompt')).height, preferredHeight);
+  await evaluate(`document.querySelector('#composer .composer-resize').dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`);
+  assert.equal(existsSync(join(home, 'projects')), false);
+  await click('#project-selector');
+  await waitFor("!document.getElementById('folder-modal').classList.contains('hidden')");
+  await screenshot('project-picker');
+  await click('#folder-browse');
+  await waitFor("!!document.getElementById('folder-location').value");
+  await evaluate(`document.getElementById('folder-location').value = ${JSON.stringify(project)}; document.getElementById('folder-location-form').requestSubmit()`);
+  await waitFor(`${projectPathExpression}.includes(document.getElementById('folder-path').textContent)`);
+  await click('#folder-use');
+  await waitFor("document.getElementById('folder-modal').classList.contains('hidden')");
   await click('#settings-button');
   await waitFor(`!!document.querySelector('#add-custom-provider')`);
+  await click('[data-settings-tab="project"]');
+  await click('#toggle-trust');
+  await waitFor(`document.querySelector('#toggle-trust')?.textContent.includes('撤销信任')`);
   await click('[data-settings-tab="provider"]');
   await click('#add-custom-provider');
   const fill = (id, value) => evaluate('document.getElementById(' + JSON.stringify(id) + ').value = ' + JSON.stringify(value));
@@ -293,6 +380,8 @@ try {
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('#composer .selector-chip')).every(button => { const box=button.getBoundingClientRect();return [...button.children].filter(node=>node.getBoundingClientRect().height>0).every(node=>{const r=node.getBoundingClientRect();return Math.abs((r.top+r.bottom)/2-(box.top+box.bottom)/2)<0.6;});})`), true);
   await screenshot('composer-alignment');
   await click('#model-picker-button');
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[data-choose-model]')].map(node => node.dataset.chooseModel)`), ['mock/mock', 'mock/mock-alt']);
+  await screenshot('configured-models-only');
   await click('[data-choose-model="mock/mock-alt"]');
   await waitFor(`!document.querySelector('#model-picker-button').disabled && document.querySelector('#followup-model-picker-button [data-model-label]').textContent === 'Second test model'`);
   assert.equal(await evaluate(`document.querySelector('#thinking-select').classList.contains('hidden')`), true);
@@ -317,7 +406,9 @@ try {
   await click('#mode-picker-button');
   await click('#project-selector');
   await waitFor(`!document.getElementById('folder-modal').classList.contains('hidden')`);
-  assert.equal(await evaluate(`document.getElementById('folder-path').textContent`), project);
+  await click('#folder-browse');
+  await waitFor(`!document.getElementById('folder-external').classList.contains('hidden')`);
+  assert.ok([project, projectCanonical].includes(await evaluate(`document.getElementById('folder-path').textContent`)));
   await click('#folder-use');
   await waitFor(`document.getElementById('folder-modal').classList.contains('hidden')`);
   await evaluate(`document.getElementById('prompt').value = 'UI smoke test'; document.getElementById('composer').requestSubmit()`);
@@ -327,6 +418,8 @@ try {
   assert.ok((await evaluate(`document.getElementById('verification-output').textContent`)).includes('PASS node --version'));
   assert.equal(await evaluate(`document.querySelectorAll('.diff-add').length`), 1);
   await screenshot('conversation');
+  await checkComposerSizing('followup-prompt', 420, 'composer-resize-followup');
+  assert.equal(await evaluate(`parseFloat(getComputedStyle(document.querySelector('.turn.assistant .turn-text')).fontSize)`), 16);
   assert.equal(observedEfforts.at(-1), 'high');
   // Command controls stay near the composer, discover real Pi resources and do not call a model for local operations.
   const beforeLocalCommands = modelRequests;
@@ -623,6 +716,7 @@ try {
   assert.equal(await evaluate(`document.querySelectorAll('#toast-root > .toast').length <= 2`), true);
   await screenshot('mobile');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  await checkComposerSizing('followup-prompt', 240, 'composer-resize-mobile');
   await evaluate(`document.getElementById('followup-prompt').value=''; document.getElementById('followup-prompt').dispatchEvent(new Event('input'))`);
   await click('#followup-commands-button');
   await waitFor(`!document.getElementById('command-picker').classList.contains('hidden')`);
@@ -685,6 +779,108 @@ try {
   await screenshot('mobile-mcp-editor');
   assert.equal(await evaluate(`document.getElementById('drawer-body').scrollWidth <= document.getElementById('drawer-body').clientWidth`), true);
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  await click('#drawer-close');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await click('#new-chat-button');
+  await waitFor(`!document.getElementById('start-state').classList.contains('hidden') && !document.getElementById('run-button').disabled`);
+  assert.equal(await evaluate(`document.getElementById('project-selector-label').textContent`), '自动创建项目');
+  assert.equal(await evaluate(`document.querySelector('[data-upload-picker="prompt"]').disabled`), false);
+  assert.equal(await evaluate(`document.querySelector('[data-file-picker="prompt"]').disabled`), true);
+  await evaluate(`(() => {
+    const files = new DataTransfer();
+    files.items.add(new File(['export const uploadEvidence = 42;'], 'first-message.ts', {type:'text/plain'}));
+    const input = document.getElementById('prompt-upload-input'); input.files = files.files; input.dispatchEvent(new Event('change'));
+  })()`);
+  await waitFor(`document.querySelector('#prompt-attachments .attachment-chip strong')?.textContent === 'first-message.ts' && !document.querySelector('[data-upload-picker="prompt"]').disabled`);
+  await evaluate(`(async () => {
+    const data = new DataTransfer();
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 48;
+    const context = canvas.getContext('2d'); context.fillStyle = '#28634f'; context.fillRect(0,0,48,48);
+    context.fillStyle = '#dceadf'; context.fillRect(12,12,24,24);
+    const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    data.items.add(new File([png], 'clipboard.png', {type:'image/png'}));
+    document.getElementById('prompt').dispatchEvent(new ClipboardEvent('paste', {bubbles:true,cancelable:true,clipboardData:data}));
+  })()`);
+  await waitFor(`document.querySelector('#prompt-attachments img.attachment-preview')?.naturalWidth === 48 && !document.querySelector('[data-upload-picker="prompt"]').disabled`);
+  await screenshot('visible-attachments');
+  // The fixture model accepts text. Remove the previewed image before inference.
+  await click('#prompt-attachments [data-remove-attachment="1"]');
+  const requestsBeforeManaged = modelRequests;
+  await evaluate(`document.getElementById('prompt').value = '创建项目并分析上传文件'; document.getElementById('composer').requestSubmit()`);
+  await waitFor(`document.querySelector('#timeline > .turn.assistant h2')?.textContent === 'Smoke check passed' && !document.getElementById('followup-send').disabled`);
+  const managedSession = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession'))`);
+  assert.equal(dirname(managedSession.project), await realpath(join(home, 'projects')));
+  assert.equal(existsSync(managedSession.path), true);
+  assert.equal(SessionManager.open(managedSession.path).getCwd(), managedSession.project);
+  assert.equal(existsSync(join(managedSession.project, 'first-message.ts')), false);
+  assert.equal(modelRequests, requestsBeforeManaged + 1);
+  assert.equal(await evaluate(`document.querySelectorAll('#followup-attachments .attachment-chip').length`), 0);
+  assert.ok((await evaluate(`document.getElementById('timeline').textContent`)).includes('uploadEvidence'));
+  await screenshot('automatic-project');
+  await click('#new-chat-button');
+  await waitFor(`!document.getElementById('start-state').classList.contains('hidden') && !document.getElementById('project-selector').disabled`);
+  await click('#project-selector');
+  await evaluate(`document.getElementById('managed-project-name').value = '命名项目验收'; document.getElementById('managed-project-form').requestSubmit()`);
+  await waitFor(`document.getElementById('folder-modal').classList.contains('hidden') && document.getElementById('project-selector-label').textContent === '命名项目验收'`);
+  assert.notEqual(await evaluate(`document.getElementById('current-project-path').textContent`), managedSession.project);
+  // Project removal is a reversible library operation, including for projects discovered only from old Pi history.
+  const beforeRemoval = modelRequests;
+  const sourceBeforeRemoval = await import('node:fs/promises').then(({ readFile }) => readFile(join(project, 'sample.txt'), 'utf8'));
+  await evaluate(`Array.from(document.querySelectorAll('[data-project-menu]')).find(button => ${projectPathExpression}.includes(button.dataset.projectMenu)).click()`);
+  assert.equal(await evaluate(`document.getElementById('session-menu').getAttribute('aria-label')`), '项目操作');
+  await screenshot('project-removal-menu');
+  await pointerClick('[data-project-action="remove"]');
+  await waitFor(`!document.getElementById('history-filter').disabled && !Array.from(document.querySelectorAll('[data-project]')).some(node => ${projectPathExpression}.includes(node.dataset.project))`);
+  assert.equal(await import('node:fs/promises').then(({ readFile }) => readFile(join(project, 'sample.txt'), 'utf8')), sourceBeforeRemoval);
+  await cdp('Page.reload');
+  await waitFor(`document.getElementById('connection-label')?.textContent.includes('已连接')`);
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-project]')).some(node => ${projectPathExpression}.includes(node.dataset.project))`), false);
+  await screenshot('project-removed');
+  await click('#project-selector'); await click('#folder-browse');
+  await waitFor(`!!document.getElementById('folder-location').value`);
+  await evaluate(`document.getElementById('folder-location').value = ${JSON.stringify(project)}; document.getElementById('folder-location-form').requestSubmit()`);
+  await waitFor(`${projectPathExpression}.includes(document.getElementById('folder-path').textContent)`);
+  await click('#folder-use');
+  await waitFor(`document.getElementById('folder-modal').classList.contains('hidden') && Array.from(document.querySelectorAll('[data-project]')).some(node => ${projectPathExpression}.includes(node.dataset.project))`);
+  assert.ok(await evaluate(`Array.from(document.querySelectorAll('[data-project]')).find(node => ${projectPathExpression}.includes(node.dataset.project)).querySelectorAll('[data-session]').length > 0`));
+  assert.equal(modelRequests, beforeRemoval);
+  assert.equal(modelRequests, requestsBeforeManaged + 1);
+  // Exercise actual parent/child Pi sessions through the Web, including cancellation.
+  const trustedChildren = await fetch(origin + '/api/projects/trust', { method: 'POST', headers: { 'content-type': 'application/json', 'x-pforge-token': server.token }, body: JSON.stringify({ path: project, trusted: true }) });
+  assert.equal(trustedChildren.status, 200);
+  await evaluate(`document.getElementById('prompt').value = 'forge-subagent-smoke：并行探索代码与审查风险'; document.getElementById('composer').requestSubmit()`);
+  await waitFor(`document.getElementById('subagents-count').textContent === '1 / 2'`);
+  await click('#subagents-button');
+  assert.equal(await evaluate(`document.querySelectorAll('#subagent-list [data-subagent-open]').length`), 2);
+  assert.equal(await evaluate(`(() => { const r=document.getElementById('subagent-menu').getBoundingClientRect(); return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight; })()`), true);
+  await screenshot('subagent-menu');
+  await evaluate(`Array.from(document.querySelectorAll('#subagent-list [data-subagent-open]')).find(node=>node.textContent.includes('审阅潜在风险')).click()`);
+  await waitFor(`document.getElementById('subagent-heading').textContent === '审阅潜在风险' && document.getElementById('subagent-detail').textContent.includes('sample.txt')`);
+  assert.equal(await evaluate(`document.getElementById('subagent-panel').closest('#conversation-view')`), null);
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('#subagent-detail details')).every(node=>!node.open)`), true);
+  await screenshot('subagent-running');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await waitFor(`document.getElementById('subagent-panel').getAttribute('aria-modal') === 'true'`);
+  assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  assert.equal(await evaluate(`document.getElementById('chat-pane').inert`), true);
+  await screenshot('mobile-subagent');
+  await click('#subagent-stop');
+  await waitFor(`document.getElementById('subagent-status').textContent === '已停止'`);
+  await click('#subagent-close');
+  assert.equal(await evaluate(`document.getElementById('chat-pane').inert`), false);
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await waitFor(`document.querySelector('#timeline > .turn.assistant h2')?.textContent === '子任务结果已汇总' && !document.getElementById('followup-send').disabled`);
+  await cdp('Page.reload');
+  await waitFor(`document.getElementById('subagents-count').textContent === '2'`);
+  await click('#subagents-button');
+  assert.equal(await evaluate(`document.getElementById('subagent-list').textContent.includes('已完成') && document.getElementById('subagent-list').textContent.includes('已停止')`), true);
+  await screenshot('subagent-restored');
+  const childrenSession = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession'))`);
+  const snapshot = await (await fetch(origin + '/api/sessions/' + childrenSession.id, { headers: { 'x-pforge-token': server.token } })).json();
+  assert.deepEqual(snapshot.subagents.map((agent) => agent.status).sort(), ['cancelled', 'completed']);
+  assert.ok(snapshot.budget.modelTurns >= 6);
+  const ordinaryHistory = await (await fetch(origin + '/api/history', { headers: { 'x-pforge-token': server.token } })).json();
+  assert.ok(snapshot.subagents.every((agent) => !JSON.stringify(ordinaryHistory).includes(agent.id)));
   assert.deepEqual(failures, []);
   await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['composer slash commands and keyboard selection', 'loaded Pi skills and prompt templates in command menu', 'context estimates and compaction beneath composer', 'manual compaction cancellation and unknown post-compaction usage', '390px command and context popovers', 'no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'seven settings tabs including memory and Pi compaction controls', 'skill content preview, Pi-native toggle persistence, local directory import/removal', 'active session skill command reload without a model request', 'centered composer labels and SVG chevrons', '390px skills settings layout', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'composer stop and continuation with real Pi cancellation', 'interrupted state survives page refresh without replay', 'continuation returns to send on completion', 'right-side Git review outside the chat', 'project file preview and controlled terminal', 'diff scroll and selection survive refresh', 'review changes to a modal drawer at narrow widths', '390px review drawer and keyboard focus', 'project collapse', 'history restore', 'history rename pin archive trash restore without model requests', 'Markdown session export from history menu', 'keyboard and pointer session menus within viewport', 'native Pi user-edit and answer-continuation forks', 'fork source navigation and per-session draft isolation', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
   console.log('Web browser smoke checks passed: slash commands, context usage, manual compaction and cancellation, memory layers and Pi compaction controls, MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, right-side Git review with project file preview and controlled terminal, independent scrolling and retained selection, narrow-screen review drawer and keyboard focus, history menus, recoverable trash, per-message Pi forks, isolated drafts and desktop/mobile layout. Screenshots: ' + output);

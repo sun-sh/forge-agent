@@ -17,9 +17,16 @@ flowchart TD
   Session --> Pi["Pi agent loop, tools, sessions, models and resources"]
   Verify["forge-agent verification extension"] --> Session
   Modes["forge-agent Web mode policy"] --> Session
+  Session --> Delegation["Forge parent-owned subagent catalog and budgets"]
+  Delegation --> Children["Independent read-only Pi sessions"]
 ```
 
 ## Ownership
+
+The Web client's managed read-only subagents use independent Pi sessions with a
+parent-owned catalog, restricted tools, shared execution budgets and cancellation.
+See [subagent design and current boundaries](subagents.md). The planned workflow's
+existing self-review remains a separate gate; it is not automatically delegated.
 
 | Capability | Implementation |
 | --- | --- |
@@ -81,10 +88,15 @@ automatically.
 The budget runtime is attached to the host execution rather than to one phase.
 It therefore covers planned inspection, implementation, verification repairs,
 review, automatic Pi recovery, and explicit continuation within that execution.
-The same runtime also guards adaptive prompts. Provider usage is observed when
-Pi emits a completed assistant message, so the limits are protective host
-guards rather than exact billing cutoffs. Changing the configured limits affects
-the next execution; it does not rewrite an existing snapshot.
+The same runtime also guards adaptive prompts. Adaptive change and verification
+runs now receive the same durable execution envelope as planned runs: request,
+workflow, model, budget, Git baseline and observed changes are written to the
+Pi branch and task index. The envelope does not turn adaptive execution into a
+multi-stage plan; it makes the short path inspectable and recoverable. Provider
+usage is observed when Pi emits a completed assistant message, so the limits
+are protective host guards rather than exact billing cutoffs. Changing the
+configured limits affects the next execution; it does not rewrite an existing
+snapshot.
 
 ## Web integration limits
 
@@ -141,6 +153,11 @@ user-maintained reference injection, not automatic learning or retrieval. Global
 and project memory are stored under the Forge home, and project memory uses the
 canonical real directory with validated legacy migration; Pi owns automatic
 compaction.
+Memory injection also reserves separate prompt budgets for global, project and
+session layers. The active session and project scopes therefore remain visible
+when a user has accumulated a large global memory; the Web settings surface
+shows the selected and truncated budget for the current session. This remains
+explicit user-maintained reference material rather than automatic learning.
 The [product review](product-audit.md) records reproduced cases and acceptance criteria.
 
 ## Active and legacy code

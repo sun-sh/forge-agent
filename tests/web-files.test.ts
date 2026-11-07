@@ -69,4 +69,21 @@ describe('safe Web project file references', () => {
     const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]).toString('base64');
     await expect(preparePromptAttachments(root, Array.from({ length: 5 }, () => ({ type: 'image', mimeType: 'image/png', data: png })))).rejects.toThrow('4 张');
   });
+
+  it('accepts bounded uploaded UTF-8 text while keeping it separate from project files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forge-web-files-upload-'));
+    const prepared = await preparePromptAttachments(root, [{ type: 'upload', name: 'snippet.ts', text: 'export const answer = 42;' }]);
+    expect(prepared.text).toContain('uploaded-file');
+    expect(prepared.text).toContain('snippet.ts');
+    await expect(preparePromptAttachments(root, [{ type: 'upload', name: '.env', text: 'SECRET=1' }])).rejects.toThrow('凭据');
+    await expect(preparePromptAttachments(root, [{ type: 'upload', name: 'archive.zip', text: 'fake' }])).rejects.toThrow('不支持');
+  });
+
+  it('does not expose the temporary Forge runtime directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forge-web-files-runtime-'));
+    await mkdir(join(root, '.forge-agent-runtime'));
+    await writeFile(join(root, '.forge-agent-runtime', 'access-token'), 'private');
+    expect((await listProjectFiles(root)).map((file) => file.path)).not.toContain('.forge-agent-runtime/access-token');
+    expect(await readProjectFile(root, '.forge-agent-runtime/access-token')).toBeUndefined();
+  });
 });

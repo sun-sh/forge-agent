@@ -24,6 +24,18 @@ describe('Forge identity and interface context', () => {
     expect(identity).toContain(surface === 'web' ? 'in the user\'s browser' : 'terminal client (interactive TUI or single-shot CLI)');
   });
 
+  it.each(['web', 'cli'] as const)('keeps %s greetings brief and scopes location details to relevant requests', (surface) => {
+    const sections: Record<string, string> = { project_context: 'Current working directory: C:/Users/example/projects/app' };
+    identityHooks(surface).get('before_agent_start')!({ messageType: 'user', systemPromptOptions: { sections } } as unknown as BeforeAgentStartEvent);
+    const identity = sections['forge_identity'];
+    expect(identity).toContain('For a simple greeting, respond naturally and briefly');
+    expect(identity).toContain('Do not turn a greeting into a product introduction, a capability list or an explanation of the current interface');
+    expect(identity).toContain('For identity or capability questions, answer briefly');
+    expect(identity).toContain('Do not volunteer absolute project paths, user home directories, session identifiers or session-file locations, local connection URLs or ports, or internal runtime metadata in greetings or unrelated answers');
+    expect(identity).toContain('Provide these details accurately when the user asks for them or when they are necessary to locate a file, explain a task result or diagnose a problem');
+    expect(sections['project_context']).toBe('Current working directory: C:/Users/example/projects/app');
+  });
+
   it('projects only the SDK default preamble while preserving instructions, tool updates and stored messages', () => {
     const preamble = 'You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.';
     const messages = [
@@ -47,8 +59,8 @@ describe('Forge identity and interface context', () => {
       { role: 'system', content: '', timestamp: 1, sections: { preamble: 'User-authored system prompt', rules: 'Keep these instructions' } },
       { role: 'system', content: 'Exact custom prompt mentioning pi and CLI', timestamp: 2 },
       { role: 'user', content: 'Explain the Pi CLI', timestamp: 3 },
-      { role: 'assistant', content: [{ type: 'text', text: 'Earlier introduction: Pi coding-agent CLI' }], timestamp: 4 },
-      { role: 'toolResult', toolCallId: 'read-1', toolName: 'read', content: [{ type: 'text', text: 'Repository describes a CLI based on Pi' }], isError: false, timestamp: 5 }
+      { role: 'assistant', content: [{ type: 'text', text: 'Earlier introduction: Pi coding-agent CLI. Working directory: C:/Users/example/projects/app' }], timestamp: 4 },
+      { role: 'toolResult', toolCallId: 'read-1', toolName: 'read', content: [{ type: 'text', text: 'Repository describes a CLI based on Pi. File: C:/Users/example/projects/app/src/main.ts' }], isError: false, timestamp: 5 }
     ] as ContextWithSystemEvent['messages'];
     const result = identityHooks('web').get('context_with_system')!({ type: 'context_with_system', messages });
     expect(result.messages).toEqual(messages);
