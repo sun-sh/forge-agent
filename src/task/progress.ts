@@ -16,6 +16,19 @@ function stable(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined';
 }
 
+function structuredEvidence(toolName: string, value: unknown): unknown {
+  if ((toolName !== 'bash' && toolName !== 'powershell') || !value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const result = value as Record<string, unknown>;
+  // Pi 1.4.0 shell tools share this result contract. Timing is observation
+  // metadata, not fresh command evidence; retain all other and custom fields.
+  if (typeof result['output'] !== 'string' || typeof result['truncated'] !== 'boolean' ||
+      typeof result['exit_code'] !== 'number' || !Number.isFinite(result['exit_code']) ||
+      typeof result['wall_time_seconds'] !== 'number' || !Number.isFinite(result['wall_time_seconds'])) return value;
+  const evidence = { ...result };
+  delete evidence['wall_time_seconds'];
+  return evidence;
+}
+
 /** Detect repeated evidence, never infer a stall from elapsed time alone. */
 export class TaskProgress {
   private state: ProgressSnapshot = { version: 1, status: 'active', observations: 0, unchanged: 0, warnings: 0 };
@@ -30,7 +43,7 @@ export class TaskProgress {
     if (phase !== this.phase) { this.phase = phase; this.seen.clear(); this.state.unchanged = 0; this.state.status = 'active'; delete this.state.reason; }
     this.state.observations++;
     {
-      const key = createHash('sha256').update(stable([event.toolName, event.input, event.isError, event.content, event.structuredContent])).digest('hex');
+      const key = createHash('sha256').update(stable([event.toolName, event.input, event.isError, event.content, structuredEvidence(event.toolName, event.structuredContent)])).digest('hex');
       if (this.seen.has(key)) this.state.unchanged++;
       else { this.state.unchanged = 0; this.state.status = 'active'; delete this.state.reason; }
       this.seen.add(key); if (this.seen.size > 64) this.seen.delete(this.seen.values().next().value!);

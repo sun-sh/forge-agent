@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Exclude Pi shell wall-clock duration from repeated-evidence fingerprints, preserving command output, exit status, other structured evidence and custom-tool duration fields; cover varying bash/PowerShell timings and the real Pi shell loop.
 - Resolve uncertain task-intent hints through read-only structured understanding instead of silently treating unfamiliar implementation requests as completed research; preserve complete constraints and acceptance ahead of background context.
 - Route explicit host verification actions without natural-language inference, and derive read-only completion labels from the executed permission mode.
 - Accept one schema-valid final JSON handoff after evidence prose while rejecting ambiguous objects and trailing instructions; retain the real-provider failure and separately fingerprinted corrected repository runs.

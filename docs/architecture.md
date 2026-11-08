@@ -192,8 +192,11 @@ reviewed reference material, ranked using the current goal's English/Chinese
 lexical terms while prioritizing constraints and preferences. Settings expose
 selected IDs/reasons. A bounded host checkpoint rebuilt from durable task state
 preserves the goal, phase, handoff and unresolved findings in Pi's prompt through
-compaction. Repeated unchanged reader/error results produce a strategy warning
-and then a bounded needs-attention stop. See [task scheduling](task-scheduling.md).
+compaction. Repeated unchanged tool evidence produces a strategy warning and
+then a bounded needs-attention stop, including successful shell calls. Fingerprints
+exclude only wall-clock duration from results matching Pi's built-in shell contract;
+output, exit status and other structured evidence remain significant. Raw results
+are unchanged. See [task scheduling](task-scheduling.md).
 Pending
 candidates carry evidence and session ownership, do not enter the prompt, and
 are not inherited as controllable records by a normal fork. The same ownership

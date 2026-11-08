@@ -13,6 +13,43 @@ describe('bounded progress observations', () => {
     for (let i = 0; i < 30; i++) fresh.observe({ ...bash, content: [{ type: 'text', text: 'new evidence ' + i }] });
     expect(fresh.snapshot().status).toBe('active');
   });
+  it.each(['bash', 'powershell'])('ignores changing Pi %s duration when the command and evidence repeat', (toolName) => {
+    const progress = new TaskProgress();
+    for (let i = 0; i < 30; i++) {
+      const event = {
+        toolName, input: { command: 'echo unchanged' }, content: [{ type: 'text', text: 'unchanged\n' }], isError: false,
+        structuredContent: { output: 'unchanged\n', truncated: false, exit_code: 0, wall_time_seconds: i / 10 }
+      };
+      progress.observe(event);
+      expect(event.structuredContent.wall_time_seconds).toBe(i / 10);
+    }
+    expect(progress.snapshot()).toMatchObject({ status: 'stalled', warnings: 1, unchanged: 12, observations: 13 });
+  });
+  it.each([
+    ['output', { output: 'new evidence\n' }], ['exit code', { exit_code: 1 }],
+    ['truncation', { truncated: true }], ['full output location', { full_output_path: '/full-output.txt' }],
+    ['additional evidence', { evidence: 'changed' }]
+  ])('retains changes to shell %s as new evidence even with the same model-facing text', (_name, update) => {
+    const progress = new TaskProgress();
+    const event = {
+      toolName: 'bash', input: { command: 'inspect' }, content: [{ type: 'text', text: 'same visible excerpt' }], isError: false,
+      structuredContent: { output: 'unchanged\n', truncated: false, exit_code: 0, wall_time_seconds: 0.1 }
+    };
+    for (let i = 0; i < 7; i++) progress.observe(event);
+    expect(progress.snapshot().status).toBe('warned');
+    progress.observe({ ...event, structuredContent: { ...event.structuredContent, ...update } });
+    expect(progress.snapshot()).toMatchObject({ status: 'active', unchanged: 0, warnings: 1 });
+  });
+  it('preserves duration fields for custom tools and non-Pi result shapes', () => {
+    for (const toolName of ['custom_measurement', 'bash']) {
+      const progress = new TaskProgress();
+      for (let i = 0; i < 30; i++) progress.observe({
+        toolName, input: {}, content: [], isError: false,
+        structuredContent: { ...(toolName === 'custom_measurement' ? { output: '', truncated: false, exit_code: 0 } : {}), wall_time_seconds: i / 10 }
+      });
+      expect(progress.snapshot()).toMatchObject({ status: 'active', unchanged: 0, warnings: 0 });
+    }
+  });
   it('warns then stops unchanged reads, retains no raw tool data and resets only on a new run', () => {
     const progress = new TaskProgress(); progress.begin();
     for (let i = 0; i < 6; i++) expect(progress.observe(read('secret.env', 'private-token'))).toBeUndefined();

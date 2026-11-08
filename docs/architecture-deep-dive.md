@@ -142,6 +142,8 @@ Conversation → Episode → Fact → Preference → Skill 不应直接被当成
 
 停滞检测对真实工具名、输入、输出和错误做指纹，重复观察六次提醒改变策略，十二次仍无新证据则停止为 needs_attention。成功 shell 或写工具不会仅因返回成功就清零；不同证据与阶段变化清除连续计数，时间长不单独算卡死。它没有语义级进度判断或每次调用后的文件版本观察，合法重复动作仍可能被误判；需要更多案例测量。指纹只在内存，持久化计数不包含原始工具内容。
 
+Pi shell 的 `wall_time_seconds` 是波动的观察元数据：对符合内置 `bash` / `powershell` 结果格式的响应，仅在比较指纹时排除该字段，保留输出、退出码、截断与其他字段，也不修改 Pi 原始结果。自定义工具及非 Pi 格式不套用此规则。
+
 源码：[检查点](../src/task/checkpoints.ts)、[任务索引](../src/task/registry.ts)、[持久化替换](../src/task/persistence.ts)、[进展观察](../src/task/progress.ts)。验收：[持久化故障](../tests/task-persistence.test.ts)、[进展](../tests/task-progress.test.ts)、[真实 Pi 工具循环停滞](../tests/web-progress.test.ts)。
 
 ## 8. 如何证明设计有效

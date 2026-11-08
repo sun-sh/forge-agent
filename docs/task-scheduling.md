@@ -29,6 +29,8 @@ worker 在独立 worktree 提出补丁，人工选择应用；“应用并验证
 
 主任务的进度监测比较工具输入与实际结果的指纹。连续 6 次返回见过的相同证据时提醒调整策略，达到 12 次且仍未改变时停止，任务标为需要处理。检测覆盖内置读取/搜索、重复相同错误和成功但重复的 shell/写操作，也可识别小范围循环；新证据或阶段变化会重置连续计数，成功本身不清空历史。时间长本身不构成停滞。它没有语义进度判断或每次调用后的文件版本观察，合法重复可能误判；总预算仍约束其他情况。
 
+对符合 Pi 1.4.0 结果格式的 `bash` / `powershell`，指纹忽略 `wall_time_seconds`，避免同一命令仅因耗时波动就被视为有进展。输出、退出码、截断状态及其他结构化字段仍参与比较；原始工具结果保持完整，其他工具的同名字段仍作为证据。
+
 全局、项目和会话记忆有独立配额。显式约束和偏好优先，事实与决策按当前目标的中英文词项匹配召回；设置展开后展示选择原因。规划任务交接从持久化状态优先恢复结构化目标、完整约束与验收、文件范围和未解决问题，再加入阶段摘要与验证状态。自适应或旧记录使用明确标记的原始请求首尾节选，完整请求仍在任务记录中。长期记忆仍需用户接受候选，工具输出和模型摘要不会变成权限。
 
 实现与回归：`src/task/queue.ts`、`src/task/progress.ts`、`src/task/context.ts`、`src/web/subagents.ts`，以及 `tests/task-queue.test.ts`、`tests/web-queue.test.ts`、`tests/web-progress.test.ts`、`tests/memory.test.ts`、`tests/web-subagents.test.ts`。
@@ -42,3 +44,5 @@ The durable queue runs up to three different projects concurrently, preserving a
 Within a parent task, asynchronous child handles allow independent parent work. Pi's settlement boundary returns unread results for synthesis, and the host refuses completion if collection failed. Workers remain proposal-based; explicit apply-and-verify transfers the same project lease into configured host verification without a model request.
 
 A bounded progress monitor warns after six repeated unchanged observations and stops after twelve; new evidence and phase transitions reset the consecutive count, while identical successful shell/write results do not erase history. It never infers a stall from duration alone and may misclassify legitimate repetition. Scoped lexical recall and structured task checkpoints prioritize complete constraints and acceptance through Pi compaction; unstructured adaptive/legacy requests have explicitly partial head/tail excerpts. These are inspectable host mechanisms, not evidence of improved model quality or a replacement agent loop.
+
+For `bash` / `powershell` results matching Pi 1.4.0's shell contract, fingerprints exclude only `wall_time_seconds`. Output, exit code, truncation and other structured evidence remain significant. Raw results are unchanged; custom-tool duration fields are not normalized.
