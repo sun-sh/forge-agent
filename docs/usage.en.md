@@ -32,7 +32,7 @@ flowchart LR
     Review --> Complete
 ```
 
-The planned workflow's completion gate requires passing configured verification, a structured `ready` review with no unresolved issues, and no detected changes during review within the available Git evidence. Verification failures receive at most `verifyRetries` automatic repairs. Review findings, missing checks, invalid review output, or stale evidence leave the task needing attention.
+The planned workflow's completion gate requires passing configured verification, a structured `ready` review with no unresolved issues, and no detected changes during review within the available Git evidence. Blocking defects belong in `issues`; optional improvements belong in `notes` and appear as non-blocking observations. Non-empty `issues` always prevents completion. Verification failures receive at most `verifyRetries` automatic repairs. Blocking findings, missing checks, invalid review output, or stale evidence leave the task needing attention.
 
 Stopping a task prevents later stages. After a service restart, unfinished work is marked interrupted. **Re-inspect and continue** (`重新检查并继续`) explicitly starts a fresh inspection of the current workspace. The model review is a second pass and can still miss defects.
 

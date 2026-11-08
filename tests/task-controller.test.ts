@@ -25,6 +25,18 @@ describe('task workflow controller', () => {
   it.each([
     ['Fix the bug and run the tests', 'change'],
     ['Run tests and fix any failures', 'change'],
+    ['Implement CustomProviders.remove(id, expectedRevision). Do not modify package files, existing tests, or notes.txt. Run all configured verification.', 'change'],
+    ['Fix the bug. Do not modify tests or package-lock.json.', 'change'],
+    ['修复登录问题，不要修改现有测试和 package.json。运行验证。', 'change'],
+    ['解释项目结构，不要修改现有测试。', 'explore'],
+    ['Review the code. Do not modify tests or package.json.', 'explore'],
+    ['Fix the bug. Do not modify any files, including tests.', 'explore'],
+    ['Fix the bug. Do not make any changes.', 'explore'],
+    ['Fix the bug. Do not modify tests or execute commands.', 'explore'],
+    ['修复登录问题，不要修改任何文件。', 'explore'],
+    ['Do not delete files.', 'explore'],
+    ['不要删除文件。', 'explore'],
+    ['Implement provider removal. Do not delete protected tests.', 'change'],
     ['Run build', 'verify'],
     ['Run the configured verification', 'verify'],
     ['What is the best way to implement retries?', 'explore'],
@@ -34,6 +46,12 @@ describe('task workflow controller', () => {
     ['你好', 'answer'],
     ['你能干什么？', 'answer']
   ])('routes %s as %s', (prompt, kind) => { expect(taskKind(prompt)).toBe(kind); });
+  it('runs implementation and verification when a change preserves only named files', async () => {
+    const f = fixture();
+    const result = await f.controller.run('Implement provider deletion. Do not modify package files, existing tests, or notes.txt. Run all configured verification.', 0, f.adapter);
+    expect(result.kind).toBe('change'); expect(result.status).toBe('completed');
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']); expect(result.verification?.status).toBe('passed');
+  });
   it('completes only after verification and structured review pass', async () => {
     const f = fixture();
     const result = await f.controller.run('Fix the task', 1, f.adapter);
@@ -44,6 +62,22 @@ describe('task workflow controller', () => {
     expect(result.review?.verdict).toBe('ready');
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
+  });
+  it('persists optional review notes without treating them as unresolved defects', async () => {
+    const notes = ['Optional improvement outside the requested scope.'];
+    const f = fixture(undefined, JSON.stringify({ verdict: 'ready', summary: 'Acceptance criteria met', issues: [], notes }));
+    const result = await f.controller.run('Fix the task', 0, f.adapter);
+    expect(result.status).toBe('completed'); expect(result.review?.notes).toEqual(notes);
+    expect(f.messages.at(-1)).toContain('non-empty issues always prevents completion');
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: result }])?.review?.notes).toEqual(notes);
+  });
+  it.each([
+    { verdict: 'ready', summary: 'Contradiction', issues: ['Actual acceptance defect'], notes: ['Optional improvement'] },
+    { verdict: 'changes_requested', summary: 'Needs changes', issues: [], notes: ['Optional improvement'] },
+    { verdict: 'ready', summary: 'Invalid notes', issues: [], notes: 'unvalidated free text' }
+  ])('keeps review notes from bypassing invalid verdicts, findings or schema: %j', async (review) => {
+    const f = fixture(undefined, JSON.stringify(review));
+    expect((await f.controller.run('Fix the task', 0, f.adapter)).status).toBe('needs_attention');
   });
   it('routes answer and exploration prompts through one read-only model turn', async () => {
     const f = fixture(); let baselines = 0; let verifications = 0; let changes = 0;

@@ -22,6 +22,29 @@ async function fixture() {
   return { root, source, home, suite, path };
 }
 describe('pinned repository evaluation harness', () => {
+  it('retains independent small-task gates and evidence after a hidden assertion fails, and does not call unknown pricing free', async () => {
+    const f = await fixture();
+    const model = createServer(async (request, response) => {
+      let raw = ''; for await (const chunk of request) raw += chunk;
+      const input = JSON.parse(raw), write = input.messages.at(-1).role !== 'tool';
+      const solution = 'export function normalizeConfig(input) { return { retries: Number.isInteger(input.retries) ? Math.max(0, Math.min(10, input.retries)) : 3, tags: Array.isArray(input.tags) ? input.tags.filter(x => typeof x === "string") : [] }; }';
+      const delta = write ? { role: 'assistant', tool_calls: [{ index: 0, id: 'clamped-retries', type: 'function', function: { name: 'write', arguments: JSON.stringify({ path: 'src/config.mjs', content: solution }) } }] } : { role: 'assistant', content: 'Implementation complete.' };
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      for (const [part, finish] of [[delta, null], [{}, write ? 'tool_calls' : 'stop']]) response.write('data: ' + JSON.stringify({ id: 'mock', object: 'chat.completion.chunk', model: 'mock', choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
+      response.end('data: [DONE]\n\n');
+    });
+    await new Promise((done) => model.listen(0, '127.0.0.1', done)); cleanups.push(() => new Promise((done) => { model.closeAllConnections(); model.close(() => done()); }));
+    await writeFile(join(f.home, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1', models: [{ id: 'mock' }] } } }));
+    const output = join(f.root, 'small-hidden-failure');
+    await expect(execute(process.execPath, ['scripts/evaluate-agent.mjs', '--real', '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--task', 'config-normalize-cross-file', '--output', output], { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
+    const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8'));
+    expect(report.total).toBe(1);
+    expect(report.results[0]).toMatchObject({ qualityPass: false, heldOutPass: false, verificationGate: true, workspaceIntegrity: true, taskCompletion: true, falseCompletion: true, costUsd: null });
+    expect(report.metrics).toMatchObject({ falseCompletions: 1, heldOutPassRate: 0, verificationGateRate: 1, workspaceIntegrityRate: 1, taskCompletionRate: 1, totalCostUsd: null });
+    expect(report.modelMetadata.pricingKnown).toBe(false);
+    const snapshot = await readFile(join(output, report.results[0].evidence.snapshot), 'utf8');
+    expect(snapshot).toContain('Implementation complete.'); expect(snapshot).not.toContain('fixture-only');
+  }, 60000);
   it('pins immutable revisions, fingerprints independent oracles and rejects traversal/duplicate ids', async () => {
     const f = await fixture(), loaded = await loadRepositorySuite(f.path);
     const before = loaded.fingerprint; await writeFile(join(f.root, 'oracle.mjs'), '// changed oracle');
@@ -34,6 +57,8 @@ describe('pinned repository evaluation harness', () => {
     const prepared = await execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--prepare'], { windowsHide: true });
     expect(JSON.parse(prepared.stdout).tasks[0].revision).toBe(f.suite.tasks[0].revision);
     await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock'], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('--trust-suite') });
+    const invalidBudget = join(f.root, 'invalid-budget.json'); await writeFile(invalidBudget, JSON.stringify({ maxTotalTokens: 0, unrecognized: true }));
+    await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--trust-suite', '--budget', invalidBudget], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('ZodError') });
   });
   it('runs the actual pinned clone with a scripted provider and records held-out failures as false completions', async () => {
     const f = await fixture(); let correct = true, modelCalls = 0;
@@ -49,10 +74,17 @@ describe('pinned repository evaluation harness', () => {
     });
     await new Promise((done) => model.listen(0, '127.0.0.1', done)); cleanups.push(() => new Promise((done) => { model.closeAllConnections(); model.close(() => done()); }));
     await writeFile(join(f.home, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1', models: [{ id: 'mock' }] } } }));
-    const argumentsFor = (output) => ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--output', output];
+    const limits = { maxDurationMs: 60000, maxModelTurns: 10, maxToolCalls: 30, maxTotalTokens: 12345, maxCostUsd: 1 };
+    const budgetPath = join(f.root, 'budget.json'); await writeFile(budgetPath, JSON.stringify(limits));
+    const argumentsFor = (output) => ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--budget', budgetPath, '--output', output];
     const passedOutput = join(f.root, 'passed'); await execute(process.execPath, argumentsFor(passedOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 });
     const passed = JSON.parse(await readFile(join(passedOutput, 'report.json'), 'utf8'));
     expect(passed.metrics).toMatchObject({ passed: 1, total: 1, falseCompletions: 0 }); expect(passed.results[0]).toMatchObject({ baselineFails: true, heldOutPass: true, workspaceIntegrity: true });
+    expect(passed.metrics.costUsd).toBeNull(); expect(passed.modelMetadata.pricingKnown).toBe(false);
+    expect(passed.limits).toEqual(limits); expect(passed.results[0].budget.limits).toEqual(limits);
+    const snapshot = JSON.parse(await readFile(join(passedOutput, passed.results[0].evidence.snapshot), 'utf8'));
+    expect(snapshot).toMatchObject({ running: false, outcome: 'completed' });
+    expect(await readFile(join(passedOutput, passed.results[0].evidence.diff), 'utf8')).toContain('a + b');
     correct = false; const failedOutput = join(f.root, 'failed');
     await expect(execute(process.execPath, argumentsFor(failedOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
     const failed = JSON.parse(await readFile(join(failedOutput, 'report.json'), 'utf8'));

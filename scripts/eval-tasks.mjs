@@ -27,7 +27,7 @@ export const tasks = [
   {
     id: 'config-normalize-cross-file',
     entry: 'src/index.mjs',
-    prompt: 'Fix normalizeConfig across the small src module. Accept an object and return a new object with retries as an integer from 0 to 10 (default 3) and tags as a copied array of strings (default []). Do not mutate input, preserve the public re-export in src/index.mjs, preserve notes.txt and verify.mjs, and use the configured verification.',
+    prompt: 'Fix normalizeConfig across the small src module. Accept an object and return a new object. Preserve retries only when it is a numeric integer from 0 to 10 inclusive; missing, non-integer or out-of-range retries must use the default 3, without rounding or clamping. Return tags as a new array containing only the input array\'s string elements, or [] when tags is not an array. Do not mutate input, preserve the public re-export in src/index.mjs, preserve notes.txt and verify.mjs, and use the configured verification.',
     initialFiles: {
       'src/config.mjs': 'export function normalizeConfig(input) { return { retries: input.retries || 3, tags: input.tags || [] }; }\n',
       'src/index.mjs': 'export { normalizeConfig } from "./config.mjs";\n'

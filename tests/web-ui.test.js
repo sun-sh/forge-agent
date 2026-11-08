@@ -1246,6 +1246,15 @@ describe('Web client integration', () => {
     expect(window.document.querySelector('.thinking-block').closest('.execution-details')).not.toBeNull();
     expect(window.document.querySelector('.tool-row').closest('.execution-details')).not.toBeNull();
   });
+  it('shows review notes separately from blocking findings and renders them as untrusted text', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'review-notes';
+    const review = { verdict: 'ready', summary: 'Required checks passed', issues: [], notes: ['Optional: <img src=x onerror=alert(1)>'] };
+    app.applySnapshot({ id: 'review-notes', running: false, task: { kind: 'change', status: 'completed', phase: 'complete', repairs: 0, phases: [], review }, messages: [] });
+    const result = window.document.getElementById('task-review');
+    expect(result.textContent).toContain('审阅备注（非阻断）'); expect(result.textContent).toContain(review.notes[0]);
+    expect(result.textContent).not.toContain('待处理问题：'); expect(result.querySelector('img')).toBeNull();
+    expect(window.document.getElementById('task-note').textContent).toContain('验证通过');
+  });
 
   it('applies staged model and reasoning before exactly one next prompt and retains them across snapshots', async () => {
     const first = model('a', { reasoning: true, thinkingLevels: ['low', 'high'] });

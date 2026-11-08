@@ -1154,7 +1154,8 @@ function reviewText(text) {
   try {
     const review = JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
     if (typeof review.summary !== 'string' || !Array.isArray(review.issues)) throw new Error('Invalid review');
-    return review.summary + (review.issues.length ? '\n\n待处理问题：\n' + review.issues.filter((issue) => typeof issue === 'string').map((issue) => '• ' + issue).join('\n') : '\n\n未提出待处理问题。');
+    return review.summary + (review.issues.length ? '\n\n待处理问题：\n' + review.issues.filter((issue) => typeof issue === 'string').map((issue) => '• ' + issue).join('\n') : '\n\n未提出待处理问题。')
+      + (Array.isArray(review.notes) && review.notes.length ? '\n\n审阅备注（非阻断）：\n' + review.notes.filter((note) => typeof note === 'string').map((note) => '• ' + note).join('\n') : '');
   } catch { return '审阅结果需要人工检查。可在任务记录中查看阶段状态。'; }
 }
 function renderMessage(message, partial = false, phase, task = state.task, entryId) {
@@ -1262,7 +1263,8 @@ function renderTask(task) {
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
   $('task-note').textContent = task.status === 'running' ? (task.workflow === 'direct' ? '正在自适应执行' : '正在' + TASK_LABELS[task.phase]) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'budget_exceeded' ? '执行预算已用尽，可以调整设置后重新检查。' : task.status === 'completed' ? task.workflow === 'direct' ? '自适应执行完成。' : task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
-  $('task-review').textContent = task.review ? '模型审阅：' + task.review.summary + (task.review.issues?.length ? '\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '') : '审阅尚未完成。';
+  $('task-review').textContent = task.review ? '模型审阅：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
+    + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : '审阅尚未完成。';
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
   renderBudget(task.budget || state.budget);
   setRunning(state.running);
