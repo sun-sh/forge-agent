@@ -16,6 +16,7 @@ export interface ProjectExecution {
 export class ProjectExecutions {
   private readonly active = new Map<string, ProjectExecution>();
   private closed = false;
+  async isActive(project: string): Promise<boolean> { return this.active.has(directoryKey(await canonicalDirectory(project))); }
   async acquire(project: string, kind: ProjectExecution['kind']): Promise<ProjectExecution> {
     const key = directoryKey(await canonicalDirectory(project));
     // Check and reserve together, after the final await.

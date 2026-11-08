@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { loadConfig, type LoadedConfig } from "../config.js";
 import { pforgeHome } from "../pforge-home.js";
 import { runVerification, verificationMessage, VerificationInterruptedError, type VerificationReport } from "./verify.js";
+import { captureWorkspace, invalidateEvidence, revalidateEvidence, verificationConfigHash, verificationEvidenceSchema, type VerificationEvidence, type WorkspaceStamp } from './evidence.js';
+import { replaceMetadataFile } from '../task/persistence.js';
 
 export interface PforgeVerificationOutcome {
   status: "unchecked" | "running" | "passed" | "failed" | "skipped";
@@ -17,6 +19,7 @@ export interface PforgeVerificationOutcome {
   runId?: string;
   evidenceId?: string;
   checkedAt?: string;
+  evidence?: VerificationEvidence;
 }
 
 export interface PforgeVerificationRuntime {
@@ -27,13 +30,33 @@ export interface PforgeVerificationRuntime {
   waitForVerification(signal?: AbortSignal): Promise<PforgeVerificationOutcome>;
   beginTurn(runId?: string): void;
   verifyTrusted(signal: AbortSignal): Promise<PforgeVerificationOutcome>;
+  /** Recheck evidence without executing project commands or resetting retries. */
+  refreshEvidence(signal?: AbortSignal, observation?: { workspace: WorkspaceStamp; configHash: string }): Promise<PforgeVerificationOutcome>;
+  invalidate(reason: string): Promise<void>;
   readonly commands: ReadonlyArray<{ name: string; command: string; timeoutMs?: number }>;
 }
 export const verificationOutcomeSchema = z.object({
   status: z.enum(['unchecked', 'running', 'passed', 'failed', 'skipped']), attempts: z.number().int().min(0).max(20),
   reason: z.string().optional(), error: z.string().optional(), runId: z.uuid().optional(), evidenceId: z.uuid().optional(), checkedAt: z.iso.datetime().optional(),
+  evidence: verificationEvidenceSchema.optional(),
   report: z.object({ passed: z.boolean(), summary: z.string(), results: z.array(z.object({ name: z.string().optional(), command: z.string(), exitCode: z.number().int().nullable(), passed: z.boolean(), durationMs: z.number().min(0), output: z.string(), failure: z.enum(['timeout', 'aborted', 'spawn_error']).optional(), error: z.string().optional(), outputPath: z.string().optional() })).max(1000) }).optional()
 });
+
+export function hasPassedReport(outcome?: PforgeVerificationOutcome): boolean {
+  return outcome?.status === 'passed' && outcome.report?.passed === true && outcome.report.results.length > 0
+    && outcome.report.results.every((result) => result.passed && result.exitCode === 0 && !result.failure && !result.error);
+}
+export function isVerified(outcome?: PforgeVerificationOutcome): boolean {
+  return hasPassedReport(outcome) && outcome?.evidence?.freshness === 'current' && Boolean(outcome.evidence.workspace.digest);
+}
+export function refreshVerificationEvidence(outcome: PforgeVerificationOutcome, workspace: WorkspaceStamp, configHash: string): PforgeVerificationOutcome {
+  if (!outcome.report && !outcome.evidence) return outcome;
+  const evidence = outcome.evidence ? revalidateEvidence(outcome.evidence, workspace, configHash) : {
+    workspace: { version: 1 as const, scope: workspace.scope, files: 0 }, configHash,
+    freshness: 'unconfirmed' as const, reason: '历史验证未绑定工作区版本，请重新验证。'
+  };
+  return { ...outcome, evidence };
+}
 
 function stateRoot(): string {
   return pforgeHome();
@@ -53,7 +76,7 @@ async function persistOutcome(cwd: string, outcome: PforgeVerificationOutcome): 
   const text = JSON.stringify({ cwd: resolve(cwd), updatedAt: new Date().toISOString(), ...outcome }, null, 2);
   const temporary = path + '.' + randomUUID() + '.tmp';
   await writeFile(temporary, text, "utf8");
-  await rename(temporary, path);
+  await replaceMetadataFile(temporary, path);
   if (outcome.evidenceId) await writeFile(join(dirname(path), outcome.evidenceId + '.json'), text, 'utf8');
 }
 
@@ -89,6 +112,25 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     if (reason) { outcome.status = "skipped"; outcome.reason = reason; outcome.report = undefined; outcome.error = undefined; }
     return reason;
   };
+  const invalidate = async (reason: string) => {
+    if (!outcome.report && !outcome.evidence) return;
+    const evidence = outcome.evidence ?? { workspace: { version: 1 as const, scope: 'directory' as const, files: 0 }, configHash: verificationConfigHash(commands), freshness: 'unconfirmed' as const };
+    const next = invalidateEvidence(evidence, reason);
+    if (JSON.stringify(next) !== JSON.stringify(outcome.evidence)) { outcome.evidence = next; await persist(); }
+  };
+  const refreshEvidence = async (signal?: AbortSignal, observation?: { workspace: WorkspaceStamp; configHash: string }) => {
+    if (inFlight || (!outcome.report && !outcome.evidence)) return outcome;
+    if (!trusted()) { await invalidate('项目信任已撤销，请信任项目并重新验证。'); return outcome; }
+    const evidenceId = outcome.evidenceId;
+    let configHash: string;
+    try { configHash = observation?.configHash ?? verificationConfigHash(loadConfig(cwd).config.verify); }
+    catch { await invalidate('无法确认当前验证配置，请修复配置后重新验证。'); return outcome; }
+    const workspace = observation?.workspace ?? await captureWorkspace(cwd, signal);
+    if (inFlight || outcome.evidenceId !== evidenceId) return outcome;
+    const next = refreshVerificationEvidence(outcome, workspace, configHash);
+    if (JSON.stringify(next.evidence) !== JSON.stringify(outcome.evidence)) { outcome.evidence = next.evidence; await persist(); }
+    return outcome;
+  };
 
   let inFlight: Promise<VerificationReport> | undefined;
   const run = (signal: AbortSignal): Promise<VerificationReport> => {
@@ -99,12 +141,19 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     outcome.report = undefined;
     outcome.error = undefined;
     outcome.reason = undefined;
+    outcome.evidence = undefined;
     options.onOutcome?.(structuredClone(outcome));
-    const current = runVerification(cwd, commands, signal, verificationOutputRoot(cwd))
+    const configHash = verificationConfigHash(commands);
+    let before: WorkspaceStamp;
+    const current = captureWorkspace(cwd, signal).then((workspace) => { before = workspace; return runVerification(cwd, commands, signal, verificationOutputRoot(cwd)); })
       .then(async (report) => {
         outcome.report = report;
         outcome.status = report.passed ? "passed" : "failed";
         outcome.checkedAt = new Date().toISOString();
+        const after = await captureWorkspace(cwd, signal);
+        const stable = Boolean(before.digest && before.digest === after.digest && before.scope === after.scope);
+        outcome.evidence = { workspace: after, configHash, freshness: stable ? 'current' : 'unconfirmed',
+          ...(!stable ? { reason: '验证期间工作区发生变化或未能完整读取，请检查生成文件的忽略规则并重新验证。' } : {}) };
         await persist();
         return report;
       })
@@ -142,8 +191,8 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
         }
         const report = await run(signal ?? new AbortController().signal);
         return {
-          content: [{ type: "text", text: verificationMessage(report) }],
-          details: { passed: report.passed, summary: report.summary },
+          content: [{ type: "text", text: verificationMessage(report) + (report.passed && !isVerified(outcome) ? '\n\nWorkspace freshness is unconfirmed. These commands passed, but this is not current-version completion evidence. Recheck before claiming verified completion.' : '') }],
+          details: { passed: report.passed, summary: report.summary, freshness: outcome.evidence?.freshness },
           isError: !report.passed
         };
       }
@@ -164,7 +213,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     });
 
     pi.on("agent_before_settle", async (event, ctx) => {
-      if (event.outcome !== "completed" || commands.length === 0) return;
+      if (event.outcome !== "completed" || event.continue || commands.length === 0) return;
       if (options.managed?.()) return;
       if (blocked()) return;
       if (!ctx.isProjectTrusted()) {
@@ -176,7 +225,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
       try {
         const report = await run(ctx.signal ?? new AbortController().signal);
         if (report.passed) {
-          ctx.ui.notify("Verification passed", "info");
+          ctx.ui.notify(isVerified(outcome) ? 'Verification passed' : 'Verification commands passed; workspace freshness is unconfirmed. Run verification again before claiming verified completion.', isVerified(outcome) ? 'info' : 'warning');
           return;
         }
         if (outcome.attempts < retries) {
@@ -212,6 +261,8 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     outcome,
     reload,
     beginTurn,
+    invalidate,
+    refreshEvidence,
     async verifyTrusted(signal) {
       if (blocked()) return outcome;
       if (!trusted()) { outcome.status = 'failed'; outcome.error = 'Project is not trusted; refusing to run project verification commands.'; await persist(); return outcome; }
@@ -224,7 +275,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
       if (!trusted()) { outcome.status = 'failed'; outcome.error = 'Project is not trusted; refusing to run project verification commands.'; return outcome; }
       if (outcome.status === "unchecked" || outcome.status === "running") {
         await run(signal);
-      }
+      } else await refreshEvidence(signal);
       return outcome;
     },
     get commands() { return commands; }

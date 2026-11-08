@@ -22,17 +22,18 @@ if (args.includes('--prepare')) {
   if (!model?.includes('/') || !args.includes('--trust-suite')) throw new Error('Running repository code requires explicit --model provider/model and --trust-suite. Review pinned sources, setup/verification commands and oracles first with --prepare.');
   const { ModelRuntime, VERSION } = await import('@earendil-works/pi-coding-agent');
   const { startWebConsole } = await import('../dist/web/server.js');
+  const { isVerified } = await import('../dist/verification/pi-extension.js');
   const { pforgeHome } = await import('../dist/pforge-home.js');
   const { executeCommand, CommandExecutionError } = await import('../dist/tools/command.js');
   const { loadConfig } = await import('../dist/config.js');
   const { checkpointTarget } = await import('../dist/task/checkpoints.js');
-  const { budgetLimitsSchema } = await import('../dist/task/budget.js');
+  const { budgetLimitsSchema, DEFAULT_BUDGET_LIMITS } = await import('../dist/task/budget.js');
   const budgetFile = option('--budget');
-  const limits = budgetLimitsSchema.parse(budgetFile ? JSON.parse(await readFile(resolve(budgetFile), 'utf8')) : { maxDurationMs: 600000, maxModelTurns: 50, maxToolCalls: 300, maxTotalTokens: 750000, maxCostUsd: 2 });
+  const limits = budgetLimitsSchema.parse(budgetFile ? JSON.parse(await readFile(resolve(budgetFile), 'utf8')) : DEFAULT_BUDGET_LIMITS);
   const sourceHome = resolve(option('--config-home', pforgeHome())), root = await mkdtemp(join(tmpdir(), 'forge-repo-eval-'));
   const output = resolve(option('--output', '.forge-agent/repository-evals/' + new Date().toISOString().replaceAll(':', '-')));
   await mkdir(output, { recursive: true });
-  const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./repository-suite.mjs', './evaluation-evidence.mjs', '../dist/task/controller.js', '../dist/task/intent.js', '../dist/web/server.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+  const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./repository-suite.mjs', './evaluation-evidence.mjs', '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
   const home = join(root, 'home'); await mkdir(home);
   const execute = promisify(execFile), results = [], startedAt = new Date().toISOString();
   const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -110,7 +111,7 @@ if (args.includes('--prepare')) {
         finally { if (gateway) await gateway.close(); }
       }
       const complete = snapshot?.task ? snapshot.task.status === 'completed' : snapshot?.outcome === 'completed';
-      const verification = snapshot?.verification?.status === 'passed';
+      const verification = isVerified(snapshot?.verification);
       const passed = !error && baselineFails && heldOutPass && integrity && complete && verification;
       const result = { id: task.id, workflow: flow, iteration, revision: task.revision, baselineFails, heldOutPass, workspaceIntegrity: integrity, completed: complete, verification, passed, infrastructureFailure, falseCompletion: Boolean(complete && (!heldOutPass || !integrity || !verification)),
         latencyMs: Math.round(performance.now() - started), setupMs, executionMs, thinkingLevel: snapshot?.thinkingLevel, evidence,

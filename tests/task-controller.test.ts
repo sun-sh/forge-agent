@@ -1,15 +1,21 @@
-import { describe, expect, it } from 'vitest';
-import { TaskController, restoreTask, type TaskAdapter, type TaskState } from '../src/task/controller.js';
+import { describe, expect, it, vi } from 'vitest';
+import { TaskController, restoreTask, taskPhaseContract, withTaskEvidence, type TaskAdapter, type TaskState } from '../src/task/controller.js';
 import { taskKind } from '../src/task/intent.js';
 import type { PforgeVerificationOutcome } from '../src/verification/pi-extension.js';
 import { VerificationInterruptedError } from '../src/verification/verify.js';
+import { randomUUID } from 'node:crypto';
+import handoff from './fixtures/task-handoff.json' with { type: 'json' };
 
-function fixture(verification: PforgeVerificationOutcome = { status: 'passed', attempts: 0, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }, review = '{"verdict":"ready","summary":"Reviewed","issues":[]}') {
+const evidence = { workspace: { version: 1 as const, scope: 'git' as const, digest: 'a'.repeat(64), files: 1 }, configHash: 'b'.repeat(64), freshness: 'current' as const };
+
+function fixture(verification: PforgeVerificationOutcome = { status: 'passed', attempts: 0, evidence, evidenceId: randomUUID(), report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }, review = '{"verdict":"ready","summary":"Reviewed","issues":[]}') {
+  const reviewText = (() => { try { return JSON.stringify({ acceptance: handoff.acceptance, ...JSON.parse(review) }); } catch { return review; } })();
   const saved: TaskState[] = [], phases: string[] = [], messages: string[] = [];
   const controller = new TaskController((state) => saved.push(state));
   const adapter: TaskAdapter = {
-    async execute(phase, message) { phases.push(phase); messages.push(message); return phase === 'review' ? review : phase + ' complete'; },
+    async execute(phase, message) { phases.push(phase); messages.push(message); return phase === 'review' ? reviewText : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : phase + ' complete'; },
     async verify() { return verification; },
+    async refreshVerification() { return verification; },
     async baseline() { return { available: true, files: [] }; },
     async changes() { return { available: true, truncated: false, files: [] }; }
   };
@@ -17,6 +23,79 @@ function fixture(verification: PforgeVerificationOutcome = { status: 'passed', a
 }
 
 describe('task workflow controller', () => {
+  it('continues from a real-provider-shaped inspection handoff with evidence prose and a single final JSON object', async () => {
+    const f = fixture(), execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => args[0] === 'inspect' ? 'Inspection complete. Findings:\n- Relevant implementation and tests located.\n\n' + JSON.stringify(handoff.brief) : execute(...args);
+    const task = await f.controller.run('请解决登录接口的 500 错误', 0, f.adapter);
+    expect(task).toMatchObject({ kind: 'change', status: 'completed' });
+    expect(task.phases.map((phase) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+  });
+  it('routes an explicit host verification action without inferring intent from its descriptive text', async () => {
+    const f = fixture(), prompt = '运行项目配置的验证命令，检查刚刚应用的子任务变更。';
+    expect(taskKind(prompt)).toBe('undetermined');
+    const task = await f.controller.run(prompt, 0, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent', requestedKind: 'verify' });
+    expect(task).toMatchObject({ kind: 'verify', status: 'completed' });
+    expect(task.phases.map((phase) => phase.phase)).toEqual(['verify', 'complete']);
+    expect(f.phases).toEqual([]);
+  });
+  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', 'Make the sign-in button blue', '请解决登录错误，不要修改现有测试', '请解决登录接口的 500 错误，然后运行测试', '请分析并解决登录问题'])('resolves unfamiliar implementation phrasing without silently completing inspection: %s', async (prompt) => {
+    const f = fixture(); expect(taskKind(prompt)).toBe('undetermined');
+    const task = await f.controller.run(prompt, 0, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent' });
+    expect(task).toMatchObject({ intentHint: 'undetermined', kind: 'change', mode: 'agent', status: 'completed' });
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']); expect(task.verification?.status).toBe('passed');
+  });
+  it('keeps ambiguous understanding pending and cannot downgrade an explicit implementation request', async () => {
+    for (const [prompt, intent] of [['处理一下那个', 'clarify'], ['Fix login', 'explore']] as const) {
+      const f = fixture(); const execute = f.adapter.execute;
+      f.adapter.execute = async (...args) => args[0] === 'inspect' ? JSON.stringify({ ...handoff.brief, intent, unresolved: ['Which visible result is required?'] }) : execute(...args);
+      const task = await f.controller.run(prompt, 0, f.adapter);
+      expect(task.status).toBe('needs_attention'); expect(f.phases).not.toContain('implement');
+    }
+  });
+  it('coalesces usage snapshots while immediately persisting critical transitions and flushing final counts', async () => {
+    vi.useFakeTimers();
+    try {
+      const saved: TaskState[] = [], controller = new TaskController((task) => saved.push(task));
+      const f = fixture(), task = await f.controller.run('Fix task', 0, f.adapter);
+      task.status = 'running'; controller.setExternalState(task); const initial = saved.length;
+      for (let i = 0; i < 100; i++) controller.recordProgress({ version: 1, status: 'active', observations: i, unchanged: 0, warnings: 0 });
+      expect(saved).toHaveLength(initial); expect(controller.state?.progress?.observations).toBe(99);
+      await vi.advanceTimersByTimeAsync(1000); expect(saved).toHaveLength(initial + 1);
+      controller.recordProgress({ version: 1, status: 'warned', observations: 101, unchanged: 6, warnings: 1 });
+      expect(saved).toHaveLength(initial + 2);
+      controller.recordProgress({ version: 1, status: 'warned', observations: 102, unchanged: 7, warnings: 1 });
+      controller.flush(); expect(saved.at(-1)?.progress?.observations).toBe(102);
+    } finally { vi.useRealTimers(); }
+  });
+  it('persists host-assigned acceptance IDs and passes the validated plan to implementation and review', async () => {
+    const f = fixture(); const task = await f.controller.run('Fix the task without changing protected files', 0, f.adapter);
+    expect(task.plan?.acceptance).toMatchObject([{ id: 'A1', criterion: handoff.plan.acceptance[0]!.criterion }]);
+    expect(f.messages[2]).toContain('MODEL-AUTHORED REFERENCE DATA'); expect(f.messages[2]).toContain('"id":"A1"');
+    expect(f.messages.at(-1)).toContain('exactly one acceptance result');
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }])?.plan).toEqual(task.plan);
+    const legacy = { ...task }; delete legacy.plan; delete legacy.review!.acceptance;
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: legacy }])?.status).toBe('completed');
+  });
+  it.each(['plain prose', JSON.stringify({ ...handoff.plan, trust: true }), JSON.stringify({ ...handoff.plan, acceptance: [] })])('stops malformed plan handoff before implementation: %s', async (output) => {
+    const f = fixture(); const execute = f.adapter.execute; let checked = false;
+    f.adapter.execute = async (...args) => args[0] === 'plan' ? output : execute(...args);
+    f.adapter.verify = async () => { checked = true; throw new Error('must not run'); };
+    const task = await f.controller.run('Fix the task', 2, f.adapter);
+    expect(task).toMatchObject({ status: 'needs_attention', phase: 'plan', repairs: 0 });
+    expect(task.phases.at(-1)?.endedAt).toBeTypeOf('string'); expect(f.saved.at(-1)).toEqual(task);
+    expect(checked).toBe(false); expect(f.phases).not.toContain('implement'); expect(f.controller.active).toBe(false);
+  });
+  it.each([
+    undefined, [], [{ id: 'A1', status: 'unconfirmed', evidence: 'No supporting evidence' }],
+    [{ id: 'A2', status: 'met', evidence: 'Invented criterion' }],
+    [{ id: 'A1', status: 'met', evidence: 'one' }, { id: 'A1', status: 'met', evidence: 'duplicate' }]
+  ])('rejects ready reviews without exact confirmed acceptance coverage: %j', async (acceptance) => {
+    const f = fixture(); const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => args[0] === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Claimed done', issues: [], acceptance }) : execute(...args);
+    const result = await f.controller.run('Fix the task', 0, f.adapter);
+    expect(result.status).toBe('needs_attention'); expect(result.verification?.status).toBe('passed');
+    expect(withTaskEvidence({ ...result, status: 'completed' }, result.verification!).status).toBe('needs_attention');
+  });
   it('prioritizes implementation intent when a change also asks for verification', () => {
     expect(taskKind('修改代码并运行测试')).toBe('change');
     expect(taskKind('运行项目测试')).toBe('verify');
@@ -25,6 +104,10 @@ describe('task workflow controller', () => {
   it.each([
     ['Fix the bug and run the tests', 'change'],
     ['Run tests and fix any failures', 'change'],
+    ['Extend Queue.drain(limit = Infinity) in index.js and its public index.d.ts declaration. Do not change existing tests or notes.txt. Run configured verification.', 'change'],
+    ['扩展队列的 drain 参数并运行验证，不要修改现有测试。', 'change'],
+    ['Explain how to extend Queue.drain and run tests.', 'explore'],
+    ['Extend the API. Do not modify any files.', 'explore'],
     ['Implement CustomProviders.remove(id, expectedRevision). Do not modify package files, existing tests, or notes.txt. Run all configured verification.', 'change'],
     ['Fix the bug. Do not modify tests or package-lock.json.', 'change'],
     ['修复登录问题，不要修改现有测试和 package.json。运行验证。', 'change'],
@@ -46,11 +129,54 @@ describe('task workflow controller', () => {
     ['你好', 'answer'],
     ['你能干什么？', 'answer']
   ])('routes %s as %s', (prompt, kind) => { expect(taskKind(prompt)).toBe(kind); });
+  it('distinguishes consultation, scoped protections and user-authored contextual continuation', () => {
+    expect(taskKind('你觉得还有什么需要完善？')).toBe('explore');
+    expect(taskKind('修复接口，但不要删除数据库')).toBe('change');
+    expect(taskKind('Fix the API. Do not delete the database.')).toBe('change');
+    expect(taskKind('继续')).toBe('undetermined');
+    expect(taskKind('继续', { previousUserPrompts: ['修复接口'] })).toBe('change');
+    expect(taskKind('continue', { pendingKind: 'verify' })).toBe('verify');
+    expect(taskKind('按刚才的方案处理', { previousUserPrompts: ['请分析登录问题并提出计划，不要修改任何文件'] })).toBe('change');
+    expect(taskKind('继续，但不要修改任何文件', { pendingKind: 'change' })).toBe('explore');
+    expect(taskKind('继续', { previousUserPrompts: ['Explain the project structure'] })).toBe('explore');
+  });
+  it('repairs concrete review defects, then verifies and reviews again using the same repair allowance', async () => {
+    const f = fixture(); let reviews = 0, checks = 0;
+    const execute = f.adapter.execute, verify = f.adapter.verify;
+    f.adapter.execute = async (...args) => { const original = await execute(...args); return args[0] === 'review' && ++reviews === 1 ? '{"verdict":"changes_requested","summary":"Missing required case","issues":["Handle empty input"]}' : original; };
+    f.adapter.verify = async (signal) => { checks++; return verify(signal); };
+    const result = await f.controller.run('Fix the task', 1, f.adapter);
+    expect(result).toMatchObject({ status: 'completed', repairs: 1, review: { verdict: 'ready', freshness: 'current' } });
+    expect(checks).toBe(2); expect(reviews).toBe(2);
+    expect(f.messages.some((message) => message.includes('Handle empty input') && message.includes('share this bounded retry budget'))).toBe(true);
+    expect(f.messages[0]).toBe('Fix the task'); expect(taskPhaseContract('inspect')).toContain('HOST PHASE CONTRACT'); expect(f.messages[1]).toContain('Do not restart');
+  });
+  it('does not reset the repair counter between verification and review failures', async () => {
+    const f = fixture(undefined, '{"verdict":"changes_requested","summary":"Defect","issues":["Blocking bug"]}');
+    const pass = await f.adapter.verify(new AbortController().signal); let calls = 0;
+    f.adapter.verify = async () => ++calls === 1 ? { status: 'failed', attempts: 0, error: 'failure' } : pass;
+    const result = await f.controller.run('Fix the task', 1, f.adapter);
+    expect(result.status).toBe('needs_attention'); expect(result.repairs).toBe(1); expect(calls).toBe(2);
+    expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(2);
+  });
+  it('persists invalidated verification and review without claiming current completion', async () => {
+    const f = fixture(); const result = await f.controller.run('Fix the task', 0, f.adapter);
+    const stale = withTaskEvidence(result, { ...result.verification!, evidence: { ...evidence, freshness: 'stale', reason: 'Changed after undo' } });
+    expect(stale).toMatchObject({ status: 'needs_attention', review: { freshness: 'stale' }, verification: { status: 'passed', evidence: { freshness: 'stale' } } });
+    expect(stale.verification?.report).toEqual(result.verification?.report);
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: stale }])).toEqual(stale);
+  });
   it('runs implementation and verification when a change preserves only named files', async () => {
     const f = fixture();
     const result = await f.controller.run('Implement provider deletion. Do not modify package files, existing tests, or notes.txt. Run all configured verification.', 0, f.adapter);
     expect(result.kind).toBe('change'); expect(result.status).toBe('completed');
     expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']); expect(result.verification?.status).toBe('passed');
+  });
+  it('does not skip implementation and review when an extension request also asks to run verification', async () => {
+    const f = fixture();
+    const result = await f.controller.run('Extend Queue.drain(limit = Infinity) and its public declaration. Do not change existing tests or notes.txt. Run configured verification.', 0, f.adapter);
+    expect(result.kind).toBe('change'); expect(result.status).toBe('completed');
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']);
   });
   it('completes only after verification and structured review pass', async () => {
     const f = fixture();
@@ -97,7 +223,7 @@ describe('task workflow controller', () => {
   });
   it('routes an explicit verification request directly to the verification gate', async () => {
     const f = fixture(); let verifications = 0;
-    f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }; };
+    f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, evidence, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }; };
     const result = await f.controller.run('Run the configured tests.', 2, f.adapter);
     expect(result).toMatchObject({ kind: 'verify', status: 'completed', phase: 'complete' });
     expect(f.phases).toEqual([]);
@@ -115,12 +241,14 @@ describe('task workflow controller', () => {
   it('bounds repair retries and returns exact verification output to implementation', async () => {
     const output = 'verbatim\n$output\nend';
     const f = fixture({ status: 'failed', attempts: 0, report: { passed: false, summary: 'FAIL', results: [{ command: 'test', exitCode: 4, passed: false, durationMs: 1, output }] } });
+    f.adapter.changes = async () => ({ available: true, truncated: false, files: [{ path: 'code.ts', status: ' M', fingerprint: String(f.phases.filter((phase) => phase === 'implement').length), preexisting: false, observed: true }] });
     const result = await f.controller.run('Fix', 2, f.adapter);
     expect(result.status).toBe('failed');
     expect(result.repairs).toBe(2);
     expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(3);
     expect(f.messages.filter((message) => message.includes(output))).toHaveLength(2);
     expect(f.phases).not.toContain('review');
+    expect(result.changes?.files).toMatchObject([{ path: 'code.ts', fingerprint: '3' }]);
   });
   it.each([
     [{ status: 'passed', attempts: 0 }, '{"verdict":"ready","summary":"Claim without report","issues":[]}'],

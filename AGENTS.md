@@ -52,3 +52,15 @@
 - Use a container, VM, or restricted account for untrusted repositories.
 - Do not add project trust bypasses, Approval bypasses, or automatic execution of untrusted project
   extensions.
+
+## Documentation and evidence
+
+- Keep documentation in the same change as implementation. Update the relevant architecture, usage,
+  operations or evaluation document when behavior, APIs, configuration, persistence, trust or recovery changes.
+- Update both `README.md` and `README.en.md` for user-visible capabilities and setup changes; keep their
+  supported scope and limitations consistent. Record substantive changes under `CHANGELOG.md` Unreleased.
+- Preserve the Forge/Pi ownership boundary in feature claims. Distinguish implemented behavior, tested
+  evidence and planned work; never describe mock tests as model quality or invent comparative scores.
+- Published evaluations must identify their protocol and code fingerprint. Retain failed runs and prior
+  results; do not relabel old measurements as validation of newer code. Never publish private sessions,
+  local credentials, provider endpoints or user-specific paths.

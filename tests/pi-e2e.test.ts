@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile, spawn } from "node:child_process";
@@ -27,10 +27,11 @@ async function run(verify: string) {
   const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
   const port = (server.address() as AddressInfo).port;
   const home = await mkdtemp(join(tmpdir(), "pforge-e2e-"));
-  await mkdir(join(home, ".git"));
-  await writeFile(join(home, "pforge.json"), JSON.stringify({ verify: [{ name: "verify", command: verify }], verifyRetries: 0 }), "utf8");
+  const project = await mkdtemp(join(tmpdir(), 'pforge-e2e-project-'));
+  await promisify(execFile)('git', ['init', '-q'], { cwd: project, windowsHide: true });
+  await writeFile(join(project, "pforge.json"), JSON.stringify({ verify: [{ name: "verify", command: verify }], verifyRetries: 0 }), "utf8");
   await writeFile(join(home, "models.json"), JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${port}/v1`, api: "openai-completions", apiKey: "test", models: [{ id: "mock" }] } } }), "utf8");
-  const child = spawn(process.execPath, [join(process.cwd(), "dist", "pi-cli.js"), "--approve", "--model", "mock/mock", "-p", "Complete"], { cwd: home, env: { ...process.env, PFORGE_HOME: home }, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [join(process.cwd(), "dist", "pi-cli.js"), "--approve", "--model", "mock/mock", "-p", "Complete"], { cwd: project, env: { ...process.env, FORGE_AGENT_HOME: home, PFORGE_HOME: home }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const timer = setTimeout(() => child.kill("SIGKILL"), 25000);
   let stdout = "", stderr = "";
   child.stdout.on("data", (chunk) => stdout += chunk);

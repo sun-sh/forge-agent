@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { MemoryError, MemoryStore, memoryRevision } from '../src/web/memory.js';
+import { createExecutionState } from '../src/task/controller.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -17,6 +18,54 @@ async function fixture() {
 }
 
 describe('scoped memory', () => {
+  it('retrieves relevant English/path and Chinese memories ahead of unrelated facts while retaining explicit constraints', async () => {
+    const { home, project, otherProject, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
+    const document = await store.replace('project', [
+      ...Array.from({ length: 40 }, (_, index) => ({ text: 'Unrelated marketing calendar ' + index + ' ' + 'calendar '.repeat(30), kind: 'fact' })),
+      { text: 'src/config/normalize.ts preserves unknown settings in normalizeConfig.', kind: 'fact' },
+      { text: '支付回调必须使用幂等键处理重复通知。', kind: 'decision' },
+      { text: 'Do not change the public API.', kind: 'constraint' },
+      { text: 'normalizeConfig disabled obsolete behavior', kind: 'fact', enabled: false }
+    ], project);
+    await store.replace('project', [{ text: 'Other project normalizeConfig secret', kind: 'fact' }], otherProject);
+    await store.propose(project, manager, { layer: 'project', kind: 'fact', text: 'normalizeConfig unaccepted candidate', evidence: 'model suggestion' });
+    const plan = await store.promptPlan(project, manager, 'Fix src/config/normalize.ts normalizeConfig validation');
+    expect(plan.text).toContain('preserves unknown settings'); expect(plan.text).toContain('Do not change the public API');
+    expect(plan.text).not.toMatch(/marketing|Other project|unaccepted|disabled obsolete/);
+    expect(plan.layers.find((layer) => layer.layer === 'project')).toMatchObject({ includedItems: 2, omittedItems: 41 });
+    expect(plan.layers.find((layer) => layer.layer === 'project')?.selected).toEqual(expect.arrayContaining([{ id: document.items[40]!.id, reason: 'relevant' }, { id: document.items[42]!.id, reason: 'constraint' }]));
+    const chinese = await store.promptPlan(project, manager, '修复支付回调幂等问题');
+    expect(chinese.text).toContain('幂等键处理重复通知'); expect(chinese.text).not.toContain('normalizeConfig');
+    expect(plan.text.length).toBeLessThanOrEqual(plan.maxChars);
+  });
+  it('rebuilds bounded original-goal context after compaction and uses that goal instead of an internal phase prompt for recall', async () => {
+    const { home, project, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
+    const task = createExecutionState('Fix normalizeConfig in src/config.ts\n' + 'context '.repeat(700) + '\nPROTECTED_TAIL: preserve unknown keys and never modify auth.ts', { workflow: 'planned' });
+    task.phase = 'implement'; task.phases.push({ phase: 'inspect', startedAt: task.startedAt, endedAt: task.startedAt, summary: 'Relevant evidence: src/config.ts' });
+    await store.replace('project', [{ text: 'normalizeConfig must keep unknown keys.', kind: 'fact' }, { text: 'Unrelated color preference for logo.', kind: 'fact' }], project);
+    const hooks = new Map<string, any>();
+    store.extension(project, manager, () => task)({ registerTool() {}, on(name: string, callback: any) { hooks.set(name, callback); } } as any);
+    const event = { messageType: 'custom', systemPromptOptions: { sections: {} as Record<string, string> } };
+    await hooks.get('before_agent_start')(event);
+    expect(event.systemPromptOptions.sections['forge_memory']).toContain('keep unknown keys');
+    expect(event.systemPromptOptions.sections['forge_memory']).not.toContain('logo');
+    const checkpoint = event.systemPromptOptions.sections['forge_task_checkpoint']!;
+    const payload = JSON.parse(checkpoint.slice(checkpoint.indexOf('\n') + 1));
+    expect(payload.goal).toContain('Fix normalizeConfig in src/config.ts');
+    expect(payload.goal).toContain('PROTECTED_TAIL: preserve unknown keys and never modify auth.ts');
+    expect(payload.originalRequest).toMatchObject({ taskId: task.id, characters: task.prompt.length, excerptOnly: true });
+    manager.appendCustomEntry('pforge.task', task); manager.appendCompaction('Very short summary without the goal.', manager.getLeafId()!, 10000);
+    const reopened = SessionManager.open(manager.getSessionFile()!), rebuilt = new Map<string, any>();
+    store.extension(project, reopened, () => task)({ registerTool() {}, on(name: string, callback: any) { rebuilt.set(name, callback); } } as any);
+    const after = { messageType: 'custom', systemPromptOptions: { sections: {} as Record<string, string> } };
+    await rebuilt.get('before_agent_start')(after);
+    expect(after.systemPromptOptions.sections['forge_task_checkpoint']).toBe(checkpoint);
+    expect(after.systemPromptOptions.sections['forge_task_checkpoint']).toContain('Fix normalizeConfig');
+    expect(after.systemPromptOptions.sections['forge_task_checkpoint']).toContain('PROTECTED_TAIL: preserve unknown keys and never modify auth.ts');
+    expect(after.systemPromptOptions.sections['forge_task_checkpoint']!.length).toBeLessThan(7000);
+    task.status = 'completed'; await rebuilt.get('before_agent_start')(after);
+    expect(after.systemPromptOptions.sections['forge_task_checkpoint']).toBeUndefined();
+  });
   it('keeps model proposals out of the prompt until explicit review and records provenance', async () => {
     const { home, project, store } = await fixture(), manager = SessionManager.create(project, join(home, 'sessions'));
     manager.appendMessage({ role: 'user', content: 'Prefer pnpm for this project', timestamp: Date.now() });

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
 import { z } from 'zod';
 import { taskStateSchema, type TaskState } from './controller.js';
+import { replaceMetadataFile } from './persistence.js';
 
 const MAX_TASKS = 500;
 const registrySchema = z.object({
@@ -38,6 +39,10 @@ export class TaskRegistry {
   private readonly records = new Map<string, TaskRecord>();
   private writeQueue: Promise<void> = Promise.resolve();
   private writeError?: Error;
+  private writeRevision = 0;
+  private requestedWrites = 0;
+  private committedWrites = 0;
+  private bytesWritten = 0;
   private warning?: string;
   private compromised = false;
   private closed = false;
@@ -45,6 +50,7 @@ export class TaskRegistry {
   private constructor(private readonly path: string, private readonly ownerPath: string) {}
 
   get diagnostic(): string | undefined { return this.writeError ? '任务索引保存失败：' + this.writeError.message : this.warning; }
+  get persistenceStats() { return { requestedWrites: this.requestedWrites, committedWrites: this.committedWrites, bytesWritten: this.bytesWritten }; }
 
   static async open(home: string, onCompromised?: (error: Error) => void): Promise<TaskRegistry> {
     const directory = join(home, 'tasks');
@@ -98,13 +104,17 @@ export class TaskRegistry {
   }
 
   private scheduleWrite() {
-    const snapshot = { version: 1 as const, tasks: [...this.records.values()].map(clone) };
+    const revision = ++this.writeRevision; this.requestedWrites++;
     this.writeQueue = this.writeQueue.then(async () => {
       if (this.closed || this.compromised) throw new Error('Task registry ownership was lost');
+      if (revision !== this.writeRevision) return; // A newer complete index supersedes this pending snapshot.
+      const snapshot = { version: 1 as const, tasks: [...this.records.values()].map(clone) };
       const temporary = this.path + '.' + randomUUID() + '.tmp';
       try {
-        await writeFile(temporary, JSON.stringify(snapshot, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-        await rename(temporary, this.path);
+        const content = JSON.stringify(snapshot, null, 2) + '\n';
+        await writeFile(temporary, content, { encoding: 'utf8', mode: 0o600 });
+        await replaceMetadataFile(temporary, this.path);
+        this.committedWrites++; this.bytesWritten += Buffer.byteLength(content);
         this.writeError = undefined;
       } finally { await rm(temporary, { force: true }); }
     }).catch((error: unknown) => { this.writeError = error instanceof Error ? error : new Error(String(error)); });

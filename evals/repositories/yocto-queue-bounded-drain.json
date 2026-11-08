@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "name": "Yocto Queue bounded lazy drain at a fixed public revision",
+  "tasks": [
+    {
+      "id": "yocto-queue-bounded-drain",
+      "source": "https://github.com/sindresorhus/yocto-queue.git",
+      "revision": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+      "prompt": "Extend Queue.drain(limit = Infinity) in index.js and its public index.d.ts declaration. Keep drain a lazy iterator: it must dequeue at most limit values in FIFO order as next() consumes them, count undefined values normally, leave unconsumed values in the queue when the iterator is closed early, and keep no-argument behavior compatible. Accept Infinity or non-negative finite integers (including 0). For other numbers, throw RangeError; for non-number limits, throw TypeError. Because this is a generator, validation may happen on first consumption, but it must happen before any dequeue, even for an empty queue. Preserve queue size/head/tail behavior, ordinary non-destructive iteration, and enqueue after drain. Do not change package.json, existing tests, readme.md or notes.txt. Run configured verification.",
+      "setup": [
+        { "name": "fixed direct test dependencies", "command": "npm install --ignore-scripts --no-save --package-lock=false ava@3.15.0 tsd@0.17.0 xo@0.44.0 typescript@4.9.5", "timeoutMs": 300000 }
+      ],
+      "verify": [
+        { "name": "syntax", "command": "node --check index.js", "timeoutMs": 30000 },
+        { "name": "existing runtime and declaration tests", "command": "npm test", "timeoutMs": 120000 }
+      ],
+      "oracle": "yocto-queue-bounded-drain.oracle.mjs",
+      "oracleTimeoutMs": 30000,
+      "protected": ["package.json", "test.js", "index.test-d.ts", "readme.md", "notes.txt"],
+      "dirtyFiles": { "notes.txt": "Existing user work: preserve queue consumers and comments.\n" }
+    }
+  ]
+}

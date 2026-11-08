@@ -2,6 +2,9 @@
 
 The current package is `forge-agent` 0.2.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
 
+See [Architecture Deep Dive](architecture-deep-dive.md) for design decisions,
+failure semantics, source/test references and the remaining gaps.
+
 forge-agent is a product layer built on the Pi Coding Agent SDK. It does not fork Pi
 or implement a second agent loop. It uses more than Pi's model request runtime:
 the coding-agent session, tools, history, settings, and resource discovery are
@@ -44,8 +47,9 @@ existing self-review remains a separate gate; it is not automatically delegated.
 | Project verification and bounded repair attempts | forge-agent `src/config.ts`, `src/verification/pi-extension.ts`, `src/verification/verify.ts`, and `src/tools/command.ts`. |
 | Local gateway authorization | forge-agent `src/web/auth.ts` and gateway checks; separate from Pi's provider credentials. |
 | Web MCP management | forge-agent `src/web/mcp.ts`, `src/web/mcp-runtime.ts` and `src/web/ui/mcp.js`: scoped editing, probes, browser authorization, per-tool controls and session connection views. Pi owns validation, protocol, OAuth and execution. |
-| Planned task orchestration | forge-agent `src/task/controller.ts`; Pi still executes every model/tool turn. |
-| Home ownership and task index | forge-agent `src/task/registry.ts`; a `proper-lockfile` lease gives one Web gateway ownership of a Forge home, preserves an owner-free recovery path after a stale process, and surfaces index write diagnostics. |
+| Planned task orchestration | `src/task/controller.ts` and `plan.ts`: schema-validated task understanding, preserved constraints/acceptance, bounded repairs; Pi still executes every model/tool turn. |
+| Host completion and execution records | `src/task/lifecycle.ts` unifies finalization failure/success; `timeline.ts` projects a stable read-only graph from Pi history with explicit missing-result and timing semantics. |
+| Home ownership and task index | `src/task/registry.ts`: one Web owner per home, stale-owner recovery, write diagnostics, superseded-write coalescing and write-volume counters; high-frequency usage is coalesced while critical task boundaries persist. |
 | Project execution ownership | forge-agent `src/web/executions.ts` and `src/project-identity.ts`; Agent prompts, terminal commands, project-trust changes, and shutdown share one canonical-directory reservation. |
 | Execution budgets | forge-agent `src/task/budget.ts` and Web hooks; each execution observes duration, model turns, tool calls, provider-reported tokens and cost, then aborts Pi and records `budget_exceeded`. |
 | Git change evidence and bounded diff preview | forge-agent `src/task/git.ts` and the Web changes panel; pre-existing dirty files are marked. |
@@ -80,10 +84,26 @@ when the session previously selected `planned`. The product-owned controller coo
 
 Each phase is a Pi prompt or custom continuation, so tool calls and automatic
 model recovery still belong to Pi. The controller owns phase transitions, a
-bounded verification repair budget, cancellation, durable task entries in the
+shared bounded verification/review repair budget, cancellation, durable task entries in the
 Pi branch, and the completion gate. A task cannot become complete from model
 prose alone: configured verification must pass and the review response must be
-structured and issue-free. Missing verification produces `needs_attention`.
+structured and issue-free. Each concrete blocking review repair returns to implementation,
+verification, and review, without resetting retries. Inspection and planning have host
+handoff contracts in system context, separate from the visible user message.
+Missing or stale verification produces `needs_attention`.
+
+`src/verification/evidence.ts` records bounded workspace content fingerprints and
+command-configuration hashes separately from display-only Git diffs. Reports keep
+their historical `passed`/`failed` result; `evidence.freshness` distinguishes current,
+stale, and unconfirmed observations. Only a nonempty, consistently successful report
+with current evidence can satisfy the verification gate. Review metadata binds the
+model verdict to the verification evidence ID. Host undo, proposal application and
+terminal commands invalidate evidence for all project sessions and durable task records,
+even on partial failure. Session/task reads and history restoration observe external
+changes with a short idle-query cache. Staleness is sticky until an explicit new check.
+Limits, excluded paths and the non-atomic observation boundary are documented in the
+[usage guide](usage.en.md). Source contents and credential values are never persisted
+in workspace fingerprints.
 
 The controller stores a versioned snapshot after phase changes, verification
 evidence, and review. On process restart a running snapshot becomes
@@ -95,14 +115,15 @@ The budget runtime is attached to the host execution rather than to one phase.
 It therefore covers planned inspection, implementation, verification repairs,
 review, automatic Pi recovery, and explicit continuation within that execution.
 The same runtime also guards adaptive prompts. Adaptive change and verification
-runs now receive the same durable execution envelope as planned runs: request,
+runs, including answer/exploration prompts, receive a durable execution envelope: request,
 workflow, model, budget, Git baseline and observed changes are written to the
 Pi branch and task index. The envelope does not turn adaptive execution into a
 multi-stage plan; it makes the short path inspectable and recoverable. Provider
 usage is observed when Pi emits a completed assistant message, so the limits
 are protective host guards rather than exact billing cutoffs. Changing the
 configured limits affects the next execution; it does not rewrite an existing
-snapshot.
+snapshot. Usage separates input, output, cache reads and cache writes. In-flight
+responses arriving after a stop are still counted, and missing prices remain unknown.
 
 ## Web integration limits
 
@@ -152,8 +173,10 @@ marks files already dirty before the task. It reports Git, unborn-repository,
 and non-Git limits instead of attributing every workspace change to the agent.
 
 Current lifecycle limits matter: a Forge home is intentionally single-owner, so
-a second gateway sharing it is rejected. One queued job runs at a time, only
-when existing work is idle. Queue snapshots expose committed disk state; restart
+a second gateway sharing it is rejected. Up to three queued jobs run across
+different projects, with FIFO order per canonical project/session. Busy projects
+do not block others; per-job cancellation drains only its own execution tree.
+Queue snapshots expose committed disk state; restart
 marks running jobs interrupted and preserves queued jobs. Explicit retry creates
 a new execution that checks current state. The service is a detached local process,
 not an OS startup service or distributed scheduler. Scoped memory remains reference
@@ -165,7 +188,13 @@ Memory injection also reserves separate prompt budgets for global, project and
 session layers. The active session and project scopes therefore remain visible
 when a user has accumulated a large global memory; the Web settings surface
 shows the selected and truncated budget for the current session. This remains
-reviewed reference material rather than a learned retrieval system. Pending
+reviewed reference material, ranked using the current goal's English/Chinese
+lexical terms while prioritizing constraints and preferences. Settings expose
+selected IDs/reasons. A bounded host checkpoint rebuilt from durable task state
+preserves the goal, phase, handoff and unresolved findings in Pi's prompt through
+compaction. Repeated unchanged reader/error results produce a strategy warning
+and then a bounded needs-attention stop. See [task scheduling](task-scheduling.md).
+Pending
 candidates carry evidence and session ownership, do not enter the prompt, and
 are not inherited as controllable records by a normal fork. The same ownership
 rule applies to child tasks and checkpoints.
@@ -175,7 +204,8 @@ The [product review](product-audit.md) records reproduced cases and acceptance c
 
 The product entry points are `src/pi-cli.ts` and `src/web/server.ts`. Their
 dependencies are emitted by TypeScript and Web assets are copied by
-`scripts/build.mjs`. `vitest.config.ts` explicitly selects the active tests.
+`scripts/build.mjs`. `vitest.config.ts` discovers `tests/**/*.test.{ts,js}`;
+TypeScript checks `tests/**/*.test.ts`. Legacy tests stay outside this tree.
 
 Earlier self-built agent, provider, context, MCP, security, storage, and eval
 modules, tests and old demos are preserved under `archive/prototype/`. They are

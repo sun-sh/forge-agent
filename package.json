@@ -56,6 +56,7 @@
     "CHANGELOG.md",
     "SECURITY.md",
     "AGENTS.md",
+    "CONTRIBUTING.md",
     "docs",
     "LICENSE",
     "forge-agent.schema.json"

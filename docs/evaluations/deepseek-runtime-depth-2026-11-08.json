@@ -1,0 +1,599 @@
+{
+  "schemaVersion": 1,
+  "kind": "reviewed-real-model-runtime-regression",
+  "date": "2026-11-08",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "transport": "OpenAI-compatible provider",
+  "thinkingLevel": "medium",
+  "environment": {
+    "platform": "win32",
+    "node": "v24.19.0",
+    "piVersion": "1.4.0"
+  },
+  "source": {
+    "baseRevision": "a383ea435f997f264d1214714cfe6ea5ab079544",
+    "workingTree": "modified",
+    "evaluatorFingerprints": {
+      "small": "b5e0482230745a83cb2e20bf1c57f3b0de877702d233334e489928670a52f52f",
+      "repository": "25d4b55ed42c969528564988b9f947e208a114b52a94ae47a6b918b5db340927"
+    }
+  },
+  "smallSuite": {
+    "suiteVersion": "forge-eval-small-repo-v5",
+    "suiteFingerprint": "760ff5cafb863e8a",
+    "taskSource": "scripts/eval-tasks.mjs",
+    "repeat": 1,
+    "summaries": [
+      {
+        "workflow": "direct",
+        "total": 5,
+        "passed": 5,
+        "falseCompletions": 0,
+        "medianLatencyMs": 38821,
+        "totalTokens": 152044
+      },
+      {
+        "workflow": "planned",
+        "total": 5,
+        "passed": 5,
+        "falseCompletions": 0,
+        "medianLatencyMs": 52396,
+        "totalTokens": 287531
+      }
+    ],
+    "results": [
+      {
+        "id": "clamp-bounds",
+        "workflow": "direct",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 42230,
+        "modelTurns": 7,
+        "toolCalls": 9,
+        "totalTokens": 30337,
+        "usage": {
+          "input": 4382,
+          "output": 1059,
+          "cacheRead": 24896,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "strict-port",
+        "workflow": "direct",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 38821,
+        "modelTurns": 6,
+        "toolCalls": 5,
+        "totalTokens": 24478,
+        "usage": {
+          "input": 3750,
+          "output": 696,
+          "cacheRead": 20032,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "stable-dedupe",
+        "workflow": "direct",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 30906,
+        "modelTurns": 6,
+        "toolCalls": 8,
+        "totalTokens": 24763,
+        "usage": {
+          "input": 4055,
+          "output": 868,
+          "cacheRead": 19840,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "config-normalize-cross-file",
+        "workflow": "direct",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 31790,
+        "modelTurns": 6,
+        "toolCalls": 10,
+        "totalTokens": 28361,
+        "usage": {
+          "input": 4903,
+          "output": 1698,
+          "cacheRead": 21760,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "root-safe-path-cross-file",
+        "workflow": "direct",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 44020,
+        "modelTurns": 8,
+        "toolCalls": 12,
+        "totalTokens": 44105,
+        "usage": {
+          "input": 6215,
+          "output": 2498,
+          "cacheRead": 35392,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "clamp-bounds",
+        "workflow": "planned",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 45603,
+        "modelTurns": 10,
+        "toolCalls": 12,
+        "totalTokens": 49387,
+        "usage": {
+          "input": 15121,
+          "output": 2842,
+          "cacheRead": 31424,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "strict-port",
+        "workflow": "planned",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 50527,
+        "modelTurns": 10,
+        "toolCalls": 12,
+        "totalTokens": 55530,
+        "usage": {
+          "input": 17411,
+          "output": 3879,
+          "cacheRead": 34240,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "stable-dedupe",
+        "workflow": "planned",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 52396,
+        "modelTurns": 11,
+        "toolCalls": 16,
+        "totalTokens": 61343,
+        "usage": {
+          "input": 17509,
+          "output": 3386,
+          "cacheRead": 40448,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "config-normalize-cross-file",
+        "workflow": "planned",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 61355,
+        "modelTurns": 10,
+        "toolCalls": 16,
+        "totalTokens": 58471,
+        "usage": {
+          "input": 19084,
+          "output": 3803,
+          "cacheRead": 35584,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "root-safe-path-cross-file",
+        "workflow": "planned",
+        "run": 1,
+        "passed": true,
+        "heldOutPass": true,
+        "verificationGate": true,
+        "workspaceIntegrity": true,
+        "taskCompletion": true,
+        "falseCompletion": false,
+        "taskStatus": "completed",
+        "repairs": 0,
+        "latencyMsIncludingSetup": 81889,
+        "modelTurns": 10,
+        "toolCalls": 16,
+        "totalTokens": 62800,
+        "usage": {
+          "input": 22466,
+          "output": 5006,
+          "cacheRead": 35328,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      }
+    ]
+  },
+  "initialRepositoryBatch": {
+    "protocolValid": false,
+    "fingerprint": "57df72c87652f41a24f1c4b3b150ed5e67f8db984481da2c7529bc887af60c0f",
+    "harnessFingerprint": "d2de37e1d78667a01c2c145e1d7c2a53c0875cbcb0a4b3260bbda92b3b1d9117",
+    "rawHarnessTotals": {
+      "total": 4,
+      "passed": 0,
+      "falseCompletions": 4
+    },
+    "results": [
+      {
+        "workflow": "direct",
+        "iteration": 1,
+        "rawPassed": false,
+        "rawFalseCompletion": true,
+        "heldOutPass": false,
+        "hostCompleted": true,
+        "configuredVerificationPassed": true,
+        "workspaceIntegrity": true,
+        "modelTurns": 8,
+        "toolCalls": 8,
+        "totalTokens": 64222,
+        "usage": {
+          "input": 9956,
+          "output": 3386,
+          "cacheRead": 50880,
+          "cacheWrite": 0
+        },
+        "costUsd": null,
+        "reviewedDiagnosis": "Runtime assertions passed before declaration compilation failed on unrelated modern ambient Node types with the pinned older compiler; declaration acceptance was not established."
+      },
+      {
+        "workflow": "planned",
+        "iteration": 1,
+        "rawPassed": false,
+        "rawFalseCompletion": true,
+        "heldOutPass": false,
+        "hostCompleted": true,
+        "configuredVerificationPassed": true,
+        "workspaceIntegrity": true,
+        "modelTurns": 0,
+        "toolCalls": 0,
+        "totalTokens": 0,
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        },
+        "costUsd": null,
+        "reviewedDiagnosis": "Host routing classified Extend plus verification as verification-only. Existing tests passed without implementation. The external runtime assertion rejected unchanged drain(0)."
+      },
+      {
+        "workflow": "direct",
+        "iteration": 2,
+        "rawPassed": false,
+        "rawFalseCompletion": true,
+        "heldOutPass": false,
+        "hostCompleted": true,
+        "configuredVerificationPassed": true,
+        "workspaceIntegrity": true,
+        "modelTurns": 9,
+        "toolCalls": 12,
+        "totalTokens": 83217,
+        "usage": {
+          "input": 11283,
+          "output": 4158,
+          "cacheRead": 67776,
+          "cacheWrite": 0
+        },
+        "costUsd": null,
+        "reviewedDiagnosis": "Runtime assertions passed before declaration compilation failed on unrelated modern ambient Node types with the pinned older compiler; declaration acceptance was not established."
+      },
+      {
+        "workflow": "planned",
+        "iteration": 2,
+        "rawPassed": false,
+        "rawFalseCompletion": true,
+        "heldOutPass": false,
+        "hostCompleted": true,
+        "configuredVerificationPassed": true,
+        "workspaceIntegrity": true,
+        "modelTurns": 0,
+        "toolCalls": 0,
+        "totalTokens": 0,
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        },
+        "costUsd": null,
+        "reviewedDiagnosis": "Host routing classified Extend plus verification as verification-only. Existing tests passed without implementation. The external runtime assertion rejected unchanged drain(0)."
+      }
+    ],
+    "disposition": "All original results retained. This batch identified a host routing defect and an oracle environment defect; its raw failure counts are not treated as valid model quality scores. The corrected protocol has a different fingerprint and is reported separately."
+  },
+  "repositorySuite": {
+    "suite": "Yocto Queue bounded lazy drain at a fixed public revision",
+    "suiteSource": "evals/repositories/yocto-queue-bounded-drain.json",
+    "oracleSource": "evals/repositories/yocto-queue-bounded-drain.oracle.mjs",
+    "repository": "https://github.com/sindresorhus/yocto-queue.git",
+    "revision": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+    "fingerprint": "87faa1791bfc461fb7ee4746fa22b36b66786c9b7420d0ad3aa4a5b5b7d94ebe",
+    "repeat": 2,
+    "limits": {
+      "maxDurationMs": 3600000,
+      "maxModelTurns": 150,
+      "maxToolCalls": 300,
+      "maxTotalTokens": 5000000,
+      "maxCostUsd": 25
+    },
+    "summaries": [
+      {
+        "workflow": "direct",
+        "total": 2,
+        "passed": 2,
+        "falseCompletions": 0,
+        "medianLatencyMs": 104693,
+        "totalTokens": 126250
+      },
+      {
+        "workflow": "planned",
+        "total": 2,
+        "passed": 2,
+        "falseCompletions": 0,
+        "medianLatencyMs": 124383,
+        "totalTokens": 277304
+      }
+    ],
+    "results": [
+      {
+        "id": "yocto-queue-bounded-drain",
+        "workflow": "direct",
+        "iteration": 1,
+        "passed": true,
+        "baselineFails": true,
+        "heldOutPass": true,
+        "workspaceIntegrity": true,
+        "completed": true,
+        "verification": true,
+        "falseCompletion": false,
+        "infrastructureFailure": false,
+        "setupMs": 58029,
+        "executionMs": 73525,
+        "latencyMsIncludingSetup": 133847,
+        "repairs": 0,
+        "modelTurns": 8,
+        "toolCalls": 10,
+        "totalTokens": 64567,
+        "usage": {
+          "input": 9927,
+          "output": 3568,
+          "cacheRead": 51072,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "yocto-queue-bounded-drain",
+        "workflow": "planned",
+        "iteration": 1,
+        "passed": true,
+        "baselineFails": true,
+        "heldOutPass": true,
+        "workspaceIntegrity": true,
+        "completed": true,
+        "verification": true,
+        "falseCompletion": false,
+        "infrastructureFailure": false,
+        "setupMs": 49087,
+        "executionMs": 154583,
+        "latencyMsIncludingSetup": 205955,
+        "repairs": 0,
+        "modelTurns": 16,
+        "toolCalls": 22,
+        "totalTokens": 176208,
+        "usage": {
+          "input": 41005,
+          "output": 10019,
+          "cacheRead": 125184,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "yocto-queue-bounded-drain",
+        "workflow": "direct",
+        "iteration": 2,
+        "passed": true,
+        "baselineFails": true,
+        "heldOutPass": true,
+        "workspaceIntegrity": true,
+        "completed": true,
+        "verification": true,
+        "falseCompletion": false,
+        "infrastructureFailure": false,
+        "setupMs": 58056,
+        "executionMs": 135861,
+        "latencyMsIncludingSetup": 195975,
+        "repairs": 0,
+        "modelTurns": 7,
+        "toolCalls": 12,
+        "totalTokens": 61683,
+        "usage": {
+          "input": 18374,
+          "output": 4397,
+          "cacheRead": 38912,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "id": "yocto-queue-bounded-drain",
+        "workflow": "planned",
+        "iteration": 2,
+        "passed": true,
+        "baselineFails": true,
+        "heldOutPass": true,
+        "workspaceIntegrity": true,
+        "completed": true,
+        "verification": true,
+        "falseCompletion": false,
+        "infrastructureFailure": false,
+        "setupMs": 49617,
+        "executionMs": 94183,
+        "latencyMsIncludingSetup": 145733,
+        "repairs": 0,
+        "modelTurns": 12,
+        "toolCalls": 17,
+        "totalTokens": 101096,
+        "usage": {
+          "input": 32768,
+          "output": 7400,
+          "cacheRead": 60928,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      }
+    ]
+  },
+  "collaborationIntegration": {
+    "kind": "real-model-explicit-async-collaboration-integration",
+    "passed": true,
+    "taskStatus": "completed",
+    "currentVerification": true,
+    "explicitlyRequestedDelegation": true,
+    "observedActions": [
+      "start",
+      "wait",
+      "wait"
+    ],
+    "asyncStartObserved": true,
+    "overlappingChildLifecycles": true,
+    "latencyMsIncludingSetup": 81480,
+    "modelTurns": 15,
+    "toolCalls": 19,
+    "totalTokens": 86842,
+    "usage": {
+      "input": 16790,
+      "output": 7716,
+      "cacheRead": 62336,
+      "cacheWrite": 0
+    },
+    "costUsd": null,
+    "children": [
+      {
+        "role": "explorer",
+        "status": "completed",
+        "collected": true,
+        "durationMs": 17944,
+        "modelTurns": 3,
+        "toolCalls": 3,
+        "totalTokens": 7713,
+        "usage": {
+          "input": 2375,
+          "output": 1882,
+          "cacheRead": 3456,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      },
+      {
+        "role": "explorer",
+        "status": "completed",
+        "collected": true,
+        "durationMs": 47305,
+        "modelTurns": 3,
+        "toolCalls": 2,
+        "totalTokens": 8133,
+        "usage": {
+          "input": 2414,
+          "output": 2391,
+          "cacheRead": 3328,
+          "cacheWrite": 0
+        },
+        "costUsd": null
+      }
+    ]
+  },
+  "limitations": [
+    "Five small public tasks run once per workflow and one small third-party repository task run twice per workflow; this is not a general coding benchmark or an industry ranking.",
+    "The explicitly requested two-child integration demonstrates lifecycle, collection and acceptance, not autonomous delegation choice or multi-agent quality gains.",
+    "Every run is retained, including failures; no competitor baseline or statistical claim is made.",
+    "The initial four repository runs used a flawed ambient-type oracle and exposed an Extend routing defect. Their raw failures are retained separately; corrected runs must not be merged into a single unchanged-protocol score.",
+    "The small suite and explicit collaboration case preceded the final Extend routing correction; evaluator fingerprints distinguish the runtime versions.",
+    "The third-party repository has fixed direct test dependency versions but no upstream lockfile; transitive resolution is not fully pinned.",
+    "Small-suite latency includes setup; repository execution time is separated from setup. Background local acceptance work overlapped with some small runs, so timings are descriptive only.",
+    "Cumulative tokens include repeated input and cache reads, plus child usage where present; they are not the context-window size.",
+    "Model prices were not configured. Cost is unknown, never reported as free.",
+    "This allowlisted aggregate excludes provider URLs, credentials, local paths, session IDs and raw transcripts."
+  ]
+}

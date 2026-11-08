@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { replaceMetadataFile } from './persistence.js';
 
 export const budgetLimitsSchema = z.object({
   maxDurationMs: z.number().int().min(60_000).max(86_400_000),
@@ -12,10 +13,10 @@ export const budgetLimitsSchema = z.object({
 }).strict();
 export type BudgetLimits = z.infer<typeof budgetLimitsSchema>;
 export const DEFAULT_BUDGET_LIMITS: BudgetLimits = {
-  maxDurationMs: 15 * 60 * 1000,
-  maxModelTurns: 50,
+  maxDurationMs: 60 * 60 * 1000,
+  maxModelTurns: 150,
   maxToolCalls: 300,
-  maxTotalTokens: 750_000,
+  maxTotalTokens: 5_000_000,
   maxCostUsd: 25
 };
 
@@ -30,13 +31,16 @@ export interface BudgetSnapshot {
   toolCalls: number;
   totalTokens: number;
   costUsd: number;
+  costIncomplete?: boolean;
+  usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   exceededReason?: string;
 }
 export const budgetSnapshotSchema = z.object({
   version: z.literal(1), status: z.enum(['running', 'completed', 'aborted', 'exceeded']),
   startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(), limits: budgetLimitsSchema,
   modelTurns: z.number().int().min(0), toolCalls: z.number().int().min(0), totalTokens: z.number().int().min(0),
-  costUsd: z.number().finite().min(0), exceededReason: z.string().max(1000).optional()
+  costUsd: z.number().finite().min(0), exceededReason: z.string().max(1000).optional(),
+  costIncomplete: z.boolean().optional(), usage: z.object({ input: z.number().int().min(0), output: z.number().int().min(0), cacheRead: z.number().int().min(0), cacheWrite: z.number().int().min(0) }).strict().optional()
 }).strict();
 
 const settingsSchema = z.object({ budget: budgetLimitsSchema }).strict();
@@ -77,7 +81,7 @@ export async function saveAgentSettings(home: string, settings: Pick<AgentSettin
   const path = join(home, 'web-settings.json');
   await mkdir(dirname(path), { recursive: true });
   const temporary = path + '.' + randomUUID() + '.tmp';
-  try { await writeFile(temporary, JSON.stringify(parsed, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 }); await rename(temporary, path); }
+  try { await writeFile(temporary, JSON.stringify(parsed, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 }); await replaceMetadataFile(temporary, path); }
   finally { const { rm } = await import('node:fs/promises'); await rm(temporary, { force: true }); }
 }
 
@@ -93,7 +97,7 @@ export class BudgetRuntime {
   private readonly observers = new Set<(snapshot: BudgetSnapshot) => void>();
   constructor(readonly limits: BudgetLimits, onChange?: (snapshot: BudgetSnapshot) => void) {
     this.onChange = onChange;
-    this.snapshotValue = { version: 1, status: 'running', startedAt: new Date().toISOString(), limits: { ...limits }, modelTurns: 0, toolCalls: 0, totalTokens: 0, costUsd: 0 };
+    this.snapshotValue = { version: 1, status: 'running', startedAt: new Date().toISOString(), limits: { ...limits }, modelTurns: 0, toolCalls: 0, totalTokens: 0, costUsd: 0, costIncomplete: false, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   }
   start() {
     this.timer = setTimeout(() => this.exceed(`任务超过总时限 ${Math.round(this.limits.maxDurationMs / 60000)} 分钟`), this.limits.maxDurationMs);
@@ -129,13 +133,21 @@ export class BudgetRuntime {
     if (this.snapshotValue.toolCalls > this.limits.maxToolCalls) this.exceed(`任务超过工具调用上限 ${this.limits.maxToolCalls}`);
     this.changed(); return this.snapshotValue.status === 'running';
   }
-  recordUsage(usage: { totalTokens?: unknown; cost?: { total?: unknown } }) {
-    if (this.snapshotValue.status !== 'running') return false;
+  recordUsage(usage: { totalTokens?: unknown; input?: unknown; output?: unknown; cacheRead?: unknown; cacheWrite?: unknown; cost?: { total?: unknown } }, pricingKnown?: boolean) {
+    // Responses already in flight remain billable after cancellation or a limit.
+    // Account for them without reopening the run or replacing its stop reason.
     const tokens = typeof usage.totalTokens === 'number' && Number.isFinite(usage.totalTokens) ? Math.max(0, usage.totalTokens) : 0;
     const cost = typeof usage.cost?.total === 'number' && Number.isFinite(usage.cost.total) ? Math.max(0, usage.cost.total) : 0;
     this.snapshotValue.totalTokens += Math.round(tokens); this.snapshotValue.costUsd += cost;
-    if (this.snapshotValue.totalTokens > this.limits.maxTotalTokens) this.exceed(`任务超过 token 上限 ${this.limits.maxTotalTokens}`);
-    else if (this.snapshotValue.costUsd > this.limits.maxCostUsd) this.exceed(`任务超过费用上限 $${this.limits.maxCostUsd}`);
+    if (pricingKnown === false || (tokens > 0 && pricingKnown === undefined && cost === 0)) this.snapshotValue.costIncomplete = true;
+    for (const key of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) {
+      const count = usage[key];
+      this.snapshotValue.usage![key] += typeof count === 'number' && Number.isFinite(count) ? Math.round(Math.max(0, count)) : 0;
+    }
+    if (this.snapshotValue.status === 'running') {
+      if (this.snapshotValue.totalTokens > this.limits.maxTotalTokens) this.exceed(`任务超过累计 token 上限 ${this.limits.maxTotalTokens}（含缓存读取）`);
+      else if (this.snapshotValue.costUsd > this.limits.maxCostUsd) this.exceed(`任务超过费用上限 $${this.limits.maxCostUsd}`);
+    }
     this.changed(); return this.snapshotValue.status === 'running';
   }
   check() { if (this.snapshotValue.status === 'exceeded') throw new BudgetExceededError(this.snapshotValue.exceededReason!); }

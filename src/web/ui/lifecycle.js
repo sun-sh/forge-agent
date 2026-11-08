@@ -4,7 +4,7 @@ export function lifecycleUI({ api, esc, toast, currentSession, running, readOnly
   const canMutate = (session) => { if (session !== currentSession() || running() || readOnly()) { toast('请在当前会话空闲且可编辑时操作', 'warning'); return false; } return true; };
   const selection = (container) => [...container.querySelectorAll('[data-checkpoint-file]:checked')].map((input) => input.value);
   const filesMarkup = (view) => view.files.map((file) => '<label class="checkpoint-file"><input type="checkbox" data-checkpoint-file value="' + esc(file.path) + '" ' + (file.eligible ? 'checked' : 'disabled') + '><button type="button" data-checkpoint-preview="' + esc(file.path) + '">' + esc(file.path) + '</button><small>' + (file.applied ? view.kind === 'proposal' ? '已应用' : '已撤销' : file.conflict ? '后续修改冲突' : file.operation === 'add' ? '新增' : file.operation === 'delete' ? '删除' : '修改') + '</small></label>').join('');
-  function renderReview(container, view, { route, mutate, label, onChange, session, editable = true }) {
+  function renderReview(container, view, { route, mutate, label, onChange, session, editable = true, canVerify = false }) {
     container.innerHTML = '<p class="settings-note">' + esc(view.reason || (view.kind === 'proposal' ? '将所选修改应用到主项目，保留暂存区；应用后请运行验证。' : '恢复所选文件到此次执行前；原有未提交内容会保留。')) + (view.skipped ? ' · ' + view.skipped + ' 个敏感、链接或超限文件未纳入。' : '') + '</p>' + (view.diagnostic ? '<p role="alert">' + esc(view.diagnostic) + '</p>' : '') + '<div class="checkpoint-files">' + (filesMarkup(view) || '<p class="settings-note">没有可处理的文件变更。</p>') + '</div><button type="button" class="button quiet small" data-checkpoint-apply ' + (!view.files.some((file) => file.eligible) || running() || readOnly() ? 'disabled' : '') + '>' + label + '</button><p class="settings-note" data-checkpoint-feedback role="status"></p>';
     container.querySelectorAll('[data-checkpoint-preview]').forEach((button) => { button.onclick = async () => {
       try { const data = await api(route + '&path=' + encodeURIComponent(button.dataset.checkpointPreview)); const pre = container.ownerDocument.createElement('pre'); pre.className = 'checkpoint-diff'; pre.textContent = data.diff; container.querySelector('[data-checkpoint-feedback]').replaceChildren(pre); }
@@ -12,15 +12,18 @@ export function lifecycleUI({ api, esc, toast, currentSession, running, readOnly
     }; });
     const apply = container.querySelector('[data-checkpoint-apply]');
     apply.disabled ||= !editable;
-    apply.onclick = async () => {
+    let verify;
+    if (canVerify) { verify = container.ownerDocument.createElement('button'); verify.type = 'button'; verify.className = 'button quiet small'; verify.dataset.checkpointVerify = ''; verify.textContent = '应用并验证'; verify.disabled = apply.disabled; apply.after(verify); }
+    const submit = async (runVerification) => {
       if (!editable || !canMutate(session)) return;
       const paths = selection(container);
       if (!paths.length) { toast('请先选择文件', 'warning'); return; }
-      if (!container.ownerDocument.defaultView.confirm(label + ' ' + paths.length + ' 个文件？\n' + paths.slice(0, 10).join('\n'))) return;
-      apply.disabled = true;
-      try { await mutate(paths, view.revision); toast(label + '完成'); await onChange(); await changed(); }
-      catch (error) { container.querySelector('[data-checkpoint-feedback]').textContent = error.message; apply.disabled = false; }
+      if (!container.ownerDocument.defaultView.confirm((runVerification ? '应用并运行项目验证命令' : label) + ' ' + paths.length + ' 个文件？\n' + paths.slice(0, 10).join('\n'))) return;
+      apply.disabled = true; if (verify) verify.disabled = true;
+      try { await mutate(paths, view.revision, runVerification); toast(runVerification ? '已应用，正在验证；结果会显示在任务中' : label + '完成'); if (session === currentSession()) { await onChange(); await changed(); } }
+      catch (error) { if (session === currentSession()) { container.querySelector('[data-checkpoint-feedback]').textContent = error.message; apply.disabled = false; if (verify) verify.disabled = false; } }
     };
+    apply.onclick = () => submit(false); if (verify) verify.onclick = () => submit(true);
   }
   async function loadCheckpoints(container, selectedId) {
     const session = currentSession(); if (!session) return;
@@ -43,7 +46,7 @@ export function lifecycleUI({ api, esc, toast, currentSession, running, readOnly
     const section = document.createElement('details'); section.className = 'checkpoint-section'; section.open = true;
     const title = document.createElement('summary'); title.textContent = '独立 worktree 的变更'; const review = document.createElement('div'); section.append(title, review); container.prepend(section);
     renderReview(review, view, { route: '/api/sessions/' + session + '/subagents?agent=' + encodeURIComponent(childId), label: '应用所选变更',
-      mutate: (paths, revision) => api('/api/sessions/' + session + '/subagents', { method: 'POST', body: JSON.stringify({ action: 'apply', id: childId, paths, revision }) }), session, editable, onChange });
+      mutate: (paths, revision, verify) => api('/api/sessions/' + session + '/subagents', { method: 'POST', body: JSON.stringify({ action: verify ? 'apply-verify' : 'apply', id: childId, paths, revision }) }), session, editable, canVerify: true, onChange });
     const discard = document.createElement('button'); discard.className = 'button quiet small'; discard.textContent = removed ? '工作目录已清理' : '清理独立工作目录'; discard.disabled = running() || readOnly() || removed;
     discard.onclick = async () => {
       if (removed || !canMutate(session)) return;

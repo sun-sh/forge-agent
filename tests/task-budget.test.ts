@@ -32,7 +32,7 @@ describe('host execution budgets', () => {
     const budget = new BudgetRuntime(limits); budget.start();
     expect(budget.recordUsage({ totalTokens: 50, cost: { total: 0.25 } })).toBe(true);
     expect(budget.recordUsage({ totalTokens: 60, cost: { total: 0.25 } })).toBe(false);
-    expect(budget.snapshot()).toMatchObject({ status: 'exceeded', totalTokens: 110, costUsd: 0.5, exceededReason: '任务超过 token 上限 100' });
+    expect(budget.snapshot()).toMatchObject({ status: 'exceeded', totalTokens: 110, costUsd: 0.5, exceededReason: '任务超过累计 token 上限 100（含缓存读取）' });
     budget.finish('exceeded');
   });
 
@@ -49,5 +49,18 @@ describe('host execution budgets', () => {
     expect(controllerSnapshots).toContain('running');
     expect(liveSnapshots).toEqual([0, 1]);
     budget.finish('completed');
+  });
+  it('records late in-flight usage and token categories after a limit without re-aborting or losing the original reason', () => {
+    const budget = new BudgetRuntime(limits); let aborts = 0; budget.setAbort(() => aborts++); budget.start();
+    budget.recordUsage({ totalTokens: 101, input: 10, output: 1, cacheRead: 90, cost: { total: 0 } }, false);
+    const reason = budget.exceededReason;
+    expect(budget.recordUsage({ totalTokens: 40, input: 5, output: 5, cacheRead: 30, cost: { total: 2 } }, true)).toBe(false);
+    expect(budget.snapshot()).toMatchObject({ status: 'exceeded', totalTokens: 141, costUsd: 2, costIncomplete: true, exceededReason: reason, usage: { input: 15, output: 6, cacheRead: 120, cacheWrite: 0 } });
+    expect(aborts).toBe(1); budget.finish('exceeded');
+  });
+  it('accounts for usage after cancellation without converting it into a new budget failure', () => {
+    const budget = new BudgetRuntime(limits); budget.finish('aborted');
+    expect(budget.recordUsage({ totalTokens: 1000, output: 1000, cost: { total: 3 } }, true)).toBe(false);
+    expect(budget.snapshot()).toMatchObject({ status: 'aborted', totalTokens: 1000, costUsd: 3, costIncomplete: false });
   });
 });

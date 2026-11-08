@@ -12,7 +12,7 @@ if (!npmCli) throw new Error('Run this check through npm run pack:check');
 try {
   const packed = await execute(process.execPath, [npmCli, 'pack', '--json', '--ignore-scripts', '--pack-destination', temporary], { cwd: root, windowsHide: true, maxBuffer: 4_000_000 });
   const [metadata] = JSON.parse(packed.stdout), paths = metadata.files.map((file) => file.path);
-  const required = ['dist/pi-cli.js', 'dist/web/server.js', 'dist/web/ui/index.html', 'dist/web/ui/lifecycle.js', 'dist/task/checkpoints.js', 'dist/task/queue.js', 'README.md', 'README.en.md', 'CHANGELOG.md', 'SECURITY.md', 'AGENTS.md', 'docs/operations.md', 'LICENSE', 'forge-agent.schema.json'];
+  const required = ['dist/pi-cli.js', 'dist/web/server.js', 'dist/web/ui/index.html', 'dist/web/ui/lifecycle.js', 'dist/task/checkpoints.js', 'dist/task/queue.js', 'dist/task/plan.js', 'dist/task/context.js', 'dist/task/lifecycle.js', 'dist/task/timeline.js', 'dist/verification/evidence.js', 'README.md', 'README.en.md', 'CHANGELOG.md', 'SECURITY.md', 'AGENTS.md', 'CONTRIBUTING.md', 'docs/operations.md', 'docs/architecture-deep-dive.md', 'docs/execution-records.md', 'LICENSE', 'forge-agent.schema.json'];
   for (const path of required) if (!paths.includes(path)) throw new Error('Missing package asset: ' + path);
   if (paths.some((path) => /(^|\/)(?:auth\.json|models\.json|\.env|node_modules|\.git|\.forge-agent|tests|archive)(\/|$)/.test(path))) throw new Error('Unexpected private/development file in npm package');
   const tarball = join(temporary, metadata.filename);

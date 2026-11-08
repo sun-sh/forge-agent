@@ -6,7 +6,7 @@ import { startWebConsole } from "./web/server.js";
 import { openLocalBrowser } from "./web/open-browser.js";
 import { pforgeHome, configurePforgeEnvironment } from "./pforge-home.js";
 import { loadConfig } from "./config.js";
-import { createPforgeVerification } from "./verification/pi-extension.js";
+import { createPforgeVerification, isVerified } from "./verification/pi-extension.js";
 import { runVerification, verificationMessage } from "./verification/verify.js";
 import { createForgeIdentityExtension } from "./identity.js";
 import { fileURLToPath } from 'node:url';
@@ -212,7 +212,7 @@ export async function runPforge(args = process.argv.slice(2)): Promise<void> {
     await main(parsed.args, {
       extensionFactories: [{ name: "forge-identity", factory: createForgeIdentityExtension('cli') }, { name: "pforge-verification", factory: verification.extension }]
     });
-    if (verification.outcome.status === "failed") process.exitCode = 1;
+    if (verification.outcome.status === 'failed' || (verification.outcome.status === 'passed' && !isVerified(verification.outcome))) process.exitCode = 1;
   } catch (error) {
     process.stderr.write(`forge-agent: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

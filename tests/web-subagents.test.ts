@@ -50,6 +50,16 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('never certifies an unread result when collection persistence fails', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'Result ready.'));
+    const [child] = await f.agents.start([task()], 'async-result');
+    await vi.waitFor(() => expect(f.agents.status([child!.id])[0]?.status).toBe('completed'), { timeout: 10000 });
+    expect(() => f.agents.assertCollected()).toThrow('尚未汇总');
+    const spy = vi.spyOn(f.manager, 'appendCustomEntry').mockImplementationOnce(() => { throw new Error('Result could not be persisted'); });
+    try { expect(() => f.agents.results([child!.id])).toThrow('could not be persisted'); expect(() => f.agents.assertCollected()).toThrow('尚未汇总'); }
+    finally { spy.mockRestore(); }
+    f.agents.results([child!.id]); expect(() => f.agents.assertCollected()).not.toThrow();
+  });
   const pathAliases = ['~/forge-worker-boundary.txt', '@sample.txt', 'file:///forge-worker-boundary.txt', 'new\u00a0file.txt'];
   if (process.platform === 'win32') pathAliases.push('/c/forge-worker-boundary.txt', '/mnt/c/forge-worker-boundary.txt', '.git./config');
   it.each(pathAliases)('blocks the Pi-expanded path alias %s before a writable tool can run', async (path) => {
@@ -140,6 +150,33 @@ describe('managed Pi subagents', () => {
     f.agents.beginPrompt(); await expect(f.agents.delegate([task()], 'new-prompt')).resolves.toHaveLength(1);
   });
 
+  it('returns asynchronous handles before completion, bounds waits, validates ownership and durably collects results', async () => {
+    let release: (() => void) | undefined;
+    const f = await fixture((input, res) => { release = () => answer(res, input, 'Background evidence.'); });
+    const [started] = await f.agents.start([task()], 'async-start');
+    expect(['starting', 'running']).toContain(started!.status);
+    expect(() => f.agents.beginPrompt()).toThrow('尚未收尾');
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const timed = await f.agents.wait([started!.id], 0);
+    expect(timed[0]!.status).toBe('running'); expect(timed[0]!.collectedAt).toBeUndefined();
+    await expect(f.agents.wait(['11111111-1111-4111-8111-111111111111'], 0)).rejects.toThrow('不属于');
+    await expect(f.agents.wait([started!.id], 30001)).rejects.toThrow('等待时限');
+    release!();
+    const [done] = await f.agents.wait([started!.id]);
+    expect(done).toMatchObject({ status: 'completed', result: 'Background evidence.', collectedAt: expect.any(String) });
+    const restored = new ForgeSubagents({ ...f.options, manager: SessionManager.open(f.manager.getSessionFile()!) });
+    expect(restored.snapshot()[0]!.collectedAt).toBe(done!.collectedAt); await restored.close();
+  });
+
+  it('keeps parent cancellation attached after asynchronous start returns', async () => {
+    const f = await fixture((_input, res) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': held\n\n'); });
+    const controller = new AbortController(), [child] = await f.agents.start([task()], 'async-cancel', controller.signal);
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1)); controller.abort();
+    const [cancelled] = await f.agents.wait([child!.id]);
+    expect(cancelled).toMatchObject({ status: 'cancelled', collectedAt: expect.any(String) });
+    expect(f.budget.snapshot().status).toBe('running');
+  });
+
   it('blocks attempted writes and never executes project extensions in restricted workers', async () => {
     const f = await fixture((input, res) => answer(res, input, '', { name: 'write', args: { path: 'sample.txt', content: 'corrupt' } }));
     // A restricted child must reach the model without resolving or installing this package.
@@ -205,6 +242,32 @@ describe('managed Pi subagents', () => {
 });
 
 describe('Web subagent integration', () => {
+  it('lets the parent work while a child runs, then returns unread results through Pi before verification', async () => {
+    let release: (() => void) | undefined, parentStep = 0, synthesis = false;
+    const f = await fixture((input, res) => {
+      if (text(input).includes('delegated explorer')) { release = () => answer(res, input, 'ASYNC-CHILD-EVIDENCE'); return; }
+      if (text(input).includes('Delegated results are now available.')) { synthesis = true; return answer(res, input, 'Combined parent and ASYNC-CHILD-EVIDENCE.'); }
+      if (parentStep++ === 0) return answer(res, input, '', { name: 'subagent', args: { action: 'start', tasks: [task()] } });
+      if (parentStep === 2) return answer(res, input, '', { name: 'write', args: { path: 'parent-work.txt', content: 'independent work' } });
+      return answer(res, input, 'Parent work finished; waiting for delegated evidence.');
+    });
+    await writeFile(join(f.project, 'forge-agent.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node --version' }] }));
+    const gateway = await startWebConsole({ cwd: f.project, port: 0 }); closers.push(gateway.close);
+    const origin = new URL(gateway.url).origin, headers = { 'x-pforge-token': gateway.token, 'content-type': 'application/json' };
+    const api = async (path: string, input?: unknown): Promise<any> => { const r = await fetch(origin + '/api/' + path, { headers, ...(input === undefined ? {} : { method: 'POST', body: JSON.stringify(input) }) }); expect(r.ok).toBe(true); return r.json(); };
+    await api('projects/trust', { path: f.project, trusted: true });
+    const session = await api('session', { project: f.project, model: 'mock/test' });
+    await api(`sessions/${session.id}/prompt`, { message: 'Implement an independent parent file and explore with a background child.' });
+    await vi.waitFor(async () => { expect(await readFile(join(f.project, 'parent-work.txt'), 'utf8')).toBe('independent work'); expect(release).toBeTypeOf('function'); }, { timeout: 12000 });
+    const waiting = await api(`sessions/${session.id}`);
+    expect(waiting.running).toBe(true); expect(waiting.verification.status).not.toBe('passed'); expect(synthesis).toBe(false);
+    release!(); let done: any;
+    await vi.waitFor(async () => { done = await api(`sessions/${session.id}`); expect(done.running).toBe(false); }, { timeout: 12000 });
+    expect(synthesis).toBe(true); expect(done.task.status).toBe('completed');
+    expect(done.subagents[0]).toMatchObject({ status: 'completed', collectedAt: expect.any(String) });
+    expect(done.verification.evidence.freshness).toBe('current');
+  });
+
   it('stops child Pi requests with the parent and releases project ownership after cleanup', async () => {
     const f = await fixture((input, res) => {
       if (text(input).includes('delegated explorer')) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }

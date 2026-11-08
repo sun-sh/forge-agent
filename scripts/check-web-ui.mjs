@@ -10,6 +10,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../dist/web/server.js';
 import { startOAuthFixture } from '../tests/fixtures/oauth-mcp-server.mjs';
+import handoff from '../tests/fixtures/task-handoff.json' with { type: 'json' };
 
 const candidates = [process.env.FORGE_AGENT_TEST_BROWSER, process.env.PFORGE_TEST_BROWSER, 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium', '/usr/bin/google-chrome'];
 const executable = candidates.find((candidate) => candidate && existsSync(candidate));
@@ -50,7 +51,7 @@ const modelServer = createServer(async (request, response) => {
   modelRequests++;
   const input = JSON.parse(raw);
   const phase = [...JSON.stringify(input.messages).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
-  const content = phase === 'review' ? '{"verdict":"ready","summary":"Browser fixture review","issues":[]}' : reply;
+  const content = phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Browser fixture review', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input.messages).includes('End inspection with exactly one JSON object') ? JSON.stringify(handoff.brief) : reply;
   observedEfforts.push(input.reasoning_effort);
   response.writeHead(200, { 'content-type': 'text/event-stream' });
   const send = (delta, finish_reason) => response.write('data: ' + JSON.stringify({ id: 'smoke', object: 'chat.completion.chunk', created: 1, model: input.model, choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage: { prompt_tokens: 240, completion_tokens: 40, total_tokens: 280 } } : {}) }) + '\n\n');
@@ -412,7 +413,7 @@ try {
   await click('#folder-use');
   await waitFor(`document.getElementById('folder-modal').classList.contains('hidden')`);
   await evaluate(`document.getElementById('prompt').value = 'UI smoke test'; document.getElementById('composer').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '任务完成 · 验证通过'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 未进行模型审阅'`);
   assert.equal(await evaluate(`document.querySelectorAll('.turn.user').length`), 1);
   assert.equal(await evaluate(`document.querySelector('.turn.assistant h2')?.textContent`), 'Smoke check passed');
   assert.ok((await evaluate(`document.getElementById('verification-output').textContent`)).includes('PASS node --version'));
@@ -507,7 +508,7 @@ try {
   await evaluate(`document.getElementById('followup-mode-select').value = 'plan'; document.getElementById('followup-mode-select').dispatchEvent(new Event('change'))`);
   await waitFor(`!document.getElementById('followup-mode-select').disabled && document.getElementById('followup-mode-description').textContent.includes('只读')`);
   await evaluate(`document.getElementById('followup-prompt').value = '先给出实施计划'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent.includes('规划完成')`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '回答结束 · 未执行修改'`);
   assert.equal(observedEfforts.at(-1), 'low');
   assert.equal(await evaluate(`document.getElementById('verification-report').classList.contains('hidden')`), true);
   await screenshot('plan-mode');
@@ -523,13 +524,22 @@ try {
   await click('#mode-picker [data-choose-mode="agent:planned"]');
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划')`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '任务完成 · 验证通过 · 已审阅'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 模型审阅通过'`);
   assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
   await screenshot('planned-task');
+  await click('#open-execution');
+  await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 6`);
+  assert.equal(await evaluate(`document.querySelector('[data-review-view="execution"]').getAttribute('aria-selected')`), 'true');
+  assert.ok((await evaluate(`document.getElementById('task-plan').textContent`)).includes('A1'));
+  await click('#task-plan summary');
+  await click('#execution-timeline .execution-phase:nth-of-type(3) > summary');
+  await screenshot('execution-history');
+  await click('#changes-close');
   const fullChatWidth = await evaluate(`document.getElementById('chat-pane').getBoundingClientRect().width`);
   await click('#toggle-changes');
+  await click('#changes-tabs [data-review-view="changes"]');
   await waitFor(`!!document.querySelector('[data-change-path="sample.txt"]')`);
   assert.equal(await evaluate(`document.getElementById('changes-panel').closest('#conversation-view')`), null);
   assert.equal(await evaluate(`(() => { const panel = document.getElementById('changes-panel').getBoundingClientRect(), chat = document.getElementById('chat-pane').getBoundingClientRect(); return panel.left >= chat.right - 1 && panel.width >= 360 && chat.width > 500 && panel.bottom <= innerHeight; })()`), true);
@@ -574,7 +584,7 @@ try {
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:direct' && !document.getElementById('followup-mode-picker-button').disabled`);
   const previousRunRequests = modelRequests;
   holdNextModel = true;
-  await evaluate(`document.getElementById('followup-prompt').value = 'UI stop and continuation smoke'; document.getElementById('followup-form').requestSubmit()`);
+  await evaluate(`document.getElementById('followup-prompt').value = 'Explain the source code without changing files.'; document.getElementById('followup-form').requestSubmit()`);
   await waitFor(`!document.getElementById('stop-button').classList.contains('hidden') && !document.getElementById('stop-button').disabled`);
   await waitFor(`document.querySelector('#timeline > .turn.assistant:last-child .turn-text')?.textContent.includes('Smoke check')`);
   await waitFor(`document.querySelector('#timeline > .turn.assistant:last-child h2')?.textContent === 'Smoke check passed' && document.querySelector('#timeline > .turn.assistant:last-child code.language-diff')?.textContent.includes('+new')`);
@@ -590,7 +600,7 @@ try {
   await screenshot('streaming-markdown');
   await click('#stop-button');
   await waitFor(`!document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('resume-task-button').disabled`);
-  assert.equal(await evaluate(`document.getElementById('run-status-label').textContent`), '已停止');
+  assert.equal(await evaluate(`document.getElementById('run-status-label').textContent`), '回答已停止');
   assert.equal(await evaluate(`document.getElementById('resume-task-button').closest('form').id`), 'followup-form');
   assert.equal(modelRequests, previousRunRequests + 1);
   await cdp('Page.reload');
@@ -598,7 +608,7 @@ try {
   assert.equal(modelRequests, previousRunRequests + 1);
   await screenshot('composer-stopped');
   await click('#resume-task-button');
-  await waitFor(`document.getElementById('run-status-label').textContent === '任务完成 · 验证通过'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '回答结束 · 未执行修改'`);
   assert.equal(modelRequests, previousRunRequests + 2);
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('followup-send').classList.contains('hidden')`), true);
   holdNextModel = true;
@@ -620,7 +630,7 @@ try {
   const drafted = 'unsent planned task follow-up';
   await evaluate(`document.getElementById('followup-prompt').value = ${JSON.stringify(drafted)}; document.getElementById('followup-prompt').dispatchEvent(new Event('input'))`);
   await cdp('Page.reload');
-  await waitFor(`document.getElementById('run-status-label').textContent === '任务完成 · 验证通过'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '回答结束 · 未执行修改'`);
   assert.equal(await evaluate(`document.getElementById('followup-prompt').value`), drafted);
   assert.equal(await evaluate(`document.getElementById('followup-mode-select').value`), 'agent:planned');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('#followup-mode-picker-button [data-workflow-label]')).display === 'none'`), false);

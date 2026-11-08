@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { readFile } from 'node:fs/promises';
-import { safeMarkdown, sessionOutcome } from '../src/web/ui/render.js';
+import { safeMarkdown, sessionOutcome, verificationLabel } from '../src/web/ui/render.js';
 import { createSseParser, readEventStream, StreamError } from '../src/web/ui/stream.js';
 import { mountCustomProviders } from '../src/web/ui/providers.js';
 import { mountMcp } from '../src/web/ui/mcp.js';
@@ -40,6 +40,16 @@ describe('reviewing host-owned changes', () => {
     await f.ui.loadCheckpoints(f.container); f.container.querySelector('[data-checkpoint-apply]').click();
     await vi.waitFor(() => expect(f.container.textContent).toContain('Files changed after review'));
     expect(f.changed).not.toHaveBeenCalled(); expect(f.container.querySelector('[data-checkpoint-apply]').disabled).toBe(false);
+  });
+  it('applies and verifies only selected proposal files, while preventing an old session control from acting', async () => {
+    const f = fixture(async () => ({ verificationStarted: true }));
+    f.ui.proposal(f.container, { ...view, kind: 'proposal' }, 'parent', 'child', vi.fn());
+    f.container.querySelector('[data-checkpoint-verify]').click();
+    await vi.waitFor(() => expect(f.changed).toHaveBeenCalledOnce());
+    const post = f.api.mock.calls.find(([_url, init]) => init?.method === 'POST');
+    expect(JSON.parse(post[1].body)).toEqual({ action: 'apply-verify', id: 'child', paths: ['safe.txt'], revision: 'reviewed-revision' });
+    expect(f.container.textContent).not.toContain('验证通过');
+    f.setSession('other'); f.container.querySelector('[data-checkpoint-verify]').click(); expect(f.api).toHaveBeenCalledTimes(1);
   });
   it('prevents stale checkpoint and memory controls from acting after a session switch', async () => {
     const f = fixture(async () => ({ checkpoints: [view] }));
@@ -120,10 +130,31 @@ describe('safe agent output', () => {
     expect(sessionOutcome({ outcome: 'completed', verification: { status: 'failed' } })).toMatchObject({ kind: 'failed' });
     expect(sessionOutcome({ outcome: 'completed', error: 'bad key' })).toMatchObject({ kind: 'failed' });
     expect(sessionOutcome({ outcome: 'aborted', verification: { status: 'passed' } }).label).toBe('已停止');
-    expect(sessionOutcome({ outcome: 'completed', verification: { status: 'unchecked' } }).label).toContain('未配置自动验证');
-    expect(sessionOutcome({ outcome: 'completed', verification: { status: 'passed' } })).toMatchObject({ kind: 'done' });
-    expect(sessionOutcome({ outcome: 'completed', mode: 'plan', runMode: 'agent', verification: { status: 'passed' } }).label).toContain('验证通过');
+    expect(sessionOutcome({ outcome: 'completed', verification: { status: 'unchecked' } }).label).toContain('未执行自动验证');
+    expect(sessionOutcome({ outcome: 'completed', verification: { status: 'passed' } }).label).toContain('当前版本未确认');
+    expect(sessionOutcome({ outcome: 'completed', mode: 'plan', runMode: 'agent', verification: { status: 'passed' } }).label).not.toContain('验证通过');
     expect(sessionOutcome({ outcome: 'completed', mode: 'agent', runMode: 'plan', verification: { status: 'skipped' } }).label).toContain('可发送执行指令');
+  });
+  it('does not invent verification or review for completed adaptive tasks and distinguishes historical evidence', () => {
+    const task = { kind: 'change', workflow: 'direct', status: 'completed' };
+    expect(sessionOutcome({ task }).label).toContain('未执行自动验证');
+    expect(sessionOutcome({ task }).label).toContain('未进行模型审阅');
+    const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ passed: true, exitCode: 0 }] } };
+    expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('执行结束 · 验证通过 · 未进行模型审阅');
+    expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification } }).kind).toBe('failed');
+    const review = { verdict: 'ready', issues: [], freshness: 'current', evidenceId: 'v1' };
+    expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification, review } }).label).toContain('模型审阅通过');
+    expect(sessionOutcome({ task: { ...task, verification: { ...verification, evidence: { freshness: 'stale' } }, review } })).toMatchObject({ kind: 'failed', label: expect.stringContaining('证据已过期') });
+    expect(verificationLabel({ status: 'passed' })).toContain('当前版本未确认');
+    expect(verificationLabel({ ...verification, report: { passed: true, results: [{ passed: true, exitCode: 0, failure: 'timeout' }] } })).not.toBe('验证通过');
+  });
+  it.each(['ask', 'plan'])('uses the executed %s permission mode for unknown or implementation intent labels', (mode) => {
+    for (const kind of ['undetermined', 'change']) {
+      const task = { kind, workflow: 'direct', status: 'completed', mode };
+      expect(sessionOutcome({ task, outcome: 'completed' })).toEqual({ label: '回答结束 · 未执行修改', kind: 'done' });
+      expect(sessionOutcome({ task: { ...task, mode: 'agent' }, runMode: mode, mode: 'agent', outcome: 'completed' }).label).toContain('未执行修改');
+      expect(sessionOutcome({ task: { ...task, status: 'failed' }, outcome: 'failed' }).kind).toBe('failed');
+    }
   });
 });
 
@@ -169,7 +200,7 @@ async function client(initial = {}) {
     matchMedia: () => reviewMedia,
     marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills, lifecycleUI,
     builtinCommands, filterCommands, parseCommand,
-    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome,
+    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome, verificationLabel,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
     fetch: async (url, init = {}) => {
       requests.push({ url, ...init });
@@ -890,6 +921,31 @@ describe('Git review workspace', () => {
 });
 
 describe('Task center scope', () => {
+  it('enqueues against the captured session and settings while preserving a later draft and stopping only the selected job', async () => {
+    const { window, app, requests } = await client(), find = (id) => window.document.getElementById(id);
+    await app.createSession(undefined, 'Queue'); app.state.pendingModelKey = 'mock/b'; app.state.pendingThinkingLevel = 'off';
+    const originalFetch = window.fetch; let release;
+    window.fetch = async (url, init = {}) => {
+      if (url === '/api/jobs' && init.method === 'POST') { requests.push({ url, ...init }); return new Promise((resolve) => { release = () => resolve({ ok: true, json: async () => ({}) }); }); }
+      if (url.startsWith('/api/jobs') && !init.method) return { ok: true, json: async () => ({ scheduler: { concurrency: 3, running: 2, queued: 1 }, jobs: [{ id: 'one', status: 'running', project: 'C:\\repo', model: 'mock/a', title: 'First' }, { id: 'two', status: 'running', project: 'C:\\other', model: 'mock/b', title: 'Second' }] }) };
+      return originalFetch(url, init);
+    };
+    find('tasks-button').click(); await vi.waitFor(() => expect(find('queue-summary').textContent).toContain('2/3'));
+    find('queue-task-input').value = 'Fix the first project';
+    const event = new window.Event('submit', { bubbles: true, cancelable: true }); find('queue-task-form').dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true); expect(find('queue-task-submit').disabled).toBe(true);
+    const posted = requests.find((request) => request.url === '/api/jobs' && request.method === 'POST');
+    expect(JSON.parse(posted.body)).toEqual({ session: 'created', message: 'Fix the first project', model: 'mock/b', thinkingLevel: 'off', workflow: 'direct' });
+    app.state.sessionId = 'another'; find('queue-task-input').value = 'Keep this new draft'; release();
+    await vi.waitFor(() => expect(find('queue-task-submit').disabled).toBe(false)); expect(find('queue-task-input').value).toBe('Keep this new draft');
+    find('queue-list').querySelector('[data-cancel-job="one"]').click();
+    await vi.waitFor(() => expect(requests.some((request) => request.url === '/api/jobs/one/cancel')).toBe(true));
+    expect(requests.some((request) => request.url === '/api/jobs/two/cancel')).toBe(false);
+    window.fetch = async (url, init = {}) => url === '/api/jobs' && init.method === 'POST' ? { ok: false, status: 409, json: async () => ({ error: 'Session is unavailable' }) } : originalFetch(url, init);
+    find('queue-task-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(find('toast-root').textContent).toContain('Session is unavailable'));
+    expect(find('queue-task-input').value).toBe('Keep this new draft');
+  });
   it('switches between current-project and all-project task discovery', async () => {
     const { window, requests } = await client(), find = (id) => window.document.getElementById(id);
     find('tasks-button').click();
@@ -1249,11 +1305,55 @@ describe('Web client integration', () => {
   it('shows review notes separately from blocking findings and renders them as untrusted text', async () => {
     const { window, app } = await client(); app.state.sessionId = 'review-notes';
     const review = { verdict: 'ready', summary: 'Required checks passed', issues: [], notes: ['Optional: <img src=x onerror=alert(1)>'] };
-    app.applySnapshot({ id: 'review-notes', running: false, task: { kind: 'change', status: 'completed', phase: 'complete', repairs: 0, phases: [], review }, messages: [] });
+    app.applySnapshot({ id: 'review-notes', running: false, task: { kind: 'change', workflow: 'planned', status: 'completed', phase: 'complete', repairs: 0, phases: [], review }, messages: [] });
     const result = window.document.getElementById('task-review');
     expect(result.textContent).toContain('审阅备注（非阻断）'); expect(result.textContent).toContain(review.notes[0]);
     expect(result.textContent).not.toContain('待处理问题：'); expect(result.querySelector('img')).toBeNull();
-    expect(window.document.getElementById('task-note').textContent).toContain('验证通过');
+    expect(window.document.getElementById('task-note').textContent).toContain('完成证据不完整');
+  });
+  it('opens acceptance and tool history in the right execution tab and preserves expanded phases on refresh', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'run';
+    const nodes = [
+      { id: 'task', kind: 'task' }, { id: 'phase', parentId: 'task', kind: 'phase', label: 'implement', status: 'completed', durationMs: 1000, attempt: 2 },
+      { id: 'model', parentId: 'phase', kind: 'model', status: 'completed', tokens: 42 },
+      { id: 'tool', parentId: 'model', kind: 'tool', label: '<img src=x>', status: 'interrupted', durationMs: 500, timing: 'message_interval' }
+    ];
+    const original = window.fetch;
+    window.fetch = (url, init) => url.includes('/timeline?') ? Promise.resolve({ ok: true, json: async () => ({ timeline: { nodes, readOnly: true } }) }) : original(url, init);
+    app.applySnapshot({ id: 'run', task: { id: 'task', kind: 'change', workflow: 'planned', phase: 'implement', status: 'interrupted', phases: [], plan: { summary: 'A small change', acceptance: [{ id: 'A1', criterion: 'Preserve API <img src=x>', evidence: 'Inspect exported types' }] } }, messages: [] });
+    expect(window.document.querySelector('[data-review-panel="execution"]').classList.contains('hidden')).toBe(true);
+    window.document.getElementById('open-execution').click();
+    const timeline = window.document.getElementById('execution-timeline');
+    await vi.waitFor(() => expect(timeline.textContent).toContain('第 2 次'));
+    expect(app.state.changes.reviewView).toBe('execution'); expect(timeline.textContent).toContain('42 tokens');
+    expect(timeline.textContent).toContain('已中断 · 约 0.5s'); expect(timeline.querySelector('img')).toBeNull();
+    expect(window.document.getElementById('task-plan').textContent).toContain('A1'); expect(window.document.getElementById('task-plan').querySelector('img')).toBeNull();
+    timeline.querySelector('details').open = true;
+    window.document.getElementById('refresh-changes').click();
+    await vi.waitFor(() => expect(timeline.querySelector('details').open).toBe(true));
+  });
+  it('rejects late timeline data after switching to a different execution', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'first';
+    let release; const original = window.fetch;
+    window.fetch = (url, init) => url.includes('/timeline?') ? new Promise((resolve) => { release = resolve; }) : original(url, init);
+    app.applySnapshot({ id: 'first', task: { id: 'first-task', kind: 'change', phase: 'implement', status: 'running', phases: [] }, messages: [] });
+    window.document.getElementById('open-execution').click();
+    app.state.sessionId = 'second'; app.applySnapshot({ id: 'second', messages: [] });
+    release({ ok: true, json: async () => ({ timeline: { nodes: [{ id: 'old', kind: 'phase', label: 'PRIVATE_OLD_PHASE', status: 'completed' }] } }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(window.document.getElementById('execution-timeline').textContent).not.toContain('PRIVATE_OLD_PHASE');
+  });
+  it('shows stale evidence, original output and unknown model pricing without a fresh completion claim', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'stale';
+    const verification = { status: 'passed', evidence: { freshness: 'stale', reason: '检查点恢复后需要重新验证' }, report: { passed: true, results: [{ command: 'npm test', passed: true, exitCode: 0, durationMs: 1, output: 'raw\n$original\n<img src=x>' }] } };
+    const budget = { startedAt: new Date().toISOString(), status: 'completed', totalTokens: 100, modelTurns: 1, toolCalls: 2, costUsd: 0, costIncomplete: true, usage: { input: 10, output: 20, cacheRead: 70, cacheWrite: 0 }, limits: {} };
+    app.applySnapshot({ id: 'stale', running: false, verification, budget, task: { kind: 'change', workflow: 'direct', status: 'needs_attention', phase: 'complete', phases: [], verification, budget }, messages: [] });
+    expect(window.document.getElementById('verification-summary').textContent).toContain('证据已过期');
+    expect(window.document.getElementById('verification-output').textContent).toContain('raw\n$original\n<img src=x>');
+    expect(window.document.getElementById('verification-output').querySelector('img')).toBeNull();
+    expect(window.document.getElementById('task-budget').textContent).toContain('费用未知');
+    expect(window.document.getElementById('task-budget').textContent).toContain('缓存读取 70');
+    expect(window.document.getElementById('task-review').textContent).toContain('未进行模型审阅');
   });
 
   it('applies staged model and reasoning before exactly one next prompt and retains them across snapshots', async () => {

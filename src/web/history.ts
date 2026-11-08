@@ -41,14 +41,14 @@ function exportFileName(title: string, extension: string) {
   return safe + '.' + extension;
 }
 export type SessionExport = { filename: string; contentType: string; body: string };
-export function exportSession(manager: SessionManager, format: 'markdown' | 'json'): SessionExport {
+export function exportSession(manager: SessionManager, format: 'markdown' | 'json', assessment?: { task?: import('../task/controller.js').TaskState; verification?: import('../verification/pi-extension.js').PforgeVerificationOutcome }): SessionExport {
   const title = sessionTitle(manager);
   const entries = manager.getBranch();
   if (format === 'json') {
     return {
       filename: exportFileName(title, 'json'),
       contentType: 'application/json; charset=utf-8',
-      body: JSON.stringify({ version: 1, title, project: manager.getCwd(), sessionId: manager.getSessionId(), history: historyState(manager), fork: forkOrigin(manager), entries }, null, 2) + '\n'
+      body: JSON.stringify({ version: 1, title, project: manager.getCwd(), sessionId: manager.getSessionId(), history: historyState(manager), fork: forkOrigin(manager), ...(assessment ? { assessment: { ...assessment, observedAt: new Date().toISOString() } } : {}), entries }, null, 2) + '\n'
     };
   }
   const lines = [
@@ -61,6 +61,13 @@ export function exportSession(manager: SessionManager, format: 'markdown' | 'jso
     '- 导出时间：' + new Date().toISOString(),
     ''
   ];
+  if (assessment) {
+    const verification = assessment.verification ?? assessment.task?.verification;
+    lines.push('- 任务状态：' + (assessment.task?.status ?? '无活动任务'));
+    lines.push('- 验证：' + (verification?.status ?? 'unchecked') + ' · 版本证据：' + (verification?.evidence?.freshness ?? 'unconfirmed'));
+    if (verification?.evidence?.reason) lines.push('- 证据说明：' + verification.evidence.reason);
+    lines.push('', '> 以下为历史对话，历史验证结果不代表当前版本。', '');
+  }
   for (const entry of entries as any[]) {
     if (entry.type === 'message') {
       const message = entry.message;

@@ -12,7 +12,7 @@ Forge Agent is an open-source coding agent for local projects, with a Web worksp
 
 Built on the complete [Pi Coding Agent](https://github.com/earendil-works/pi) **1.4.0** runtime, Forge focuses on **task orchestration, tool policies, verification gates, reviewable changes and memory, background execution, and recovery**. Version **0.2.0** is intended for local development and early feedback, with source installation, package checks, and a GitHub tag release workflow.
 
-[Quick start](#quick-start) · [Design and ownership](#design-and-ownership) · [User guide](docs/usage.en.md) · [Architecture](docs/architecture.md) · [Evaluation](docs/evaluation.md)
+[Quick start](#quick-start) · [Design and ownership](#design-and-ownership) · [User guide](docs/usage.en.md) · [Architecture Deep Dive](docs/architecture-deep-dive.md) · [Evaluation](docs/evaluation.md)
 
 ## Quick start
 
@@ -44,7 +44,7 @@ The Web model picker offers providers with credentials or configuration saved in
 | **Inspect changes** | Right-side Git diffs, files and terminal; review execution checkpoints and undo selected files while preserving earlier dirty work and refusing conflicts. |
 | **Provide context** | Project text references, uploaded images and UTF-8 source/text files, user-maintained global/project/session memory, and composer-level context and Pi compaction controls. |
 | **Connect models and tools** | Provider setup, model discovery and multi-select; MCP configuration, probes, browser OAuth and tool settings; Skills preview, toggles and local-directory imports. |
-| **Track and recover tasks** | Phases, verification, budgets and a durable index; `/queue` queues subsequent text tasks; a detached local service survives its launching terminal without replaying started tasks after a crash. |
+| **Track and recover tasks** | A right-side execution view connects phases, model responses, tool results, checks and retries; per-criterion acceptance, budgets, a durable task index, `/queue`, and detached service execution with explicit recovery after crashes. |
 | **Delegate subtasks** | Exploration, review and implementation in independent worktrees; inspect and selectively apply child changes in the right panel, with conflict checks against the main project. |
 
 File references and previews check paths, known sensitive filenames, symlinks, and size; images also have format and aggregate limits. These checks bound the Web feature's access and do not provide process isolation.
@@ -73,9 +73,18 @@ flowchart LR
     Verify --> Review
     Review --> Complete
     Verify -->|Failure with repairs remaining| Implement
+    Review -->|Blocking defect with repairs remaining| Implement
 ```
 
-Completion requires passing configured checks, a structured `ready` model review with no unresolved issues, and no detected changes during review within the available Git evidence. Missing checks, invalid review, or stale evidence leave the task needing attention. Questions and verification-only requests take shorter paths.
+Intent hints and the user's permission mode are recorded separately. Uncertain requests produce schema-validated goals, constraints, acceptance, file scope and unresolved questions in the existing read-only inspection turn, then resolve to implementation, an answer, verification or clarification. They no longer default to successful exploration. The host assigns `A1…` acceptance identities; planning cannot remove preserved constraints or criteria. Implementation and review carry them forward, with evidence required for each finding. Invalid handoffs stop. Model-authored plans cannot expand authorization or replace configured verification commands.
+
+Completion requires passing configured checks, current workspace-content and command-configuration evidence, a structured `ready` model review without unresolved issues, and exact confirmed coverage of every acceptance criterion. Verification and review repairs share a bounded allowance; every repair reruns verification and review. Missing checks, omitted acceptance findings, invalid review, or stale evidence leave the task needing attention. Questions and verification-only requests take shorter paths.
+
+Adaptive and planned runs share host finalization. Pending child changes prevent completion; checkpoint sealing, mode restoration or task-persistence errors fail the task. The UI, queue and task index consume the same final result while historical passing checks remain available.
+
+Select **Execution history** (`执行记录`) beside task progress to inspect phases, model usage, tool results, checks and repeated implementation attempts in the right panel. Records are projected from Pi history and host state, survive reopening, and never infer success for calls without results. This is read-only inspection rather than arbitrary side-effect replay.
+
+Execution, automated checks and model review are shown separately; adaptive execution never implies a review that did not run. Undo, proposal application and terminal operations invalidate old evidence, and opening history rechecks external changes. Content observations have explicit scope and size limits; unconfirmed versions retain historical output and request a recheck. See the [usage guide](docs/usage.en.md).
 
 This makes execution inspectable; the benefit of extra planning and model self-review still needs measurement. Verification repairs and per-execution time, model-turn, tool-call, token, and cost limits are bounded. An exhausted budget becomes a recoverable `budget_exceeded` task state.
 
@@ -83,7 +92,7 @@ This makes execution inspectable; the benefit of extra planning and model self-r
 
 The parent can use `subagent` to delegate up to three parallel tasks. `explorer` and `reviewer` are read-only; `worker` uses built-in readers, search, write and edit in a detached Git worktree seeded with eligible current working files. Children cannot write the main project, run shell commands, call MCP, load external extensions, or delegate further. Each child has an independent Pi context and inherits the model and reasoning effort at delegation. The planned-workflow self-review remains a separate gate.
 
-A compact header control shows state, duration and tokens; the right panel exposes records and Stop. Review a worker's file diffs and explicitly apply selected changes to the main project, then run verification through the parent. Conflicting later edits are refused, and application creates an undo checkpoint. Cleaning a worktree preserves its sealed proposal and transcript. Read-only children support parent follow-ups; writable tasks require new delegation. Child sessions stay out of ordinary history, and parent cancellation drains active children. Separate child model settings and direct child-panel messages remain unsupported.
+Async start returns handles so the parent can continue independent work. Pi's settlement boundary returns unread results for synthesis; the host refuses completion when collection is incomplete. A compact header control shows state, duration and tokens; the right panel exposes records and Stop. Review selected worker diffs and apply them, or choose **Apply and verify** to run configured main-project checks without another model call. Conflicting edits are refused, and application creates an undo checkpoint. Cleanup preserves proposals and transcripts. Read-only children support follow-ups; writers require new delegation. Parent cancellation drains active children. Separate child models and direct child-panel messages remain unsupported.
 
 ### Checkpoints and background operation
 
@@ -97,11 +106,11 @@ node dist/pi-cli.js service status
 node dist/pi-cli.js service stop
 ```
 
-After completing the first conversation turn, use **`/queue task text`** for subsequent text tasks. The task center can inspect, cancel, open, and explicitly requeue jobs. Model, effort and workflow are frozen at admission; trust and session state are checked again at execution. Browser closure does not stop work. After process exit, queued jobs remain queued, while started jobs become interrupted and require explicit retry with fresh inspection. The detached process is not registered as an OS startup service. See [operations and upgrades](docs/operations.md).
+After the first conversation turn, add subsequent text tasks in the **task center** or use **`/queue task text`**. The queue runs up to three different projects concurrently and preserves order within each project and session. Busy projects do not block unrelated projects. Stop running jobs individually, cancel queued jobs, open their sessions or explicitly requeue. Model, effort and workflow are frozen at admission; trust and session state are checked again at execution. Browser closure does not stop work. Restart preserves queued jobs and marks started jobs interrupted without replaying tools. See [task scheduling](docs/task-scheduling.md) and [operations](docs/operations.md).
 
 ### Execution budgets
 
-**Settings → About → Execution budget** controls each Agent execution, including adaptive and planned workflows. The defaults are 15 minutes, 50 model turns, 300 tool calls, 750,000 tokens, and 25 USD. Budget snapshots are stored with the session and task record; after changing the limits, an interrupted or budget-exhausted task can be rechecked. Provider usage is usually observable at the end of a response, so one response may slightly cross a threshold; this is an execution guard, not a billing-level isolation boundary.
+**Settings → About → Execution budget** controls adaptive and planned runs. New installations default to 60 minutes, 150 model turns, 300 tool calls, 5,000,000 cumulative tokens and 25 USD; saved limits are preserved. Cumulative usage includes cache reads and differs from current context-window occupancy. Missing prices are shown as unknown. Counters persist with the task and do not reset during internal continuation. Adjusting limits allows a recheck. Provider usage normally arrives at response end, so this is an execution guard rather than a billing-level isolation boundary.
 
 Child turns, tools and usage also count toward the parent's aggregate budget. Each child activation additionally has limits of three minutes, 12 model turns, 60 tool calls, 120,000 tokens and 2 USD, capped by the corresponding parent limits. One user request can delegate at most 12 activations, including follow-ups.
 
@@ -111,18 +120,18 @@ Forge implements product and control behavior above Pi sessions and reuses Pi's 
 
 | Forge implementation | Problem it addresses | Code |
 | --- | --- | --- |
-| **Task state and recovery** | Phase transitions, stopping, bounded repairs, task discovery and explicit re-inspection; Pi sessions retain the conversation and task records. | [Controller](src/task/controller.ts), [task index](src/task/registry.ts) |
+| **Task state and recovery** | Structured goals and acceptance, shared finalization, phase/tool records, bounded repairs, stall detection and explicit re-inspection. | [Controller](src/task/controller.ts), [handoff protocol](src/task/plan.ts), [lifecycle](src/task/lifecycle.ts), [execution projection](src/task/timeline.ts), [task index](src/task/registry.ts) |
 | **Execution ownership and budgets** | One Web owner per home; Agent, terminal and project-trust changes share a canonical project lock; every execution has time, turn, tool, token and cost limits. | [Home lease](src/task/registry.ts), [project execution](src/web/executions.ts), [budget](src/task/budget.ts) |
-| **Child lifecycle** | Independent Pi contexts, restricted tools, reserved capacity, aggregate budgets, result collection, cancellation and ownership checks. | [Subagent manager](src/web/subagents.ts), [design](docs/subagents.md) |
-| **Verification and execution evidence** | Exact failed output, bounded repairs, timeouts and child-process tree termination; failed verification cannot count as successful completion. | [Verification extension](src/verification/pi-extension.ts), [command executor](src/tools/command.ts) |
+| **Child lifecycle** | Independent Pi contexts, asynchronous start and synthesis, restricted tools, aggregate budgets, cancellation and ownership checks. | [Subagent manager](src/web/subagents.ts), [design](docs/subagents.md) |
+| **Verification and execution evidence** | Exact failed output, workspace/configuration binding, stale evidence invalidation, timeouts and child-process tree termination; failed verification cannot count as successful completion. | [Verification extension](src/verification/pi-extension.ts), [workspace evidence](src/verification/evidence.ts), [command executor](src/tools/command.ts) |
 | **Tool policies** | Enforce read-only modes during execution rather than relying on hidden UI controls. | [Mode policy](src/web/modes.ts) |
 | **Change and context adapters** | Git evidence, snapshots, conflict detection and controlled recovery; scoped memory, reviewed candidates and provenance. | [Checkpoints](src/task/checkpoints.ts), [worktrees](src/task/worktrees.ts), [memory](src/web/memory.ts) |
-| **Background tasks** | A detached process, durable FIFO, frozen job settings and explicit crash recovery. | [Queue](src/task/queue.ts), [service](src/web/service.ts) |
+| **Background tasks** | A detached process, cross-project concurrency, per-project FIFO, frozen settings, independent stops and explicit crash recovery. | [Queue](src/task/queue.ts), [service](src/web/service.ts) |
 | **Web product layer** | Streaming, event reconnection, history forks, model/MCP/Skills management and execution-result presentation. | [Web gateway and UI](src/web/) |
 
 **Pi owns** the agent loop, model calls and authentication, built-in tools, session trees, compaction, project trust, MCP protocol and execution, Skills, extensions, and resource discovery. Forge's MCP management reuses Pi's protocol and authorization capabilities. Pi also supplies the terminal interface.
 
-Memory is injected by scope, with canonical project identity and validated legacy migration. Models can use `memory_proposal` to suggest project/session memory; candidates become active only after acceptance in **Settings → Memory**. Rejection, duplicate detection, provenance, explicit replacement and optimistic revision checks are supported. Forks do not inherit ownership of pending candidates. Pi owns automatic compaction. Vector retrieval and measured memory-quality gains remain future work. Earlier code under `archive/prototype/` is outside the supported build.
+Memory recall is scoped to the active task. Constraints and preferences take priority; facts and decisions use inspectable English/Chinese lexical matching. Settings show selected items and budgets. Planned runs persist structured goals, complete constraints and acceptance, file scope and unresolved questions separately. Compaction checkpoints restore these before adding phase summaries; the full original request remains in the task record. Adaptive and legacy records without a structured brief use an explicitly marked head/tail excerpt, which cannot guarantee coverage of every requirement. Models can use `memory_proposal` to suggest project/session memory; candidates become active only after acceptance in **Settings → Memory**. Rejection, deduplication, provenance, explicit replacement and revision checks are supported. Forks do not inherit pending candidate ownership. Pi owns compaction; vector retrieval and measured quality gains remain future work. `archive/prototype/` is outside the supported build.
 
 ## Configure verification
 
@@ -161,7 +170,7 @@ Evaluations use an isolated temporary Forge home and workspace, copying only the
 ## Current scope
 
 - **Runtime and delivery:** local Web and optional terminal clients; the Web UI is Chinese. A detached service, package checks and tag release workflow are implemented; npm publication and desktop installers are not claimed.
-- **Concurrency and recovery:** one Web owner per `FORGE_AGENT_HOME`. Agent, terminal, trust changes, checkpoint recovery and proposal application share project ownership. The durable queue runs one job at a time and never automatically retries an interrupted execution.
+- **Concurrency and recovery:** one Web owner per `FORGE_AGENT_HOME`. Agent, terminal, trust changes, checkpoint recovery and proposal application share project ownership. The queue runs up to three different projects concurrently, serializes each real project and never automatically retries an interrupted execution.
 - **Compatibility:** providers offer an optional three-request check for streaming text, tool-call arguments and tool-result continuation. This checks the selected endpoint/model; real OAuth, enterprise proxy, rate-limit and vendor-specific compatibility still require service acceptance.
 - **Evidence still needed:** larger real-model repository comparisons and measured memory/planning gains. The pinned-repository evaluator provides the infrastructure; fixture tests do not establish coding quality or frontier performance.
 
@@ -181,8 +190,10 @@ Local operation describes the client and execution process. A remote model still
 
 - [User guide](docs/usage.en.md): modes, commands, context, memory, Skills, MCP, sessions, and local data.
 - [Architecture and ownership](docs/architecture.md): responsibilities of Pi and Forge.
+- [Architecture Deep Dive](docs/architecture-deep-dive.md): execution, evidence, scheduling, context and recovery tradeoffs, with an English overview.
+- [Execution records and acceptance handoffs](docs/execution-records.md): the right-side execution view, phase/tool provenance, acceptance identities and record limits.
 - [MCP management](docs/mcp-management.md) · [Evaluation](docs/evaluation.md) · [Product review](docs/product-audit.md).
-- [Contributor rules](AGENTS.md): completion, retries, trust, persistence, and security changes require regression tests.
+- [Contribution workflow](CONTRIBUTING.md) and [contributor rules](AGENTS.md): code and related documentation change together; completion, retries, trust, persistence, and security changes require regression tests.
 
 Report issues with sanitized reproduction steps through [Issues](https://github.com/sun-sh/forge-agent/issues), or contribute within these boundaries.
 

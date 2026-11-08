@@ -1,0 +1,16 @@
+{
+  "brief": {
+    "version": 1, "intent": "change", "goal": "Implement the isolated fixture task within its original scope",
+    "affectedPaths": [], "constraints": ["Preserve unrelated files"], "unresolved": [],
+    "acceptance": [{"criterion": "The requested fixture behavior works", "check": "automated", "evidence": "Configured fixture verification and code inspection"}]
+  },
+  "plan": {
+    "version": 1,
+    "summary": "Implement the isolated fixture task within its original scope",
+    "affectedPaths": [],
+    "constraints": ["Preserve unrelated files"],
+    "steps": ["Apply the requested fixture change"],
+    "acceptance": [{"criterion": "The requested fixture behavior works", "check": "automated", "evidence": "Configured fixture verification and code inspection"}]
+  },
+  "acceptance": [{"id": "A1", "status": "met", "evidence": "Scripted fixture evidence; no real model judgment measured"}]
+}

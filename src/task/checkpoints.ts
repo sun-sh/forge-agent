@@ -4,6 +4,7 @@ import { lstat, mkdir, open, readFile, realpath, rename, unlink, writeFile } fro
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { directoryKey } from '../project-identity.js';
+import { replaceMetadataFile } from './persistence.js';
 
 const MAX_FILES = 1500, MAX_FILE_BYTES = 2_000_000, MAX_TOTAL_BYTES = 32_000_000;
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
@@ -81,7 +82,8 @@ export class CheckpointStore {
   private async save(record: Manifest) {
     const directory = this.directory(record.id); await mkdir(directory, { recursive: true });
     const temporary = join(directory, randomUUID() + '.tmp');
-    await writeFile(temporary, JSON.stringify(record) + '\n', { mode: 0o600 }); await rename(temporary, join(directory, 'manifest.json'));
+    try { await writeFile(temporary, JSON.stringify(record) + '\n', { mode: 0o600 }); await replaceMetadataFile(temporary, join(directory, 'manifest.json')); }
+    finally { await unlink(temporary).catch(() => {}); }
   }
   private async load(id: string, project: string, sessionId: string) {
     let record: Manifest;

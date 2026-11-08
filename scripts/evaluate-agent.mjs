@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { ModelRuntime, VERSION } from '@earendil-works/pi-coding-agent';
 import { startWebConsole } from '../dist/web/server.js';
+import { isVerified } from '../dist/verification/pi-extension.js';
 import { pforgeHome } from '../dist/pforge-home.js';
 import { tasks } from './eval-tasks.mjs';
 import { modelEvaluationMetadata, saveEvaluationEvidence, saveHarnessEvidence } from './evaluation-evidence.mjs';
@@ -31,7 +32,7 @@ const execute = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'forge-evaluation-'));
 const output = resolve(option('--output', '.forge-agent/evals/' + new Date().toISOString().replaceAll(':', '-')));
 await mkdir(output, { recursive: true });
-const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', '../dist/task/controller.js', '../dist/task/intent.js', '../dist/web/server.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', '../tests/fixtures/task-handoff.json', '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
 const evalHome = resolve(option('--home', join(root, 'home')));
 await mkdir(evalHome, { recursive: true });
 const explicitHome = args.includes('--home');
@@ -81,7 +82,7 @@ if (real && (!explicitHome || args.includes('--config-home'))) {
 
 let gitRevision = 'unavailable';
 try { gitRevision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: process.cwd(), windowsHide: true })).stdout.trim() || gitRevision; } catch { /* evaluation can run from a source archive */ }
-const suiteVersion = 'forge-eval-small-repo-v4';
+const suiteVersion = 'forge-eval-small-repo-v5';
 const suiteFingerprint = createHash('sha256').update(JSON.stringify(selectedTasks)).digest('hex').slice(0, 16);
 let modelMetadata;
 let activeTask, requests = 0;
@@ -93,7 +94,8 @@ if (!real) {
     const write = phase === 'implement' && input.messages.at(-1)?.role !== 'tool';
     const solutionFiles = activeTask.solutionFiles ?? { [activeTask.entry ?? 'solution.mjs']: activeTask.solution };
     const calls = Object.entries(solutionFiles).map(([path, content], index) => ({ index, id: 'eval-' + requests + '-' + index, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path, content }) } }));
-    const delta = write ? { role: 'assistant', tool_calls: calls } : { role: 'assistant', content: phase === 'review' ? '{"verdict":"ready","summary":"Scripted fixture review; no real model judgment measured.","issues":[]}' : phase + ' fixture response' };
+    const handoff = JSON.parse(await readFile(new URL('../tests/fixtures/task-handoff.json', import.meta.url), 'utf8'));
+    const delta = write ? { role: 'assistant', tool_calls: calls } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Scripted fixture review; no real model judgment measured.', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : phase + ' fixture response' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const [part, finish] of [[delta, null], [{}, write ? 'tool_calls' : 'stop']]) response.write('data: ' + JSON.stringify({ id: 'eval', object: 'chat.completion.chunk', model: 'mock', created: 1, choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
     response.end('data: [DONE]\n\n');
@@ -158,8 +160,8 @@ try {
       const evaluator = join(root, `${task.id}-${workflow}-r${run}-held-out.mjs`);
       const heldOutImport = JSON.stringify(pathToFileURL(join(project, entry)).href);
       await writeFile(evaluator, 'import assert from "node:assert/strict"; import * as mod from ' + heldOutImport + ';\n' + task.heldOut + '\nconsole.log("held-out assertions passed");');
-      verificationGate = snapshot.verification?.status === 'passed';
-      taskCompletion = workflow === 'planned' ? snapshot.task?.status === 'completed' : snapshot.outcome === 'completed';
+      verificationGate = isVerified(snapshot.verification);
+      taskCompletion = snapshot.task?.status === 'completed';
       try {
         await execute(process.execPath, [evaluator], { cwd: root, windowsHide: true, timeout: 30000 });
         heldOutPass = true;

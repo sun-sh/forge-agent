@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-model-small-task-regression",
+  "date": "2026-11-08",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "transport": "OpenAI-compatible provider",
+  "thinkingLevel": "medium",
+  "suiteVersion": "forge-eval-small-repo-v5",
+  "task": "config-normalize-cross-file",
+  "taskSource": "scripts/eval-tasks.mjs",
+  "environment": { "platform": "win32", "node": "v24.19.0", "piVersion": "1.4.0" },
+  "source": { "baseRevision": "a383ea435f997f264d1214714cfe6ea5ab079544", "workingTree": "modified", "harnessFingerprint": "35ef90a2e41a1db3edebe1e4076dd2dba5143337b44f4966b092a0dc183fc7ec" },
+  "results": [
+    { "workflow": "direct", "run": 1, "passed": true, "heldOutPass": true, "workspaceIntegrity": true, "verificationFreshness": "current", "taskStatus": "completed", "review": "not_run", "repairs": 0, "latencyMsIncludingSetup": 30476, "modelTurns": 6, "toolCalls": 5, "usage": { "input": 4092, "output": 1317, "cacheRead": 18496, "cacheWrite": 0, "totalTokens": 23905 }, "costUsd": null },
+    { "workflow": "planned", "run": 1, "passed": true, "heldOutPass": true, "workspaceIntegrity": true, "verificationFreshness": "current", "taskStatus": "completed", "review": "ready", "reviewFreshness": "current", "repairs": 0, "latencyMsIncludingSetup": 68743, "modelTurns": 10, "toolCalls": 15, "phaseDurationMs": { "inspect": 7724, "plan": 13413, "implement": 12397, "verify": 4978, "review": 22454 }, "usage": { "input": 16572, "output": 2941, "cacheRead": 30272, "cacheWrite": 0, "totalTokens": 49785 }, "costUsd": null }
+  ],
+  "limitations": [
+    "One small public cross-file task, one execution per workflow; no statistical performance comparison or frontier ranking.",
+    "The assertions run outside the agent workspace; notes.txt and verify.mjs remained unchanged.",
+    "Cumulative tokens include cache reads and repeated input; they do not represent context-window size.",
+    "No model pricing was configured, so cost is unknown.",
+    "This is a reviewed aggregate; raw transcripts, local paths, credentials and provider URLs remain private."
+  ]
+}

@@ -1,6 +1,6 @@
 import { marked } from '/vendor/marked.js';
 import DOMPurify from '/vendor/purify.js';
-import { safeMarkdown, textContent, sessionOutcome } from './render.js';
+import { safeMarkdown, textContent, sessionOutcome, verificationLabel } from './render.js';
 import { readEventStream, StreamError } from './stream.js';
 import { mountCustomProviders } from './providers.js';
 import { mountMcp } from './mcp.js';
@@ -40,6 +40,7 @@ const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (c
 const lifecycle = lifecycleUI({ api, esc, toast, currentSession: () => state.sessionId, running: () => state.running,
   readOnly: () => state.readOnly || state.mode !== 'agent' || historyReadOnly(), changed: () => loadChanges(true) });
 let tasksTimer, tasksRequest = 0;
+let timelineRequest = 0, timelineTimer, timelineIdentity = '';
 const ICON_PATHS = {
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/>',
   folderPlus: '<path d="M3 7V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11H3V7Z"/><path d="M12 10v6m-3-3h6"/>',
@@ -215,8 +216,11 @@ async function loadTasks() {
     const [result, queue] = await Promise.all([api('/api/tasks' + query), api('/api/jobs' + query)]);
     if (request !== tasksRequest || project !== state.project?.path || scope !== state.taskScope) return;
     state.tasks = result.tasks || []; renderTasks(); if (result.diagnostic) $('tasks-note').textContent = result.diagnostic;
+    $('queue-summary').textContent = queue.scheduler ? '运行 ' + queue.scheduler.running + '/' + queue.scheduler.concurrency + ' · 排队 ' + queue.scheduler.queued + ' · 不同项目并行，同一项目按顺序执行。' : '不同项目并行，同一项目按顺序执行。';
+    $('queue-task-submit').disabled = queueSubmitting || !state.sessionId || state.readOnly || state.mode !== 'agent';
+    $('queue-target').textContent = state.sessionId ? '当前会话 · ' + (state.project?.name || '项目') + ' · ' + (state.pendingModelKey || state.model?.key || '未选择模型') : '先打开一个 Agent 会话';
     const labels = { queued: '排队中', running: '后台执行中', completed: '已完成', failed: '失败', interrupted: '进程退出后中断', cancelled: '已取消' };
-    $('queue-list').innerHTML = (queue.jobs || []).slice().reverse().map((job) => '<article class="task-card"><div class="task-card-main"><strong>' + esc(job.title || '排队任务') + '</strong><small>' + esc(shortPath(job.project)) + ' · ' + esc(labels[job.status]) + ' · ' + esc(job.model) + '</small><span>' + esc(job.error || formatTime(job.createdAt)) + '</span></div><div class="task-card-actions">' + (['queued', 'interrupted'].includes(job.status) ? '<button type="button" class="button quiet small" data-cancel-job="' + esc(job.id) + '">取消</button>' : '') + '<button type="button" class="button quiet small" data-open-job="' + esc(job.id) + '">打开会话</button></div></article>').join('') || '<p class="settings-note">使用 /queue 任务内容 排队。独立后台进程可通过 forge-agent service start 启动。</p>';
+    $('queue-list').innerHTML = (queue.jobs || []).slice().reverse().map((job) => '<article class="task-card"><div class="task-card-main"><strong>' + esc(job.title || '排队任务') + '</strong><small>' + esc(shortPath(job.project)) + ' · ' + esc(labels[job.status]) + ' · ' + esc(job.model) + '</small><span>' + esc(job.error || job.waiting || formatTime(job.createdAt)) + '</span></div><div class="task-card-actions">' + (['queued', 'interrupted', 'running'].includes(job.status) ? '<button type="button" class="button quiet small" data-cancel-job="' + esc(job.id) + '">' + (job.status === 'running' ? '停止' : '取消') + '</button>' : '') + '<button type="button" class="button quiet small" data-open-job="' + esc(job.id) + '">打开会话</button></div></article>').join('') || '<p class="settings-note">可在上方添加任务，或使用 /queue 任务内容。同一会话正在执行时也可以排队。</p>';
     state.jobs = queue.jobs || [];
     if (queue.diagnostic) $('queue-list').textContent = queue.diagnostic;
     $('queue-list').querySelectorAll('[data-open-job]').forEach((button) => {
@@ -228,6 +232,24 @@ async function loadTasks() {
 }
 function openTasks() { closeFilePicker(); closeModelPicker(); closeModePicker(); closeCommandPicker(); $('tasks-panel').classList.remove('hidden'); void loadTasks(); clearInterval(tasksTimer); tasksTimer = setInterval(() => void loadTasks(), 3000); $('tasks-close').focus(); }
 function closeTasks() { $('tasks-panel').classList.add('hidden'); clearInterval(tasksTimer); ++tasksRequest; }
+let queueSubmitting = false;
+async function enqueueComposedTask(event) {
+  event.preventDefault();
+  if (queueSubmitting) return;
+  const input = $('queue-task-input'), draft = input.value, message = draft.trim();
+  if (!message) { input.focus(); return; }
+  const session = state.sessionId;
+  if (!session || state.readOnly || state.mode !== 'agent') { toast('先打开一个可写的 Agent 会话', 'error'); return; }
+  const payload = { session, message, workflow: state.workflow, model: state.pendingModelKey || state.model?.key, thinkingLevel: state.pendingThinkingLevel ?? state.thinkingLevel };
+  if (!payload.model) { toast('先选择一个已配置的模型', 'error'); return; }
+  queueSubmitting = true; $('queue-task-submit').disabled = true;
+  try {
+    await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
+    if (session === state.sessionId && input.value === draft) input.value = '';
+    toast('已加入队列，使用提交时选择的模型和执行方式');
+  } catch (error) { toast(error.message, 'error'); }
+  finally { queueSubmitting = false; await loadTasks(); }
+}
 async function activateTaskSession(id) {
   const data = await api('/api/sessions/' + id); state.sessionId = data.id; state.sessionPath = data.sessionFile || null; applySnapshot(data); connect(data.id); showChat(); renderProjects(); closeTasks();
 }
@@ -845,8 +867,9 @@ function renderBudget(budget = state.budget) {
   node.innerHTML = '<span>' + esc(status) + '</span>'
     + '<span>回合 ' + formatNumber(budget.modelTurns) + '/' + formatNumber(limits.maxModelTurns) + '</span>'
     + '<span>工具 ' + formatNumber(budget.toolCalls) + '/' + formatNumber(limits.maxToolCalls) + '</span>'
-    + '<span>Token ' + formatNumber(budget.totalTokens) + '/' + formatNumber(limits.maxTotalTokens) + '</span>'
-    + '<span>$' + Number(budget.costUsd || 0).toFixed(2) + '/$' + Number(limits.maxCostUsd || 0).toFixed(2) + '</span>'
+    + '<span title="累计用量包含重复上下文和缓存读取，不代表当前上下文窗口占用">累计 Token ' + formatNumber(budget.totalTokens) + '/' + formatNumber(limits.maxTotalTokens) + '</span>'
+    + (budget.usage ? '<span>输入 ' + formatNumber(budget.usage.input) + ' · 输出 ' + formatNumber(budget.usage.output) + ' · 缓存读取 ' + formatNumber(budget.usage.cacheRead) + ' · 缓存写入 ' + formatNumber(budget.usage.cacheWrite) + '</span>' : '')
+    + '<span>' + (budget.costIncomplete !== false ? Number(budget.costUsd) > 0 ? '已知 $' + Number(budget.costUsd).toFixed(2) + ' · 部分费用未知' : '费用未知' : '$' + Number(budget.costUsd || 0).toFixed(2)) + '/上限 $' + Number(limits.maxCostUsd || 0).toFixed(2) + '</span>'
     + '<span>耗时 ' + durationLabel(elapsed) + '/' + durationLabel(limits.maxDurationMs || 0) + '</span>';
 }
 function updateElapsed() { updateSubagentTiming(); if (!state.runStartedAt) { $('run-elapsed').textContent = ''; renderBudget(); return; } const end = state.running ? Date.now() : state.runFinishedAt || state.runStartedAt; const seconds = Math.max(0, Math.floor((end - state.runStartedAt) / 1000)); $('run-elapsed').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); renderBudget(); }
@@ -878,7 +901,7 @@ function renderSubagents(agents) {
 }
 function renderSubagentStatus(agent) {
   $('subagent-heading').textContent = agent.title;
-  $('subagent-status').textContent = SUBAGENT_STATUS[agent.status] || agent.status;
+  $('subagent-status').textContent = (SUBAGENT_STATUS[agent.status] || agent.status) + (agent.status === 'completed' ? agent.collectedAt ? ' · 主任务已取回结果' : ' · 等待主任务取回结果' : '');
   $('subagent-meta').textContent = (agent.role === 'worker' ? '实现 · 独立 worktree' : (agent.role === 'reviewer' ? '审阅' : '探索') + ' · 只读') + ' · ' + agent.model + ' · ' + tokenLabel(agent.budget?.totalTokens || 0) + ' tokens';
   $('subagent-activity').textContent = subagentRunning(agent) ? agent.activity || '正在处理子任务…' : agent.error || '结果已返回主 Agent';
   $('subagent-stop').classList.toggle('hidden', !subagentRunning(agent));
@@ -1228,10 +1251,10 @@ function renderVerification(verification) {
   const panel = $('verification-report');
   panel.classList.toggle('hidden', !verification?.report && !verification?.error);
   if (!verification) return;
-  panel.classList.toggle('failed', verification.status === 'failed');
-  $('verification-summary').textContent = (verification.status === 'passed' ? '验证通过' : verification.status === 'skipped' ? '验证未执行' : '验证失败') + (verification.attempts ? ' · 修复重试 ' + verification.attempts + ' 次' : '') + (verification.checkedAt ? ' · ' + formatTime(verification.checkedAt) : '') + ' · 命令与输出';
+  panel.classList.toggle('failed', verification.status === 'failed' || verification.evidence?.freshness === 'stale');
+  $('verification-summary').textContent = verificationLabel(verification) + (verification.attempts ? ' · 修复重试 ' + verification.attempts + ' 次' : '') + (verification.checkedAt ? ' · ' + formatTime(verification.checkedAt) : '') + ' · 命令与输出';
   const failures = { timeout: '超时', aborted: '已停止', spawn_error: '启动失败' };
-  $('verification-output').textContent = (verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '';
+  $('verification-output').textContent = (verification.evidence?.reason ? verification.evidence.reason + '\n\n' : '') + ((verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '');
 }
 const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '完成' };
 function setWorkflow(value) {
@@ -1255,19 +1278,48 @@ async function changeWorkflow(value) {
   } finally { state.changingConfig = false; setRunning(state.running); }
 }
 function renderTask(task) {
+  const identity = state.sessionId + ':' + (task?.id || ''), changedTask = timelineIdentity !== identity;
+  timelineIdentity = identity;
   state.task = task || null;
+  if (changedTask || !task) { ++timelineRequest; clearTimeout(timelineTimer); timelineTimer = null; $('execution-timeline').textContent = ''; $('task-phase-history').classList.remove('hidden'); }
   if (task?.budget) state.budget = task.budget;
-  const showTaskPanel = Boolean(task && !['answer', 'explore'].includes(task.kind));
+  const showTaskPanel = Boolean(task && (!['answer', 'explore'].includes(task.kind) || task.progress?.status === 'warned' || task.progress?.status === 'stalled'));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
-  if (!task) { renderBudget(null); renderComposerControl(); return; }
+  if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; renderBudget(null); renderComposerControl(); return; }
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  $('task-note').textContent = task.status === 'running' ? (task.workflow === 'direct' ? '正在自适应执行' : '正在' + TASK_LABELS[task.phase]) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || (task.status === 'budget_exceeded' ? '执行预算已用尽，可以调整设置后重新检查。' : task.status === 'completed' ? task.workflow === 'direct' ? '自适应执行完成。' : task.kind === 'verify' ? '项目验证命令已通过。' : '验证通过，模型审阅完成。' : '等待处理');
-  $('task-review').textContent = task.review ? '模型审阅：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
-    + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : '审阅尚未完成。';
+  $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : (task.workflow === 'direct' ? '正在自适应执行' : '正在' + TASK_LABELS[task.phase])) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;
+  $('task-review').textContent = task.review ? '模型审阅' + (task.review.freshness === 'stale' ? '（已过期）' : task.review.freshness !== 'current' ? '（当前版本未确认）' : '') + '：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
+    + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : task.workflow === 'direct' || task.kind === 'verify' ? '本次未进行模型审阅。' : '审阅尚未完成。';
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
+  const criteria = task.plan?.acceptance || [];
+  $('task-plan').innerHTML = criteria.length ? '<details class="acceptance-plan"><summary>目标与验收 · ' + criteria.length + ' 项</summary><p>' + esc(task.plan.summary) + '</p><ol>' + criteria.map((item) => {
+    const finding = task.review?.acceptance?.find((entry) => entry.id === item.id), label = task.review?.freshness !== 'current' && finding ? '当前未确认' : ({ met: '已确认', unmet: '未满足', unconfirmed: '未确认' }[finding?.status] || '待审阅');
+    return '<li><strong>' + esc(item.id) + ' · ' + esc(label) + '</strong><p>' + esc(item.criterion) + '</p><small>' + esc(finding?.evidence || item.evidence) + '</small></li>';
+  }).join('') + '</ol></details>' : '';
+  scheduleTimeline();
   renderBudget(task.budget || state.budget);
   setRunning(state.running);
+}
+function scheduleTimeline() {
+  if (!timelineTimer && state.changes.open && state.changes.reviewView === 'execution' && $('task-evidence').open) timelineTimer = setTimeout(() => { timelineTimer = null; void loadExecutionTimeline(); }, 350);
+}
+async function loadExecutionTimeline() {
+  const session = state.sessionId, taskId = state.task?.id, request = ++timelineRequest;
+  if (!session || !taskId) return;
+  const container = $('execution-timeline');
+  try {
+    const { timeline } = await api('/api/sessions/' + session + '/timeline?task=' + encodeURIComponent(taskId));
+    if (request !== timelineRequest || session !== state.sessionId || taskId !== state.task?.id) return;
+    if (!timeline?.nodes) { container.textContent = '暂时没有可展示的事件。'; return; }
+    const labels = { completed: '已结束', running: '进行中', failed: '失败', interrupted: '已中断', aborted: '已停止', needs_attention: '待处理', budget_exceeded: '超出预算', unconfirmed: '未确认' };
+    const meta = (node) => (labels[node.status] || '未确认') + (node.durationMs !== undefined ? ' · ' + (node.timing === 'message_interval' ? '约 ' : '') + (node.durationMs / 1000).toFixed(1) + 's' : '') + (node.tokens !== undefined ? ' · ' + node.tokens.toLocaleString() + ' tokens' : '');
+    const parents = new Map(timeline.nodes.map((node) => [node.id, node.parentId]));
+    const belongs = (node, phaseId) => { let id = node.parentId; for (let depth = 0; id && depth < 4; depth++) { if (id === phaseId) return true; id = parents.get(id); } return false; };
+    const opened = new Set([...container.querySelectorAll('details[open]')].map((node) => node.dataset.phase));
+    container.innerHTML = '<p class="settings-note">只读历史。工具时长按消息间隔估算，包含等待；没有结果的调用保持中断或进行中。</p>' + timeline.nodes.filter((node) => node.kind === 'phase').map((phase) => '<details class="execution-phase" data-phase="' + esc(phase.id) + '"' + (opened.has(phase.id) ? ' open' : '') + '><summary><span>' + esc(TASK_LABELS[phase.label] || phase.label) + (phase.attempt > 1 ? ' · 第 ' + phase.attempt + ' 次' : '') + '</span><small>' + esc(meta(phase)) + '</small></summary><ol>' + timeline.nodes.filter((node) => belongs(node, phase.id)).map((node) => '<li class="execution-node ' + esc(node.kind) + '"><span>' + esc(node.kind === 'model' ? '模型响应' : node.kind === 'check' ? '验证 · ' + node.label : node.label) + '</span><small>' + esc(meta(node)) + '</small></li>').join('') + '</ol></details>').join('') + (timeline.truncated ? '<p class="settings-note">记录超过展示上限，请在会话导出中查看原始事件。</p>' : '');
+    $('task-phase-history').classList.add('hidden');
+  } catch (error) { if (request === timelineRequest && session === state.sessionId && taskId === state.task?.id) container.textContent = '执行记录暂不可用：' + error.message; }
 }
 function renderChangeDiff(text, preserveScroll = false) {
   const node = $('changes-diff'), top = preserveScroll ? node.scrollTop : 0, left = preserveScroll ? node.scrollLeft : 0;
@@ -1306,11 +1358,11 @@ function toggleChanges(open, restoreFocus = false) {
   if (open) closeSubagent();
   if (open) { closeModelPicker(); closeModePicker(); toggleSidebar(false); syncChangesSession(); }
   state.changes.open = open; syncChangesLayout();
-  if (open) { renderReviewView(); if (state.changes.reviewView === 'files') void loadProjectFiles(); else if (state.changes.reviewView === 'changes') void loadChanges(); }
+  if (open) { renderReviewView(); if (state.changes.reviewView === 'files') void loadProjectFiles(); else if (state.changes.reviewView === 'changes') void loadChanges(); else if (state.changes.reviewView === 'execution') void loadExecutionTimeline(); }
   else if (restoreFocus) $('toggle-changes').focus();
 }
 function renderReviewView() {
-  const view = ['changes', 'files', 'terminal'].includes(state.changes.reviewView) ? state.changes.reviewView : 'changes';
+  const view = ['changes', 'files', 'terminal', 'execution'].includes(state.changes.reviewView) ? state.changes.reviewView : 'changes';
   state.changes.reviewView = view;
   document.querySelectorAll('.changes-tabs [data-review-view]').forEach((button) => {
     const selected = button.dataset.reviewView === view;
@@ -1319,11 +1371,12 @@ function renderReviewView() {
   document.querySelectorAll('[data-review-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.reviewPanel !== view));
 }
 function setReviewView(view) {
-  if (!['changes', 'files', 'terminal'].includes(view)) return;
+  if (!['changes', 'files', 'terminal', 'execution'].includes(view)) return;
   state.changes.reviewView = view; renderReviewView();
   if (!state.changes.open) return;
   if (view === 'changes') void loadChanges();
   else if (view === 'files') void loadProjectFiles();
+  else if (view === 'execution') void loadExecutionTimeline();
   else $('review-terminal-command').focus();
 }
 function renderChangeFiles(available) {
@@ -1783,7 +1836,8 @@ async function openSettings(tab, editModel) {
     };
     const memoryRevisions = { ...memory?.revisions };
     const memoryBudget = Array.isArray(memory?.promptBudget) ? memory.promptBudget : [];
-    const memoryBudgetMarkup = memoryBudget.length ? '<div class="memory-budget">本轮注入预算：' + memoryBudget.map((item) => esc(item.layer) + ' ' + esc(String(item.chars)) + '/' + esc(String(item.budget)) + (item.truncated ? '（已截断）' : '')).join(' · ') + '</div>' : '';
+    const recallReasons = { constraint: '约束优先', preference: '偏好优先', relevant: '与当前任务相关', available: '参考记忆' };
+    const memoryBudgetMarkup = memoryBudget.length ? '<details class="memory-budget"><summary>当前任务记忆召回：' + memoryBudget.map((item) => esc(item.layer) + ' ' + esc(String(item.includedItems ?? 0)) + '/' + esc(String(item.enabledItems ?? 0)) + ' 条 · ' + esc(String(item.chars)) + '/' + esc(String(item.budget)) + (item.truncated ? '（已截断）' : '')).join(' · ') + '</summary>' + memoryBudget.map((layer) => (layer.selected || []).map((selection) => { const item = memoryDocuments[layer.layer]?.items.find((entry) => entry.id === selection.id); return item ? '<p>' + esc(layer.layer + ' · ' + recallReasons[selection.reason] + (selection.partial ? ' · 部分注入' : '') + '：' + item.text.slice(0, 220)) + '</p>' : ''; }).join('')).join('') + '</details>' : '';
     const sessionMemoryEditable = Boolean(state.sessionId && !state.readOnly && !historyReadOnly());
     const renderMemory = () => {
       const compaction = settings.compaction || { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 };
@@ -2243,6 +2297,7 @@ $('changes-backdrop').addEventListener('click', () => toggleChanges(false, true)
 $('refresh-changes').addEventListener('click', () => {
   if (state.changes.reviewView === 'files') void loadProjectFiles();
   else if (state.changes.reviewView === 'changes') void loadChanges(true);
+  else if (state.changes.reviewView === 'execution') void loadExecutionTimeline();
   else toast('终端输出会在执行后更新', 'info');
 });
 $('changes-tabs').addEventListener('click', (event) => { const button = event.target.closest('[data-review-view]'); if (button) setReviewView(button.dataset.reviewView); });
@@ -2323,7 +2378,10 @@ $('allow-button').addEventListener('click', () => submitUi(false));
 $('deny-button').addEventListener('click', () => submitUi(true));
 $('approval-options').addEventListener('click', (event) => { const option = event.target.closest('[data-ui-option]'); if (!option || !state.uiRequest) return; state.uiRequest.selectedValue = option.dataset.uiOption; $('allow-button').disabled = false; [...$('approval-options').children].forEach((item) => item.classList.toggle('selected', item === option)); });
 $('tasks-button').addEventListener('click', openTasks);
+$('open-execution').addEventListener('click', () => { state.changes.reviewView = 'execution'; toggleChanges(true); });
+$('task-evidence').addEventListener('toggle', () => { if ($('task-evidence').open && state.changes.open && state.changes.reviewView === 'execution') void loadExecutionTimeline(); });
 $('tasks-close').addEventListener('click', closeTasks);
+$('queue-task-form').addEventListener('submit', enqueueComposedTask);
 $('queue-list').addEventListener('click', async (event) => {
   const retry = event.target.closest('[data-retry-job]');
   if (retry) {

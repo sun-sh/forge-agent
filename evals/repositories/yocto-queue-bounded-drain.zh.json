@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "name": "Yocto Queue bounded lazy drain: Chinese implementation intent regression",
+  "tasks": [
+    {
+      "id": "yocto-queue-bounded-drain-zh",
+      "source": "https://github.com/sindresorhus/yocto-queue.git",
+      "revision": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+      "prompt": "请解决 Queue.drain 不能限制出队数量的问题，让 index.js 中的 drain(limit = Infinity) 和公开的 index.d.ts 声明支持这个参数。必须保持惰性迭代：只有 next() 消费时才按 FIFO 出队，最多 limit 项，undefined 值正常计数，提前关闭迭代器后未消费值仍留在队列；不传参数的行为兼容。只接受 Infinity 或非负有限整数（包括 0），其他数字抛 RangeError，非数字抛 TypeError。生成器允许在首次消费时验证，但空队列也必须验证，且验证必须发生在任何出队之前。保持 size、head、tail、普通非破坏性迭代和 drain 后 enqueue 的行为。最后运行测试。验收约束：package.json、test.js、index.test-d.ts、readme.md 和 notes.txt 的内容保持不变；验收以真实代码和类型声明的行为为依据，单纯调研或既有测试通过不代表任务完成。",
+      "setup": [
+        { "name": "fixed direct test dependencies", "command": "npm install --ignore-scripts --no-save --package-lock=false ava@3.15.0 tsd@0.17.0 xo@0.44.0 typescript@4.9.5", "timeoutMs": 300000 }
+      ],
+      "verify": [
+        { "name": "syntax", "command": "node --check index.js", "timeoutMs": 30000 },
+        { "name": "existing runtime and declaration tests", "command": "npm test", "timeoutMs": 120000 }
+      ],
+      "oracle": "yocto-queue-bounded-drain.oracle.mjs",
+      "oracleTimeoutMs": 30000,
+      "protected": ["package.json", "test.js", "index.test-d.ts", "readme.md", "notes.txt"],
+      "dirtyFiles": { "notes.txt": "Existing user work: preserve queue consumers and comments.\n" }
+    }
+  ]
+}

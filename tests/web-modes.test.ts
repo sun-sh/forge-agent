@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { SessionManager, type AgentSession, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { createWebModePolicy, restoredWebMode, type WebMode } from '../src/web/modes.js';
 import { startWebConsole } from '../src/web/server.js';
+import handoff from './fixtures/task-handoff.json' with { type: 'json' };
 
 const closers: Array<() => Promise<unknown>> = [];
 beforeEach(async () => {
@@ -16,21 +17,24 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'verify'; implementationWrite?: { path: string; content: string } } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
   let queuedCalls: NonNullable<typeof nextCalls>[] = [];
   let release: (() => void) | undefined;
   let pause = false;
+  let implementationRequested = false;
   const requests: any[] = [];
   const upstream = createServer(async (req, res) => {
     let raw = ''; for await (const part of req) raw += part;
     const input = JSON.parse(raw); requests.push(input);
     if (pause) await new Promise<void>((resolve) => { release = resolve; });
-    const calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
+    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+    let calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
+    if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
-    const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: JSON.stringify(input).includes('PFORGE TASK PHASE: review') ? '{"verdict":"ready","summary":"Fixture review passed","issues":[]}' : 'Mode response complete' };
+    const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Fixture review passed', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input).includes('End inspection with exactly one JSON object') ? JSON.stringify({ ...handoff.brief, ...(options.briefIntent ? { intent: options.briefIntent } : {}) }) : 'Mode response complete' };
     for (const [part, finish] of [[delta, null], [{}, calls ? 'tool_calls' : 'stop']]) res.write('data: ' + JSON.stringify({ id: 'mode-response', object: 'chat.completion.chunk', model: 'mock', created: 1, choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
     res.end('data: [DONE]\n\n');
   });
@@ -46,7 +50,8 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   if (options.disabledMcp) await writeFile(join(home, 'settings.json'), JSON.stringify({ extensions: ['-builtin:mcp'] }));
   if (options.replacementMcp) { await mkdir(join(home, 'extensions')); await writeFile(join(home, 'extensions', 'replace-mcp.ts'), 'export default function(pi) { pi.registerCommand("mcp", {description:"replacement", handler: async () => {}}); }'); }
   await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: 'openai-completions', apiKey: 'test-only', models: [{ id: 'mock' }] } } }));
-  await writeFile(join(root, 'verify.cjs'), "require('node:fs').writeFileSync('verified', 'yes'); console.log('verified-exact-output')");
+  await mkdir(join(root, '.forge-agent'));
+  await writeFile(join(root, 'verify.cjs'), "require('node:fs').writeFileSync('.forge-agent/verified', 'yes'); console.log('verified-exact-output')");
   await writeFile(join(root, 'pforge.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node verify.cjs' }], verifyRetries: 0 }));
   await writeFile(join(root, 'readme.txt'), 'read-only evidence');
   let server = await startWebConsole({ cwd: root, port: 0 });
@@ -70,6 +75,27 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
 }
 
 describe('Web working modes with real Pi sessions', () => {
+  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', '请解决登录错误，不要修改现有测试', '请分析并解决登录问题，然后运行测试'])('implements unfamiliar change phrasing through actual writable Pi turns: %s', async (message) => {
+    const f = await fixture({ implementationWrite: { path: 'implementation-result.txt', content: 'implemented through Pi write' } });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded' });
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+    expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
+    expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');
+  });
+  it('admits an unknown request resolved to verification once, without resetting its user turn', async () => {
+    const f = await fixture({ briefIntent: 'verify' });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    const message = '确认这一版的实际质量';
+    await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(state.task).toMatchObject({ intentHint: 'undetermined', kind: 'verify', status: 'completed' });
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'verify', 'complete']);
+    expect(state.messages.filter((entry: any) => entry.role === 'user')).toHaveLength(1);
+    expect(f.requests).toHaveLength(1);
+  });
   it('keeps Forge product identity and truthful runtime attribution across mode changes and history recovery', async () => {
     const f = await fixture();
     await writeFile(join(f.root, 'AGENTS.md'), 'PROJECT_IDENTITY_CONTEXT: this repository is a local coding-agent CLI built on Pi.');
@@ -199,6 +225,12 @@ describe('Web working modes with real Pi sessions', () => {
     expect(state.task, JSON.stringify(state)).toMatchObject({ status: 'completed', phase: 'complete', repairs: 0 });
     expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
     expect(state.task.review.verdict).toBe('ready');
+    expect(state.task.plan.acceptance[0].id).toBe('A1'); expect(state.task.review.acceptance[0].status).toBe('met');
+    const timeline: any = await (await f.api('sessions/' + session.id + '/timeline?task=' + state.task.id)).json();
+    expect(timeline.timeline).toMatchObject({ taskId: state.task.id, readOnly: true, truncated: false });
+    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(6);
+    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'model')).toHaveLength(4);
+    expect((await f.api('sessions/' + session.id + '/timeline?task=unknown')).status).toBe(404);
     expect(state.verification).toMatchObject({ status: 'passed', runId: state.task.id, evidenceId: expect.any(String) });
     expect(f.requests).toHaveLength(4);
     for (const index of [0, 1, 3]) expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('write');
@@ -206,6 +238,8 @@ describe('Web working modes with real Pi sessions', () => {
     await f.restart();
     const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
     expect(restored.task.status).toBe('completed'); expect(restored.verification.evidenceId).toBe(state.verification.evidenceId);
+    const restoredTimeline: any = await (await f.api('sessions/' + restored.id + '/timeline?task=' + state.task.id)).json();
+    expect(restoredTimeline.timeline).toEqual(timeline.timeline);
     expect(f.requests).toHaveLength(4);
   });
   it('short-circuits planned answer prompts instead of running the change pipeline', async () => {
@@ -218,7 +252,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(f.requests).toHaveLength(1);
     expect(f.requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('write');
     expect(state.verification?.status).not.toBe('passed');
-    await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
     expect(state.messages.filter((message: any) => message.role === 'user').at(-1).content).toEqual([{ type: 'text', text: 'What can you do?' }]);
     await f.restart();
     const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
@@ -277,7 +311,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(state.task).toMatchObject({ kind: 'verify', status: untrusted ? 'failed' : 'completed' });
     expect(state.verification.runId).toBe(state.task.id);
     expect(state.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user').at(-1).message.content).toBe('Run the configured tests');
-    if (untrusted) await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    if (untrusted) await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
     else expect(state.verification.report.results[0].output).toContain('verified-exact-output');
   });
   it('rejects planned execution in read-only mode and never advances a cancelled task', async () => {
@@ -292,7 +326,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect((await f.api('sessions/' + session.id + '/abort', {})).status).toBe(200);
     const state = await f.settled(session.id); expect(state.task.status).toBe('aborted');
     f.release(); expect(f.requests).toHaveLength(1);
-    await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
   });
   it('explicitly continues an aborted planned task from inspection with a new run and fresh verification', async () => {
     const f = await fixture();
@@ -310,7 +344,8 @@ describe('Web working modes with real Pi sessions', () => {
     expect(resumed.task.resumeOf).toBe(stopped.task.id);
     expect(resumed.task.id).not.toBe(stopped.task.id);
     expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
-    expect(JSON.stringify(f.requests[1].messages.at(-1).content)).toContain('Reinspect the current workspace');
+    expect(JSON.stringify(f.requests[1].messages.find((message: any) => message.role === 'system'))).toContain('Reinspect the current workspace');
+    expect(JSON.stringify(f.requests[1].messages.at(-1).content)).not.toContain('HOST PHASE CONTRACT');
     expect(resumed.verification.status).toBe('passed');
     expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(409);
   });
@@ -332,7 +367,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(state.verification.status).toBe('skipped');
     expect(JSON.stringify(state.messages)).toContain('read-only evidence');
     await expect(access(join(f.root, 'unsafe-write'))).rejects.toThrow();
-    await expect(access(join(f.root, 'verified'))).rejects.toThrow();
+    await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
     const declared = f.requests[0].tools.map((tool: any) => tool.function.name);
     expect(declared).toContain('read');
     for (const name of ['write', 'bash', 'powershell', 'run_verification']) expect(declared).not.toContain(name);
@@ -351,7 +386,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(await readFile(join(f.root, 'agent-write'), 'utf8')).toBe('allowed');
     expect(state.verification.status).toBe('passed');
     expect(state.verification.report.results[0].output).toContain('verified-exact-output');
-    expect(await readFile(join(f.root, 'verified'), 'utf8')).toBe('yes');
+    expect(await readFile(join(f.root, '.forge-agent', 'verified'), 'utf8')).toBe('yes');
   });
 
   it('does not dispatch /verify in read-only mode, and preserves Agent verification failure after switching back', async () => {

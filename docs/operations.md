@@ -18,11 +18,13 @@ node dist/pi-cli.js service stop
 
 先完成会话第一轮，使 Pi 保存会话文件，再用 `/queue 任务内容` 排队。无参数的 `/queue` 打开任务中心。队列目前接受文本任务，固定排队时的项目、会话、模型、推理强度与流程；不会复制聊天框里的图片或其他附件。任务开始前重新检查模型可用性、会话状态和项目信任。
 
-队列一次执行一个任务，等待网关中已有执行空闲。浏览器关闭后继续运行；停止后台服务会停止当前执行，保留未开始任务。重启时 `running` 转为 `interrupted`，不会自动重试；`queued` 在服务重新启动且可执行时继续。任务中心的“重新排队”创建新记录，并要求先检查当前项目状态，再完成原任务；失败或取消记录仍保留。运行中通过对应会话的停止按钮取消。
+任务中心可直接添加任务，并显示运行数和等待原因。队列最多同时执行 3 个不同项目，同一真实项目及会话保持顺序；忙碌项目等待时，其他项目可以运行。运行项可以在任务中心或对应会话独立停止。浏览器关闭后继续运行；停止服务会停止活跃执行，保留未开始任务。重启时 `running` 转为 `interrupted`，不会自动重试；`queued` 在重新启动且可执行时继续。“重新排队”创建新记录，先检查当前状态；旧失败或取消记录保留。详见 [多任务调度](task-scheduling.md)。
 
 队列最多保留 500 项元数据，待处理项最多 100 个。`tasks/queue.json` 不可读时拒绝启动并保留原文件；保存失败时停止队列准入并显示诊断。不要在网关运行时手工编辑该文件。
 
 ## 检查点与 worktree
+
+模型阶段完成后，统一收尾服务还会封存检查点、恢复模式并确认任务索引写入。成功在这道边界前保持 pending；失败保留验证报告，同时将会话与任务标为失败。计数快照最多每秒合并一次，阶段、警告、停止和终态及时保存；进程突然退出可能丢失最后一个窗口内的用量。任务索引会跳过尚未执行的旧快照，并记录实际写次数和字节数。存储永久失败无法保证终态写入，必须先修复存储再检查已有文件，不能直接相信旧成功记录。这里没有 Pi 日志与索引之间的跨文件事务。
 
 可信 Git 仓库根目录中的 Agent 执行会在开始前记录工作文件、HEAD 和暂存区指纹，收尾时封存。右侧“变更 → 执行检查点”展示按次执行的差异；撤销恢复执行前内容，保留已有脏改动和暂存内容，不执行 `git reset`。HEAD/暂存区变化、之后的文件修改或过期 revision 会阻止自动撤销。只会处理检查点收集范围内的文件；外部编辑与 Agent 编辑若同时发生，不能保证准确区分作者。
 
@@ -60,7 +62,9 @@ node dist/pi-cli.js service stop
 
 Build from source with `npm ci` and `npm run build`. `npm start` owns a foreground gateway. For a detached process, stop it first and run `node dist/pi-cli.js service start|status|stop` (or the installed `forge-agent` command). One home has one gateway owner. This is not an OS startup service. Status and stop validate the live loopback instance; they never kill an arbitrary saved PID.
 
-After the first conversation turn has persisted, `/queue task text` durably queues subsequent text tasks; `/queue` opens the task center. Model, effort and workflow are frozen. One job runs at a time after existing work is idle, with fresh trust and availability checks. Browser closure does not stop execution. Restart preserves queued jobs but marks started jobs interrupted. Explicit requeue creates a new execution that inspects current state instead of replaying tools. Limits are 100 pending and 500 retained records. Invalid persistence is preserved and fails closed.
+After the first turn has persisted, add text tasks in the task center or use `/queue task text`. Model, effort and workflow are frozen. Up to three different projects run concurrently; each canonical project/session is serialized and rechecks trust and availability. Busy projects do not block others. Running jobs can be stopped independently. Browser closure does not stop execution. Restart preserves queued jobs and interrupts started ones. Explicit requeue inspects current state instead of replaying tools. Limits are 100 pending and 500 retained records. Invalid persistence is preserved and fails closed.
+
+Host success stays pending until checkpoint sealing, mode restoration and task-index confirmation finish. Finalization errors preserve historical checks while failing the execution. Counters coalesce for up to one second; critical boundaries persist immediately and flush before completion. A crash can lose the last counter window. The index skips superseded pending snapshots and exposes write counts/bytes internally. Permanent storage faults cannot promise durable failure recording or a cross-file transaction.
 
 Trusted Git roots support bounded working-file checkpoints and selected-file undo without resetting HEAD or the index. Dirty baseline content is preserved. Conflicts, stale revisions, HEAD/index changes, links and interrupted writes block unsafe recovery. Writes are journaled per file, not atomic across files. Snapshots exclude ignored/known sensitive paths, links and files over 2 MB, and are bounded to 1,500 files/32 MB. There is no global retention quota yet. Treat snapshots as private project data, not backups.
 

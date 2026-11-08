@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "kind": "reviewed-real-model-structured-handoff-regression",
+  "date": "2026-11-08",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "transport": "OpenAI-compatible provider",
+  "thinkingLevel": "medium",
+  "environment": {
+    "platform": "win32",
+    "node": "v24.19.0",
+    "piVersion": "1.4.0"
+  },
+  "suite": "evals/repositories/yocto-queue-bounded-drain.zh.json",
+  "oracle": "evals/repositories/yocto-queue-bounded-drain.oracle.mjs",
+  "repository": "https://github.com/sindresorhus/yocto-queue.git",
+  "revision": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+  "batches": [
+    {
+      "name": "initial",
+      "suiteFingerprint": "c76a52475ff89dfd0dfb58aa3b7d0fd10062c3b3299691ffbd74c290e88abdc6",
+      "harnessFingerprint": "b3699f5fc17c354516896b0f3367fe4edfd46834430aa6699d71a0246961c550",
+      "baseRevision": "a383ea435f997f264d1214714cfe6ea5ab079544",
+      "workingTree": "modified",
+      "limits": {
+        "maxDurationMs": 3600000,
+        "maxModelTurns": 150,
+        "maxToolCalls": 300,
+        "maxTotalTokens": 5000000,
+        "maxCostUsd": 25
+      },
+      "metrics": {
+        "passed": 1,
+        "total": 2,
+        "falseCompletions": 0
+      },
+      "results": [
+        {
+          "workflow": "direct",
+          "iteration": 1,
+          "passed": true,
+          "baselineFails": true,
+          "heldOutPass": true,
+          "workspaceIntegrity": true,
+          "completed": true,
+          "verification": true,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "intentHint": "undetermined",
+          "resolvedIntent": "undetermined",
+          "taskStatus": "completed",
+          "finalization": "succeeded",
+          "phases": [
+            "implement"
+          ],
+          "acceptanceCount": 0,
+          "confirmedCriteria": 0,
+          "setupMs": 77521,
+          "executionMs": 128385,
+          "modelTurns": 12,
+          "toolCalls": 17,
+          "totalTokens": 103953,
+          "usage": {
+            "input": 10986,
+            "output": 4263,
+            "cacheRead": 88704,
+            "cacheWrite": 0
+          },
+          "costUsd": null
+        },
+        {
+          "workflow": "planned",
+          "iteration": 1,
+          "passed": false,
+          "baselineFails": true,
+          "heldOutPass": false,
+          "workspaceIntegrity": true,
+          "completed": false,
+          "verification": false,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "intentHint": "undetermined",
+          "resolvedIntent": "undetermined",
+          "taskStatus": "needs_attention",
+          "finalization": "succeeded",
+          "phases": [
+            "inspect"
+          ],
+          "acceptanceCount": 0,
+          "confirmedCriteria": 0,
+          "setupMs": 59261,
+          "executionMs": 23593,
+          "modelTurns": 5,
+          "toolCalls": 9,
+          "totalTokens": 25746,
+          "usage": {
+            "input": 5859,
+            "output": 2095,
+            "cacheRead": 17792,
+            "cacheWrite": 0
+          },
+          "costUsd": null,
+          "reviewedFailure": "The provider returned inspection findings followed by one schema-valid final JSON brief. The exact-JSON-only parser rejected the response before implementation. The host remained needs_attention and did not claim completion."
+        }
+      ]
+    },
+    {
+      "name": "corrected",
+      "suiteFingerprint": "c76a52475ff89dfd0dfb58aa3b7d0fd10062c3b3299691ffbd74c290e88abdc6",
+      "harnessFingerprint": "abf8fb72df51c1000b4a1f4e949a4c3431c6678df4d410d0d467f1489119e8df",
+      "baseRevision": "a383ea435f997f264d1214714cfe6ea5ab079544",
+      "workingTree": "modified",
+      "limits": {
+        "maxDurationMs": 3600000,
+        "maxModelTurns": 150,
+        "maxToolCalls": 300,
+        "maxTotalTokens": 5000000,
+        "maxCostUsd": 25
+      },
+      "metrics": {
+        "passed": 2,
+        "total": 2,
+        "falseCompletions": 0
+      },
+      "results": [
+        {
+          "workflow": "direct",
+          "iteration": 1,
+          "passed": true,
+          "baselineFails": true,
+          "heldOutPass": true,
+          "workspaceIntegrity": true,
+          "completed": true,
+          "verification": true,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "intentHint": "undetermined",
+          "resolvedIntent": "undetermined",
+          "taskStatus": "completed",
+          "finalization": "succeeded",
+          "phases": [
+            "implement"
+          ],
+          "acceptanceCount": 0,
+          "confirmedCriteria": 0,
+          "setupMs": 75436,
+          "executionMs": 75118,
+          "modelTurns": 7,
+          "toolCalls": 12,
+          "totalTokens": 57826,
+          "usage": {
+            "input": 9978,
+            "output": 2984,
+            "cacheRead": 44864,
+            "cacheWrite": 0
+          },
+          "costUsd": null
+        },
+        {
+          "workflow": "planned",
+          "iteration": 1,
+          "passed": true,
+          "baselineFails": true,
+          "heldOutPass": true,
+          "workspaceIntegrity": true,
+          "completed": true,
+          "verification": true,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "intentHint": "undetermined",
+          "resolvedIntent": "change",
+          "taskStatus": "completed",
+          "finalization": "succeeded",
+          "phases": [
+            "inspect",
+            "plan",
+            "implement",
+            "verify",
+            "review",
+            "complete"
+          ],
+          "acceptanceCount": 11,
+          "confirmedCriteria": 11,
+          "setupMs": 56840,
+          "executionMs": 188395,
+          "modelTurns": 21,
+          "toolCalls": 31,
+          "totalTokens": 384369,
+          "usage": {
+            "input": 65549,
+            "output": 15908,
+            "cacheRead": 302912,
+            "cacheWrite": 0
+          },
+          "costUsd": null
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "One small pinned public repository task with Chinese wording, once per workflow per batch; this is a runtime regression, not a general coding benchmark.",
+    "The initial planned-format failure is retained. Corrected runs have a different harness fingerprint and are not merged into an unchanged-protocol success rate.",
+    "The parser accepts one final JSON object after evidence prose while retaining schema, size, unknown-field and ambiguity rejection.",
+    "There was no independent-reviewer, multi-agent or competitor baseline, no forced real-model compaction test, and no measured memory quality gain.",
+    "Concurrent local acceptance activity may affect timings; setup and agent execution are reported separately without performance ranking.",
+    "Direct test dependencies are fixed but upstream has no lockfile, so transitive resolution is not completely pinned.",
+    "Cumulative tokens include cache reads and repeated input. Configured prices were unavailable, so cost is unknown.",
+    "Only allowlisted aggregate fields are published. Credentials, provider URLs, local paths, session identifiers, raw reasoning and transcripts remain private."
+  ]
+}

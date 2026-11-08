@@ -1,5 +1,46 @@
 # Evaluation and evidence
 
+## Structured handoff and Chinese intent regression
+
+The [structured-handoff experiment](evaluations/structured-handoff-2026-11-08.md)
+and [allowlisted aggregate](evaluations/deepseek-structured-handoff-2026-11-08.json)
+exercise a Chinese implementation request that the hint rules leave undetermined.
+The initial batch passed 1/2: planned execution safely stopped at a valid JSON brief
+preceded by findings prose. After a bounded parsing fix, the separately fingerprinted
+batch passed 2/2 external runtime/declaration checks, protected-file checks and host
+completion gates. Planning carried 11 criteria through exact review coverage.
+The initial failure remains public; these are small regressions, not model rankings
+or a real-model compaction/independent-reviewer experiment.
+
+## Runtime depth and repository failure analysis
+
+The [reviewed experiment and failure analysis](evaluations/runtime-depth-2026-11-08.md)
+and [allowlisted aggregate](evaluations/deepseek-runtime-depth-2026-11-08.json)
+cover five small tasks in both workflows, repeated execution on a pinned
+third-party repository, and one explicitly requested two-child integration.
+The initial repository batch exposed an `Extend` task-routing defect and an
+unrelated ambient-type oracle failure. Its raw results remain separate from the
+corrected protocol; failures were retained rather than removed from the record.
+The corrected repository runs passed 4/4; the small suite passed 10/10.
+These are small engineering regressions with different runtime fingerprints,
+not a competitor benchmark or measured memory/multi-agent quality gains.
+
+## Reviewed real-model regression
+
+The [2026-11-08 aggregate](evaluations/deepseek-small-task-2026-11-08.json) records
+DeepSeek V4.1 Flash on `config-normalize-cross-file`, using an isolated project and
+home with medium reasoning effort. Adaptive and planned execution each passed the
+external assertions, protected-file integrity check and current-version verification.
+Adaptive execution took about 30 seconds including setup; planned execution took
+about 69 seconds, with about 8 seconds in inspection. Adaptive did not run a model
+review; planned review returned `ready`. Both reported unknown cost because the
+model catalog had no prices.
+
+This is one small task with one run per workflow. It checks the changed delivery
+path and does not establish a speed comparison, larger-repository quality or an
+industry ranking. The aggregate identifies the modified-tree base and harness
+fingerprint; private transcripts and provider credentials are excluded.
+
 This repository includes regression tests for the supported Pi-backed product,
 a browser acceptance script, and a small coding-task evaluation harness. They
 answer different questions and must not be combined into a frontier-performance claim.
@@ -93,11 +134,23 @@ user work. The oracle receives the workspace as `process.argv[2]`; it must be
 within the suite directory and cannot use an escaping symlink. The manifest
 and oracle bytes determine the fingerprint.
 
-The included public-repository example asks for revision-checked provider deletion
+One public-repository example asks for revision-checked provider deletion
 at a pinned Forge commit where that capability is absent. It checks stale writes,
 unrelated-provider preservation and credential removal beyond visible regressions.
 It is one public development task, not an unbiased benchmark or a published
-real-model result. Review the JSON and oracle before executing it.
+real-model result. A second example, `yocto-queue-bounded-drain.json`, extends a
+fixed third-party repository's lazy drain iterator and TypeScript declaration.
+Its external oracle checks partial consumption, undefined values, invalid limits,
+queue integrity and real declaration compilation. Direct test-dependency versions
+are explicit; the upstream repository has no lockfile, so transitive dependency
+resolution remains a reproducibility limit. Review the JSON and oracle before execution.
+
+A failing baseline alone does not validate an oracle. Test a known-correct
+implementation and meaningful incorrect variants under the same prepared
+compiler/dependency environment. The drain oracle uses `types: []` for its
+browser-neutral declaration checks so unrelated ambient Node definitions cannot
+invalidate acceptance. A regression verifies both that isolation and rejection
+of wrong runtime behavior and parameter declarations.
 
 The runner clones without hardlinks, checks out the exact revision, runs reviewed
 setup, seeds dirty files and configures the checks. It refuses symlinked/sensitive
@@ -105,8 +158,8 @@ fixture paths and rejects repository/legacy configuration that overrides the
 suite's verification. The baseline oracle must fail before the model starts.
 A copy of the oracle stays outside the project; afterward its assertions,
 protected hashes, effective configuration, host completion and verification must
-all pass. The default per-execution budget is ten minutes, 50 model turns,
-300 tool calls, 750,000 cumulative tokens and two dollars of configured cost;
+all pass. The default per-execution budget follows the Web host: 60 minutes,
+150 model turns, 300 tool calls, 5,000,000 cumulative tokens and 25 dollars of configured cost;
 a provider's single response can cross a limit before usage is available.
 
 `--budget path/to/limits.json` selects an explicit per-execution budget. Supply
@@ -139,7 +192,7 @@ are cleaned afterward; logs and reports remain and need review before sharing.
 五个公开小任务的 smoke 验证链路，真实模型执行才测模型行为；两者不能合并宣传。
 固定仓库评测使用独立 clone、不可变 commit、外部 oracle、保护文件和已有脏内容，
 同时核对验证门禁和宿主完成状态，并记录错误完成率。示例 suite 是可复现开发任务，
-不代表已经取得真实模型成绩。先执行 `--prepare` 并审阅仓库、命令与判题脚本；明确
+模板本身不等于模型成绩；已完成的实测与首批失败分析见本文开头链接。先执行 `--prepare` 并审阅仓库、命令与判题脚本；明确
 `--trust-suite` 后才执行项目代码。运行、安装和 oracle 都不是 OS 沙箱。
 
 真实运行可用 `--thinking medium` 固定推理强度，结果会保存实际生效的强度；小任务

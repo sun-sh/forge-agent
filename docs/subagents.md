@@ -4,11 +4,11 @@ Forge 在 Web 父会话之上管理子任务；每个子任务仍由 Pi `createA
 
 ## 使用与交互
 
-主 Agent 按需调用 `subagent({ tasks: [...] })`。每项包含 `title`、`role`（`explorer`、`reviewer` 或 `worker`）和完整 `prompt`；只读子会话续问提供先前的 `id`，可写任务需新建委派。每批最多三个，调用等待整批完成，结果只含状态、用量、结论、proposal 标识与错误，不把完整工具输出和思考注入父上下文。父 Agent 必须判断证据并汇总，子结论不能代替 Forge 验证门禁。
+主 Agent 可调用 `subagent({ action: "start", tasks: [...] })` 异步启动，立即获得句柄并继续独立工作；`status` 查询，`wait` 等待最多 30 秒，`result` 取回结果。省略 action 的调用保留整批等待行为。每项包含 `title`、`role`（`explorer`、`reviewer` 或 `worker`）和完整 `prompt`；只读续问提供先前 `id`，可写任务需新建委派。每批最多三个，结果只含状态、用量、结论、proposal 标识与错误。Pi 的 `agent_before_settle` 在父任务结束前等待未取回结果并触发汇总；宿主再检查结果已取回，保存失败或仍有未汇总结果不能完成。父 Agent 必须判断证据，子结论不能代替验证门禁。
 
 会话标题旁的子任务入口只在有记录时出现。列表展示任务标题、角色、状态、token 和耗时；点击后在右侧打开子会话，工具输出、思考与任务说明默认折叠。可单独停止子任务；普通聊天历史不展示这些内部会话。用户需要对子任务续问时，可让主 Agent 继续该任务；当前右侧面板是记录查看与停止入口，不提供独立输入区。
 
-交互参考了 DeepSeek Harness 的父会话目录、按需详情、独立停止和子会话历史分流。Forge 当前采用一层受限批次，未实现 Harness 的后台通知、任意树层级、Team board 或外部 Agent 后端：
+交互参考了 DeepSeek Harness 的父会话目录、按需详情、独立停止和子会话历史分流。Forge 支持一层受限异步委派与结果回收；任意树层级、Team board 和外部 Agent 后端仍未实现：
 
 - [官方子 Agent UI 文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-subagent/README.md)
 - [官方子 Agent 生命周期文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/subagent/subagent/README.md)
@@ -49,7 +49,7 @@ stateDiagram-v2
 
 worker 需要有 HEAD 的 Git 仓库。以当前提交创建独立 worktree，再复制检查点可收集的当前文件内容，包括已有脏改动和删除。写入只允许该目录中的普通非敏感文件；链接、路径穿越、Pi 会展开的 `~`/`@`/file URL、Unicode 空格别名和 Windows 非规范路径会被拒绝。没有 shell、MCP 或继续委派权限。
 
-收尾封存 before/after proposal，不自动改变主项目。右侧可以预览差异、选择文件并应用；父会话必须空闲、处于可信 Agent 模式，proposal 必须完成且归当前父会话。服务端重新校验 revision、HEAD 和所选主项目文件，拒绝后续修改冲突；应用建立主项目撤销检查点并保留 Git 暂存内容。子任务不能运行验证，应用后需由主任务执行项目检查。
+收尾封存 before/after proposal，不自动改变主项目。右侧可以预览差异，选择“应用所选变更”或“应用并验证”；父会话必须空闲、处于可信 Agent 模式，proposal 必须完成且归当前父会话。服务端重新校验 revision、HEAD 和所选文件，拒绝后续修改冲突；应用建立撤销检查点并保留暂存内容。“应用并验证”在同一项目占用下交接给验证任务，只运行已配置的主项目命令，不发送模型请求；缺少验证配置会在写入前拒绝。失败保留已应用内容和原始输出，不伪造成功，也不自动撤销。子任务本身仍没有命令执行权限。
 
 用户可以清理已停止 worker 的目录，封存补丁与会话仍保留。没有自动三方合并；不同 worker 修改同一文件时，先应用的修改会让后续 proposal 报冲突。快照大小、未收集文件和中断日志限制见 [运行说明](operations.md)。
 
@@ -61,6 +61,6 @@ worker 需要有 HEAD 的 Git 仓库。以当前提交创建独立 worktree，�
 
 ## English overview
 
-Forge owns admission, a parent-owned catalog, capacity reservation, cancellation, aggregate budgets and result collection. Pi owns every child model/tool loop. A synchronous batch of up to three children can explore/review with readers or edit in detached worktrees. Read-only children support follow-ups; writers require new delegation. The compact header catalog opens a separate details/review panel. Ordinary history omits internal children.
+Forge owns admission, a parent-owned catalog, capacity reservation, cancellation, aggregate budgets and result collection. Pi owns every child model/tool loop. `action=start` returns handles immediately; `status`, bounded `wait` and `result` manage retrieval. Pi's settlement boundary returns unread results for synthesis, and a host completion guard fails closed if collection fails. Omitting action retains blocking batches. Up to three children can explore/review with readers or edit detached worktrees. Read-only children support follow-ups; writers require new delegation. The compact catalog opens a separate details/review panel. Ordinary history omits internal children.
 
-Ownership does not survive an ordinary fork. Active records restore as interrupted without replay. Children inherit model/effort, have independent contexts, and cannot execute extensions, MCP or shell commands. Writers produce sealed proposals for explicit selected-file application; stale revisions and main-project conflicts are refused, application creates undo evidence, and the parent must verify afterward. Worktree cleanup retains proposals/transcripts. Parent cancellation waits for cleanup. These are application tool policies, not OS isolation. Automatic merge, direct child-panel messages, separate child models, external backends and measured quality gains remain outside the implementation.
+Ownership does not survive an ordinary fork. Active records restore as interrupted without replay. Children inherit model/effort, have independent contexts, and cannot execute extensions, MCP or shell commands. Writers produce sealed proposals for explicit selected-file application; stale revisions and main-project conflicts are refused and application creates undo evidence. The user can apply only, or apply and run configured parent-project verification under the same project lease without another model request. Missing checks are rejected before writing; failed checks retain applied content and original output. Worktree cleanup retains proposals/transcripts. Parent cancellation waits for cleanup. These are application tool policies, not OS isolation. Automatic merge, direct child-panel messages, separate child models, external backends and measured quality gains remain outside the implementation.
