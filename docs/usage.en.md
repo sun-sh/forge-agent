@@ -36,6 +36,23 @@ Inspection preserves structured goals, constraints, relevant files, unresolved q
 
 The planned workflow requires passing configured verification, current workspace evidence, and a structured `ready` review without unresolved issues and with exact evidence-backed coverage of every acceptance ID. Missing, duplicated or unconfirmed findings cannot certify completion. Blocking defects belong in `issues`; optional observations belong in `notes`. Verification failures and concrete review defects share `verifyRetries`. Every repair reruns verification and review. Exhausted retries, missing checks, invalid review or stale evidence leave the task needing attention.
 
+### Protect tests, lockfiles or other project paths
+
+Configure the project's `forge-agent.json`, for example:
+
+```json
+{
+  "verify": [{ "name": "test", "command": "npm test" }],
+  "verifyRetries": 2,
+  "protect": ["tests", "package-lock.json"]
+}
+```
+
+`protect` accepts literal relative files and directories, without globs, absolute paths, parent traversal, links or `.git` metadata. Directory traversal includes ignored regular files. Content is fingerprinted before model execution; automatic repairs retain that baseline. Existing user edits are allowed but must stay unchanged, and missing protected paths must stay absent. Changed protected content fails delivery even when commands pass, returns path-level findings to the model, and affects both Web completion and the CLI exit code. Restoring the initial bytes requires fresh verification.
+
+Limits are 200 configured paths, 20,000 observed entries, 256 MiB and 20 seconds per observation. Unreadable or oversized observations fail closed. This is a host delivery check, not an OS sandbox or prevention of tool side effects; temporary changes fully reverted between observations are outside its attestation. Protection also runs without configured checks, but does not imply automated verification passed.
+
+
 Select **Execution history** (`执行记录`) beside progress, or the right workspace's **Execution** (`执行`) tab, to inspect acceptance, review, phases, model tokens, tool results, checks and repeated implementation attempts. Phases collapse to keep the main conversation clear. Tool timing is estimated from message intervals and includes waiting; missing results remain interrupted/running. History can be regenerated after reopening and offers no side-effect replay. See the [execution record protocol](execution-records.md).
 
 Model stages finishing is followed by checkpoint sealing, mode restoration and persistence confirmation. Success remains pending until these finish. Finalization failures make the task fail while retaining historical passing checks. Sessions, task discovery, queues and recovery share the final result; permanent storage failure is explicit and cannot guarantee that its failure record reached disk.

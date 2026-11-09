@@ -24,7 +24,7 @@
 
 ## Configuration
 
-- `forge-agent.json`, `forge-agent.yaml`, or `forge-agent.yml` configure only `verify` and `verifyRetries`.
+- `forge-agent.json`, `forge-agent.yaml`, or `forge-agent.yml` configure only `verify`, `verifyRetries`, and `protect`.
   The schema is strict; reject unknown keys rather than silently ignoring them.
 - Pi configuration lives under `FORGE_AGENT_HOME` (default `~/.forge-agent`), including credentials, models,
   settings, MCP, skills, extensions, and sessions.
@@ -39,6 +39,9 @@
   by `verifyRetries`.
 - Retry state resets only for a new user prompt, not for automatic continuation.
 - Project verification commands must not run unless Pi trusts the project.
+- Protected literal project paths are fingerprinted before model execution and compared after checks.
+  Preserve the initial baseline through automatic repairs, including pre-existing user edits; an
+  unreadable, oversized or changed protected path prevents successful completion.
 - Verification command execution must preserve exact output, enforce timeouts, terminate child
   process trees, and avoid infinite retry loops.
 - Add a regression test for every change that affects completion, retry state, trust, persistence,

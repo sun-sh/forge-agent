@@ -529,7 +529,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       let invalidation = reason;
       if (!trustView(trustStore, settingsManager, project).trusted) invalidation ??= '项目信任已撤销，请信任项目并重新验证。';
       let configHash = verificationConfigHash([]);
-      try { configHash = verificationConfigHash(loadConfig(project).config.verify); }
+      try { const config = loadConfig(project).config; configHash = verificationConfigHash(config.verify, config.protect); }
       catch { invalidation ??= '无法确认当前验证配置，请修复配置后重新验证。'; }
       const workspace = invalidation ? { version: 1 as const, scope: 'directory' as const, files: 0 } : await captureWorkspace(project);
       // A new execution may have started while files were being observed.
@@ -1454,7 +1454,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         // Use the caller's absolute spelling for display compatibility while
         // loading and comparing configuration through the canonical path.
         const displayProject = requestedProject ? resolve(requestedProject) : root;
-        json(response, 200, { cwd: displayProject, verify: loaded.config.verify, verifyRetries: loaded.config.verifyRetries, configSources: loaded.sources, configWarnings: loaded.warnings, piVersion: VERSION, managedProjectsRoot: webProjects.managedRoot, sessionRoot }); return;
+        json(response, 200, { cwd: displayProject, verify: loaded.config.verify, verifyRetries: loaded.config.verifyRetries, protect: loaded.config.protect, configSources: loaded.sources, configWarnings: loaded.warnings, piVersion: VERSION, managedProjectsRoot: webProjects.managedRoot, sessionRoot }); return;
       }
       if (url.pathname === '/api/settings/compaction' && request.method === 'POST') {
         const input = await body(request);

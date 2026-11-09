@@ -149,11 +149,12 @@ Create `forge-agent.json` in the target project root; YAML is also supported. Re
     { "name": "typecheck", "command": "npm run typecheck", "timeoutMs": 120000 },
     { "name": "test", "command": "npm test", "timeoutMs": 300000 }
   ],
-  "verifyRetries": 2
+  "verifyRetries": 2,
+  "protect": ["tests", "package-lock.json"]
 }
 ```
 
-Only `verify` and `verifyRetries` are accepted; unknown fields are errors. Checks require Pi project trust. Exact failed output is returned to the model, and internal continuations do not reset the repair count. Persistent failures produce a nonzero CLI exit status. Outcomes are recorded in the Pi session branch; raw output and reports live under `FORGE_AGENT_HOME/verification`.
+Only `verify`, `verifyRetries` and `protect` are accepted; unknown fields are errors. Checks require Pi project trust. Exact failed output is returned to the model, and internal continuations do not reset the repair count. Persistent failures produce a nonzero CLI exit status. Outcomes are recorded in the Pi session branch; raw output and reports live under `FORGE_AGENT_HOME/verification`.
 
 See the [JSON Schema](forge-agent.schema.json). For terminal entry points, run `npm link`, then use `forge-agent`, `forge-agent check`, or `forge-agent -p "task"`.
 
@@ -207,3 +208,5 @@ Report issues with sanitized reproduction steps through [Issues](https://github.
 ## License and acknowledgments
 
 [MIT License](LICENSE). Thanks to [Pi](https://github.com/earendil-works/pi) and the project's open-source dependencies.
+
+`protect` fingerprints literal project-relative files and directories before model execution. It preserves pre-existing dirty content; changes or incomplete observations block delivery even when commands pass. This is a delivery check, not an OS sandbox.

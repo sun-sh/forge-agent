@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { pforgeHome } from "./pforge-home.js";
+import { normalizeProtectedPath, safeProtectedPath } from './verification/protected.js';
 
 const commandSchema = z.object({
   name: z.string().min(1),
@@ -10,9 +11,15 @@ const commandSchema = z.object({
   timeoutMs: z.number().int().positive().max(3_600_000).optional()
 });
 
+/** Project-relative literal paths protected for the entire execution. */
+const protectedPathSchema = z.string().trim().min(1).max(4096)
+  .refine(safeProtectedPath, 'must be a safe project-relative literal path, without links or .git metadata')
+  .transform(normalizeProtectedPath);
+
 const configSchema = z.object({
   verify: z.array(commandSchema).default([]),
-  verifyRetries: z.number().int().min(0).max(5).default(2)
+  verifyRetries: z.number().int().min(0).max(5).default(2),
+  protect: z.array(protectedPathSchema).max(200).default([])
 }).strict();
 
 export type AgentConfig = z.infer<typeof configSchema>;

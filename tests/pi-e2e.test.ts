@@ -52,15 +52,16 @@ describe("pforge end-to-end", () => {
   });
   it('gates pforge check on Pi trust and never runs rejected project commands', async () => {
     const project = await mkdtemp(join(tmpdir(), 'pforge-check-trust-')), home = await mkdtemp(join(tmpdir(), 'pforge-check-home-'));
-    await writeFile(join(project, 'pforge.json'), JSON.stringify({ verify: [{ name: 'trust-check', command: 'node -e "require(\'node:fs\').writeFileSync(\'marker\',\'yes\')"' }] }));
+    await writeFile(join(project, '.gitignore'), '.forge-agent/\n');
+    await writeFile(join(project, 'pforge.json'), JSON.stringify({ verify: [{ name: 'trust-check', command: 'node -e "require(\'node:fs\').mkdirSync(\'.forge-agent\',{recursive:true});require(\'node:fs\').writeFileSync(\'.forge-agent/marker\',\'yes\')"' }] }));
     const store = new ProjectTrustStore(home), execute = promisify(execFile);
     const options = { cwd: project, env: { ...process.env, PFORGE_HOME: home }, windowsHide: true, timeout: 15000 };
     store.set(project, false);
     await expect(execute(process.execPath, [join(process.cwd(), 'dist', 'pi-cli.js'), 'check'], options)).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('not trusted') });
-    await expect(access(join(project, 'marker'))).rejects.toThrow();
+    await expect(access(join(project, '.forge-agent', 'marker'))).rejects.toThrow();
     store.set(project, true);
     await expect(execute(process.execPath, [join(process.cwd(), 'dist', 'pi-cli.js'), 'check'], options)).resolves.toMatchObject({ stdout: expect.stringContaining('PASS trust-check') });
-    await expect(access(join(project, 'marker'))).resolves.toBeUndefined();
+    await expect(access(join(project, '.forge-agent', 'marker'))).resolves.toBeUndefined();
   });
   it("exits zero when verification passes", async () => {
     const result = await run("node --version");

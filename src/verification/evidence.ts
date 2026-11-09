@@ -14,8 +14,11 @@ export const verificationEvidenceSchema = z.object({
   freshness: z.enum(['current', 'stale', 'unconfirmed']), reason: z.string().optional(), invalidatedAt: z.iso.datetime().optional()
 });
 export type VerificationEvidence = z.infer<typeof verificationEvidenceSchema>;
-export function verificationConfigHash(commands: ReadonlyArray<{ name: string; command: string; timeoutMs?: number }>): string {
-  return createHash('sha256').update(JSON.stringify(commands.map(({ name, command, timeoutMs }) => [name, command, timeoutMs ?? 300_000]))).digest('hex');
+export function verificationConfigHash(commands: ReadonlyArray<{ name: string; command: string; timeoutMs?: number }>, protect: ReadonlyArray<string> = []): string {
+  return createHash('sha256').update(JSON.stringify({
+    commands: commands.map(({ name, command, timeoutMs }) => [name, command, timeoutMs ?? 300_000]),
+    protect: [...new Set(protect.map((path) => path.replaceAll('\\', '/').replace(/^\.\//, '')))].sort()
+  })).digest('hex');
 }
 const MAX_FILES = 20_000, MAX_BYTES = 256 * 1024 * 1024, MAX_DURATION_MS = 20_000;
 const excluded = /(^|\/)(?:\.git|node_modules|\.pforge|\.forge-agent|\.env[^/]*|\.npmrc|\.netrc|auth\.json|credentials?\.json|secrets?\.json|id_(?:rsa|ed25519)|[^/]+\.(?:pem|key|p12|pfx))($|\/)/i;

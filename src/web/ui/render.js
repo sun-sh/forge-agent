@@ -21,10 +21,12 @@ export function textContent(content) {
 }
 
 function currentVerification(verification) {
-  return verification?.status === 'passed' && verification.evidence?.freshness === 'current' && Boolean(verification.evidence.workspace?.digest) && verification.report?.passed === true
+  return verification?.status === 'passed' && (!verification.protection || verification.protection.status === 'unchanged') && verification.evidence?.freshness === 'current' && Boolean(verification.evidence.workspace?.digest) && verification.report?.passed === true
     && verification.report.results?.length > 0 && verification.report.results.every((result) => result.passed && result.exitCode === 0 && !result.failure && !result.error);
 }
 export function verificationLabel(verification) {
+  if (verification?.protection?.status === 'changed') return '保护路径发生变化';
+  if (verification?.protection?.status === 'unconfirmed') return '保护路径无法确认';
   if (verification?.status === 'failed') return '验证失败';
   if (verification?.evidence?.freshness === 'stale') return '历史验证 · 证据已过期';
   if (verification?.status === 'passed') return currentVerification(verification) ? '验证通过' : '命令曾通过 · 当前版本未确认';

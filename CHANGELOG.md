@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce strict protected-path delivery checks with pre-model content baselines, unchanged dirty user work across repairs, bounded observation, and shared CLI/Web failure semantics.
+
 - Preserve an interrupted task's adaptive/planned workflow from the composer as well as the task center, including after restart; cover resume without unwanted planning, review or extra model calls.
 - Gate planned delivery on a fresh, read-only Pi reviewer with a dedicated JSON result contract and aggregate parent-budget accounting, without sharing the implementation transcript or falling back to self-review.
 - Separate generated-output limits from cumulative request/cache tokens: default to 200,000 generated tokens with the optional cumulative guard disabled, while retaining existing saved limits.

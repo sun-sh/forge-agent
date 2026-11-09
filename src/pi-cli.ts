@@ -6,7 +6,7 @@ import { startWebConsole } from "./web/server.js";
 import { openLocalBrowser } from "./web/open-browser.js";
 import { pforgeHome, configurePforgeEnvironment } from "./pforge-home.js";
 import { loadConfig } from "./config.js";
-import { createPforgeVerification, isVerified } from "./verification/pi-extension.js";
+import { createPforgeVerification, isVerified, verificationOutcomeMessage } from "./verification/pi-extension.js";
 import { runVerification, verificationMessage } from "./verification/verify.js";
 import { createForgeIdentityExtension } from "./identity.js";
 import { fileURLToPath } from 'node:url';
@@ -123,9 +123,10 @@ async function check(cwd: string, home: string): Promise<number> {
     process.stderr.write("No verification commands configured in forge-agent.json (or legacy pforge.json).\n");
     return 1;
   }
-  const report = await runVerification(cwd, loaded.config.verify, new AbortController().signal, join(home, "verification"));
-  process.stdout.write(`${verificationMessage(report)}\n`);
-  return report.passed ? 0 : 1;
+  const verification = createPforgeVerification(cwd, { isProjectTrusted: () => trusted });
+  const outcome = await verification.verifyTrusted(new AbortController().signal);
+  process.stdout.write(`${verificationOutcomeMessage(outcome)}\n`);
+  return isVerified(outcome) ? 0 : 1;
 }
 
 export async function runPforge(args = process.argv.slice(2)): Promise<void> {

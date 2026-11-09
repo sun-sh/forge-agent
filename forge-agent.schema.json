@@ -36,6 +36,13 @@
       "minimum": 0,
       "maximum": 5,
       "default": 2
+    },
+    "protect": {
+      "type": "array",
+      "default": [],
+      "maxItems": 200,
+      "description": "Literal project-relative files or directories that must remain unchanged from the execution's initial content. No globs, parent traversal, drive paths, links or .git metadata.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
     }
   }
 }

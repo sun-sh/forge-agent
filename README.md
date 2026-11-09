@@ -149,11 +149,12 @@ Forge 在 Pi 会话之上实现产品与控制层，复用 Pi 的模型/工具�
     { "name": "typecheck", "command": "npm run typecheck", "timeoutMs": 120000 },
     { "name": "test", "command": "npm test", "timeoutMs": 300000 }
   ],
-  "verifyRetries": 2
+  "verifyRetries": 2,
+  "protect": ["tests", "package-lock.json"]
 }
 ```
 
-配置只接受 `verify` 与 `verifyRetries`，未知字段会报错。项目必须经过 Pi 信任才会执行检查；失败原始输出会反馈模型，内部自动继续不会重置修复次数。持续失败时，CLI 以非零状态退出。验证结果写入 Pi 会话分支，原始输出和报告保存在 `FORGE_AGENT_HOME/verification`。
+配置只接受 `verify`、`verifyRetries` 与 `protect`，未知字段会报错。项目必须经过 Pi 信任才会执行检查；失败原始输出会反馈模型，内部自动继续不会重置修复次数。持续失败时，CLI 以非零状态退出。验证结果写入 Pi 会话分支，原始输出和报告保存在 `FORGE_AGENT_HOME/verification`。
 
 详见 [JSON Schema](forge-agent.schema.json)。需要终端入口时执行 `npm link`，再使用 `forge-agent`、`forge-agent check` 或 `forge-agent -p "任务"`。
 
@@ -207,3 +208,5 @@ Web 网关默认绑定 `127.0.0.1`，使用本机访问凭证、HttpOnly / SameS
 ## 许可与致谢
 
 [MIT License](LICENSE)。感谢 [Pi](https://github.com/earendil-works/pi) 及本项目使用的开源依赖。
+
+`protect` 对字面的项目相对文件和目录在模型执行前建立指纹，保存原有脏改动基线；变化或不可确认会阻止完成，即使验证命令通过。这是交付检查，不是 OS 沙箱。
