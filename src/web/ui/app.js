@@ -330,6 +330,13 @@ function renderComposerControl() {
   const status = $('composer-control-status');
   status.textContent = stopping ? '正在停止…' : '';
   status.classList.toggle('hidden', !stopping);
+  const interrupted = !showStop && !resuming && state.task && ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status);
+  $('composer-run-note').classList.toggle('hidden', !interrupted);
+  if (interrupted) {
+    const task = state.task;
+    $('composer-run-reason').textContent = task.status === 'budget_exceeded' ? '本段达到执行预算，可继续未完成部分' : task.status === 'aborted' ? '执行已停止，可继续未完成部分' : task.status === 'interrupted' ? '服务退出导致任务中断' : '任务在' + (TASK_LABELS[task.phase] || '执行') + '阶段暂停';
+    $('composer-run-detail').textContent = task.error || state.error || '检查当前结果后点击继续，或发送补充信息。';
+  }
   resizeComposerInputs();
 }
 function setRunning(value) {
@@ -860,9 +867,10 @@ function renderBudget(budget = state.budget) {
   const visible = Boolean(budget && state.task && !['answer', 'explore'].includes(state.task.kind));
   node.classList.toggle('hidden', !visible);
   if (!visible) { node.textContent = ''; return; }
-  const limits = { maxDurationMs: 3_600_000, maxModelTurns: 150, maxToolCalls: 300, maxTotalTokens: 0, maxOutputTokens: 200_000, maxCostUsd: 25, ...(budget.limits || {}) }, ended = budget.endedAt ? Date.parse(budget.endedAt) : NaN;
+  const limits = { maxDurationMs: 5_400_000, maxModelTurns: 240, maxToolCalls: 500, maxTotalTokens: 0, maxOutputTokens: 300_000, maxCostUsd: 40, ...(budget.limits || {}) }, ended = budget.endedAt ? Date.parse(budget.endedAt) : NaN;
   const started = Date.parse(budget.startedAt), elapsed = Number.isFinite(started) ? (Number.isFinite(ended) ? ended : Date.now()) - started : 0;
-  const status = { running: '预算监控中', completed: '预算已完成', aborted: '预算已停止', exceeded: '预算已用尽' }[budget.status] || '预算';
+  const status = { running: '本段用量', completed: '本段用量', aborted: '本段已停止', exceeded: '达到本段上限' }[budget.status] || '用量';
+  $('task-summary-usage').textContent = '回合 ' + formatNumber(budget.modelTurns) + ' · 工具 ' + formatNumber(budget.toolCalls);
   node.dataset.status = budget.status || 'running';
   node.innerHTML = '<span>' + esc(status) + '</span>'
     + '<span>回合 ' + formatNumber(budget.modelTurns) + '/' + formatNumber(limits.maxModelTurns) + '</span>'
@@ -1282,14 +1290,17 @@ function renderTask(task) {
   const identity = state.sessionId + ':' + (task?.id || ''), changedTask = timelineIdentity !== identity;
   timelineIdentity = identity;
   state.task = task || null;
-  if (changedTask || !task) { ++timelineRequest; clearTimeout(timelineTimer); timelineTimer = null; $('execution-timeline').textContent = ''; $('task-phase-history').classList.remove('hidden'); }
+  if (changedTask || !task) { ++timelineRequest; clearTimeout(timelineTimer); timelineTimer = null; $('execution-timeline').textContent = ''; $('task-phase-history').classList.remove('hidden'); $('task-panel').open = false; $('task-summary-usage').textContent = ''; }
   if (task?.budget) state.budget = task.budget;
   const showTaskPanel = Boolean(task && (!['answer', 'explore'].includes(task.kind) || task.progress?.status === 'warned' || task.progress?.status === 'stalled'));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
-  if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; renderBudget(null); renderComposerControl(); return; }
+  if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; $('task-summary-phase').textContent = '任务进度'; $('task-summary-note').textContent = ''; renderBudget(null); renderComposerControl(); return; }
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : (task.workflow === 'direct' ? '正在自适应执行' : '正在' + TASK_LABELS[task.phase])) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;
+  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : TASK_STATUS_LABELS[task.status] || '需要检查';
+  $('task-summary-phase').textContent = TASK_LABELS[task.phase] || '任务进度';
+  $('task-summary-note').textContent = compactStatus + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '');
+  $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;
   $('task-review').textContent = task.review ? (task.reviewer?.context === 'independent' ? '独立审阅' : '模型审阅') + (task.review.freshness === 'stale' ? '（已过期）' : task.review.freshness !== 'current' ? '（当前版本未确认）' : '') + '：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
     + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : task.workflow === 'direct' || task.kind === 'verify' ? '本次未进行模型审阅。' : '审阅尚未完成。';
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
@@ -1799,7 +1810,7 @@ async function openSettings(tab, editModel) {
     state.providers = settings.providers || [];
     state.models = settings.models || [];
     const models = settings.models || [];
-    const budget = settings.budget || { maxDurationMs: 3600000, maxModelTurns: 150, maxToolCalls: 300, maxTotalTokens: 0, maxOutputTokens: 200000, maxCostUsd: 25 };
+    const budget = settings.budget || { maxDurationMs: 5400000, maxModelTurns: 240, maxToolCalls: 500, maxTotalTokens: 0, maxOutputTokens: 300000, maxCostUsd: 40 };
     const budgetDiagnostic = settings.budgetValid === false ? settings.budgetDiagnostic || '执行预算配置无效，请重新保存。' : '';
     const configWarningMarkup = (config.configWarnings || []).length ? '<p class="settings-note warning">' + config.configWarnings.map((warning) => esc(warning)).join('<br>') + '</p>' : '';
     const credentialRows = (credentials.credentials || []).map((item) => '<div class="credential-row"><span>' + esc(item.provider) + '</span><small>' + esc(item.type) + '</small><button class="text-button" data-remove-provider="' + esc(item.provider) + '">移除</button></div>').join('');
@@ -1811,8 +1822,8 @@ async function openSettings(tab, editModel) {
       '<div data-settings-panel="memory"><div id="memory-settings"></div></div>' +
       '<div data-settings-panel="mcp"><div id="mcp-settings"></div></div>' +
       '<div data-settings-panel="skills"><div id="skills-settings"></div></div>' +
-      '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify 与 verifyRetries。</p>' + configWarningMarkup + '<pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
-       '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section><section class="settings-block" id="execution-budget"><div class="settings-heading"><div><h3>执行预算</h3><p>限制单次 Agent 执行的时长、模型回合、工具调用、生成量和费用。只影响下一次执行，运行中的任务不会被静默改写。</p></div></div>' + (budgetDiagnostic ? '<p class="settings-note warning">' + esc(budgetDiagnostic) + '</p>' : '') + '<div class="budget-grid"><label>最长时长（分钟）<input id="budget-duration" type="number" min="1" max="1440" value="' + esc(Math.round((budget.maxDurationMs || 3600000) / 60000)) + '"></label><label>模型回合<input id="budget-turns" type="number" min="1" max="1000" value="' + esc(budget.maxModelTurns) + '"></label><label>工具调用<input id="budget-tools" type="number" min="1" max="10000" value="' + esc(budget.maxToolCalls) + '"></label><label>累计请求 token（0=关闭）<input id="budget-tokens" type="number" min="0" max="100000000" step="1000" value="' + esc(budget.maxTotalTokens) + '"></label><label>生成 token<input id="budget-output-tokens" type="number" min="1000" max="10000000" step="1000" value="' + esc(budget.maxOutputTokens || 200000) + '"></label><label>费用上限（美元）<input id="budget-cost" type="number" min="0" max="100000" step="0.01" value="' + esc(budget.maxCostUsd) + '"></label></div><p class="settings-note">默认不因缓存读取量停止任务；生成量、回合、工具、时长和已知费用仍受限。累计请求 token 可设为 0 关闭，启用后包含输入、输出和缓存读取。Provider usage 通常在响应结束时到达，单次响应可能略微超过上限。</p><button class="button primary small" id="save-agent-budget">保存执行预算</button></section></div>';
+      '<div data-settings-panel="project"><section class="settings-block"><h3>当前项目</h3><code class="settings-path">' + esc(state.project?.path || '未选择项目') + '</code><p>信任后允许加载项目扩展及验证命令。变更信任会卸载当前会话的项目资源，需要重新选择模型继续。</p><div class="trust-setting"><span>' + (state.trust?.trusted ? '项目已信任' : '项目未信任') + '</span><button class="button quiet" id="toggle-trust">' + (state.trust?.trusted ? '撤销信任' : '信任当前项目') + '</button></div></section><section class="settings-block"><h3>自动验证</h3><p>在当前项目的 forge-agent.json 中设置 verify、verifyRetries 和 protect。</p>' + configWarningMarkup + '<pre class="settings-code">' + esc(config.verify?.length ? config.verify.map((item) => item.name + ': ' + item.command).join(String.fromCharCode(10)) : '未配置验证命令') + '</pre></section></div>' +
+       '<div data-settings-panel="system"><section class="settings-block"><h3>Forge Agent · 本机 Coding Agent</h3><p>Agent 运行、认证、工具、会话、扩展、MCP 与 Skills 由 Pi 提供。</p><div class="config-row"><span>Pi 版本</span><code>' + esc(settings.piVersion) + '</code></div><div class="config-row block"><span>设置文件</span><code>' + esc(settings.settingsPath) + '</code></div><div class="config-row block"><span>启动目录</span><code>' + esc(config.cwd) + '</code></div><p>目录共 ' + settings.allModelCount + ' 个模型，当前已配置认证的模型 ' + models.length + ' 个。</p></section><section class="settings-block" id="execution-budget"><div class="settings-heading"><div><h3>执行预算</h3><p>限制单次 Agent 执行的时长、模型回合、工具调用、生成量和费用。只影响下一次执行，运行中的任务不会被静默改写。</p></div></div>' + (budgetDiagnostic ? '<p class="settings-note warning">' + esc(budgetDiagnostic) + '</p>' : '') + '<div class="budget-presets"><button type="button" class="button quiet small" data-budget-preset="standard">常规任务</button><button type="button" class="button quiet small" data-budget-preset="long">长任务 · 4 小时</button></div><div class="budget-grid"><label>最长时长（分钟）<input id="budget-duration" type="number" min="1" max="1440" value="' + esc(Math.round((budget.maxDurationMs || 3600000) / 60000)) + '"></label><label>模型回合<input id="budget-turns" type="number" min="1" max="1000" value="' + esc(budget.maxModelTurns) + '"></label><label>工具调用<input id="budget-tools" type="number" min="1" max="10000" value="' + esc(budget.maxToolCalls) + '"></label><label>累计请求 token（0=关闭）<input id="budget-tokens" type="number" min="0" max="100000000" step="1000" value="' + esc(budget.maxTotalTokens) + '"></label><label>生成 token<input id="budget-output-tokens" type="number" min="1000" max="10000000" step="1000" value="' + esc(budget.maxOutputTokens || 200000) + '"></label><label>费用上限（美元）<input id="budget-cost" type="number" min="0" max="100000" step="0.01" value="' + esc(budget.maxCostUsd) + '"></label></div><p class="settings-note">默认不因缓存读取量停止任务；生成量、回合、工具、时长和已知费用仍受限。累计请求 token 可设为 0 关闭，启用后包含输入、输出和缓存读取。Provider usage 通常在响应结束时到达，单次响应可能略微超过上限。</p><button class="button primary small" id="save-agent-budget">保存执行预算</button></section></div>';
     const activateTab = (name) => {
       state.settingsTab = name;
       document.querySelectorAll('[data-settings-panel]').forEach((node) => node.classList.toggle('hidden', node.dataset.settingsPanel !== name));
@@ -1823,11 +1834,17 @@ async function openSettings(tab, editModel) {
     const storageInfo = document.createElement('section'); storageInfo.className = 'settings-block';
     storageInfo.innerHTML = '<h3>项目与会话存储</h3><p>新建对话不预选目录。未选项目就发送时，会在下方创建独立项目；主动打开的本机文件夹在原位置工作。</p><div class="config-row block"><span>Forge 项目目录</span><code>' + esc(state.managedRoot || config.managedProjectsRoot) + '</code></div><div class="config-row block"><span>统一会话目录</span><code>' + esc(state.sessionRoot || config.sessionRoot) + '</code></div>';
     $('drawer-body').querySelector('[data-settings-panel="project"]').prepend(storageInfo);
+    document.querySelectorAll('[data-budget-preset]').forEach((button) => button.addEventListener('click', () => {
+      const values = button.dataset.budgetPreset === 'long' ? [240, 400, 800, 500000] : [90, 240, 500, 300000];
+      ['budget-duration', 'budget-turns', 'budget-tools', 'budget-output-tokens'].forEach((id, index) => { $(id).value = String(values[index]); });
+      $('budget-tokens').value = '0';
+      toast('已填入预算预设；费用上限保持原值，点击保存后在下一段执行生效');
+    }));
     const saveBudget = $('save-agent-budget');
     if (saveBudget) saveBudget.onclick = async () => {
       const value = { maxDurationMs: Number($('budget-duration').value) * 60000, maxModelTurns: Number($('budget-turns').value), maxToolCalls: Number($('budget-tools').value), maxTotalTokens: Number($('budget-tokens').value), maxOutputTokens: Number($('budget-output-tokens').value), maxCostUsd: Number($('budget-cost').value) };
       setBusy(saveBudget, true, '保存中…');
-      try { const result = await api('/api/settings/budget', { method: 'POST', body: JSON.stringify({ budget: value }) }); settings.budget = result.budget; toast('执行预算已保存，新任务会使用新限制'); }
+      try { const result = await api('/api/settings/budget', { method: 'POST', body: JSON.stringify({ budget: value }) }); settings.budget = result.budget; toast('执行预算已保存，下一条消息或继续任务时生效'); }
       catch (error) { toast(error.message, 'error'); }
       finally { setBusy(saveBudget, false); }
     };

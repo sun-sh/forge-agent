@@ -2,13 +2,16 @@
 
 ## Unreleased
 
-- Give independent reviewers complete bounded patches and one same-session JSON format correction, preserving evidence limits and parent budgets.
+- Resume planned tasks at a validated saved phase with their goal, acceptance, plan, original protection baseline and consumed repair count; revalidate before review and preserve same-session context without duplicating user messages. Reconsider ordinary defaults once during inspection, retain blocking ambiguities, and expose stop reasons beside a compact, collapsible task summary. Add explicit standard/long-task budget form presets.
 
-- Enforce strict protected-path delivery checks with pre-model content baselines, unchanged dirty user work across repairs, bounded observation, and shared CLI/Web failure semantics.
+- Add strict `protect` configuration for literal files and directories. Capture content before model execution, preserve initial dirty content across repairs, and reject changed or unconfirmed protection even when checks pass. CLI, Web and persisted verification share this gate.
+- Supply independent reviewers complete staged/unstaged/untracked text patches, bounded to 2,000 lines per file and 60,000 characters overall. Incomplete, sensitive, binary or oversized evidence requires attention instead of silent truncation.
+- Retry malformed review JSON once inside the same reviewer Pi session and parent budget; preserve format-retry evidence and stop after the second invalid result.
+- Make continuation a real same-session operation: stopped, interrupted and budget-limited tasks use a hidden host continuation message, preserve the current workspace context, retry malformed inspect/plan handoffs once, and no longer expose a duplicated original user prompt. Increase new-install execution defaults to 90 minutes, 240 model turns, 500 tool calls, 300,000 generated tokens and 40 USD; existing settings remain unchanged.
 
 - Preserve an interrupted task's adaptive/planned workflow from the composer as well as the task center, including after restart; cover resume without unwanted planning, review or extra model calls.
 - Gate planned delivery on a fresh, read-only Pi reviewer with a dedicated JSON result contract and aggregate parent-budget accounting, without sharing the implementation transcript or falling back to self-review.
-- Separate generated-output limits from cumulative request/cache tokens: default to 200,000 generated tokens with the optional cumulative guard disabled, while retaining existing saved limits.
+- Separate generated-output limits from cumulative request/cache tokens: the prior default was 200,000 generated tokens with the optional cumulative guard disabled; new installations now use the documented 300,000-token long-task baseline while retaining existing saved limits.
 - Add pinned cohort validation for repository evaluations: baseline/reference failures are retained as infrastructure skips, invalid tasks do not send model requests, and the validation artifact is bound to the suite fingerprint; add a regression for this gate.
 - Persist a host-owned task requirement ledger separately from model intent, so goals, constraints, acceptance IDs, affected paths and unresolved questions survive phase transitions, legacy restore and compaction handoffs.
 - Make repository evaluation reports durable on fatal startup, budget or cleanup errors, extend bounded Windows worktree cleanup, and publish the first real-model Axios pilot with false-completion and infrastructure-failure classification.

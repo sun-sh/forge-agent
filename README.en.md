@@ -84,7 +84,7 @@ Completion requires passing configured checks, current workspace-content and com
 
 Adaptive and planned runs share host finalization. Pending child changes prevent completion; checkpoint sealing, mode restoration or task-persistence errors fail the task. The UI, queue and task index consume the same final result while historical passing checks remain available.
 
-Continuing a stopped task, including after a service restart, preserves its original workflow: adaptive tasks continue through Pi directly, while planned tasks restart with read-only inspection. Resuming never silently adds the planned pipeline.
+Continuing a stopped task, including after a service restart, preserves its original workflow: adaptive tasks continue through Pi directly, while planned tasks reuse valid saved plans at their interrupted phase. Resuming never silently adds the planned pipeline.
 
 Select **Execution history** (`执行记录`) beside task progress to inspect phases, model usage, tool results, checks and repeated implementation attempts in the right panel. Records are projected from Pi history and host state, survive reopening, and never infer success for calls without results. This is read-only inspection rather than arbitrary side-effect replay.
 
@@ -116,7 +116,7 @@ After the first conversation turn, add subsequent text tasks in the **task cente
 
 ### Execution budgets
 
-**Settings → About → Execution budget** controls adaptive and planned runs. New installations default to 60 minutes, 150 model turns, 300 tool calls, a 200,000 generated-token cap, a disabled cumulative request-token guard (`0`), and 25 USD; saved limits are preserved. Usage still records input, output, and cache reads, but a large cache read does not stop a default run. Missing prices are shown as unknown. Counters persist with the task and do not reset during internal continuation. Adjusting limits allows a recheck. Provider usage normally arrives at response end, so this is an execution guard rather than a billing-level isolation boundary.
+**Settings → About → Execution budget** controls adaptive and planned runs. New installations default to 90 minutes, 240 model turns, 500 tool calls, a 300,000 generated-token cap, a disabled cumulative request-token guard (`0`), and 40 USD; saved limits are preserved. Usage still records input, output, and cache reads, but a large cache read does not stop a default run. Missing prices are shown as unknown. Counters persist with the task and do not reset during internal continuation. Adjusting limits allows a recheck. Provider usage normally arrives at response end, so this is an execution guard rather than a billing-level isolation boundary.
 
 Child turns, tools and usage also count toward the parent's aggregate budget. Ordinary child activations have limits of three minutes, 12 model turns, 60 tool calls, 16,000 generated tokens and 2 USD. The host's independent delivery-review gate has a fresh context and limits of five minutes, 24 model turns, 120 tool calls, 32,000 generated tokens and 4 USD. These remain capped by the parent limits. One user request can delegate at most 12 ordinary activations; the host review gate is admitted separately and always starts a new context.
 
@@ -212,3 +212,5 @@ Report issues with sanitized reproduction steps through [Issues](https://github.
 `protect` fingerprints literal project-relative files and directories before model execution. It preserves pre-existing dirty content; changes or incomplete observations block delivery even when commands pass. This is a delivery check, not an OS sandbox.
 
 Independent delivery review receives bounded complete text patches (2,000 lines per file, 60,000 characters overall). Oversized/incomplete evidence needs attention. Invalid review JSON gets one correction in the same reviewer session and parent budget.
+
+Task progress starts collapsed with interruption reasons beside the composer. Continue reuses the Pi context without duplicating the request, retaining requirements, the plan, protection baseline and consumed repairs. An explicit four-hour preset fills 400 turns, 800 tools and 500,000 generated tokens while preserving the cost ceiling; saving applies it to the next segment.

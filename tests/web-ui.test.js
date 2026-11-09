@@ -1302,6 +1302,33 @@ describe('Web client integration', () => {
     expect(window.document.querySelector('.thinking-block').closest('.execution-details')).not.toBeNull();
     expect(window.document.querySelector('.tool-row').closest('.execution-details')).not.toBeNull();
   });
+  it('fills a long-task budget without saving or changing the cost ceiling until explicitly saved', async () => {
+    const { window, app, requests } = await client();
+    await app.openSettings();
+    window.document.querySelector('[data-settings-tab="system"]').click();
+    const cost = window.document.getElementById('budget-cost').value;
+    window.document.querySelector('[data-budget-preset="long"]').click();
+    expect(window.document.getElementById('budget-duration').value).toBe('240');
+    expect(window.document.getElementById('budget-turns').value).toBe('400');
+    expect(window.document.getElementById('budget-tools').value).toBe('800');
+    expect(window.document.getElementById('budget-output-tokens').value).toBe('500000');
+    expect(window.document.getElementById('budget-cost').value).toBe(cost);
+    expect(requests.some((item) => item.url === '/api/settings/budget' && item.method === 'POST')).toBe(false);
+  });
+  it('keeps the task summary collapsed, preserves explicit expansion, and exposes the stop reason beside Continue', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'compact-status';
+    const task = { id: 'phase-1', workflow: 'planned', kind: 'change', phase: 'inspect', status: 'needs_attention', repairs: 0, phases: [], error: 'Specific handoff error <img src=x>' };
+    app.applySnapshot({ id: 'compact-status', running: false, outcome: 'failed', task, messages: [] });
+    const panel = window.document.getElementById('task-panel');
+    expect(panel.tagName).toBe('DETAILS'); expect(panel.open).toBe(false);
+    expect(window.document.getElementById('composer-run-note').classList.contains('hidden')).toBe(false);
+    expect(window.document.getElementById('composer-run-detail').textContent).toBe(task.error);
+    expect(window.document.getElementById('composer-run-note').querySelector('img')).toBeNull();
+    panel.open = true; app.handleEvent({ type: 'pforge_task', task: { ...task } }); expect(panel.open).toBe(true);
+    app.handleEvent({ type: 'pforge_task', task: { ...task, id: 'phase-2' } }); expect(panel.open).toBe(false);
+    app.applySnapshot({ id: 'compact-status', running: true, outcome: 'running', task: { ...task, status: 'running' }, messages: [] });
+    expect(window.document.getElementById('composer-run-note').classList.contains('hidden')).toBe(true);
+  });
   it('shows review notes separately from blocking findings and renders them as untrusted text', async () => {
     const { window, app } = await client(); app.state.sessionId = 'review-notes';
     const review = { verdict: 'ready', summary: 'Required checks passed', issues: [], notes: ['Optional: <img src=x onerror=alert(1)>'] };

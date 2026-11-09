@@ -17,12 +17,12 @@ export const budgetLimitsSchema = z.object({
 });
 export type BudgetLimits = z.infer<typeof budgetLimitsSchema>;
 export const DEFAULT_BUDGET_LIMITS: BudgetLimits = {
-  maxDurationMs: 60 * 60 * 1000,
-  maxModelTurns: 150,
-  maxToolCalls: 300,
+  maxDurationMs: 90 * 60 * 1000,
+  maxModelTurns: 240,
+  maxToolCalls: 500,
   maxTotalTokens: 0,
-  maxOutputTokens: 200_000,
-  maxCostUsd: 25
+  maxOutputTokens: 300_000,
+  maxCostUsd: 40
 };
 
 export type BudgetStatus = 'running' | 'completed' | 'aborted' | 'exceeded';

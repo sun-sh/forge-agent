@@ -33,6 +33,71 @@ describe('task workflow controller', () => {
     expect(task).toMatchObject({ kind: 'change', status: 'completed' });
     expect(task.phases.map((phase) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
   });
+  it('corrects a model that reports the read-only phase as a user-facing block before stopping', async () => {
+    const f = fixture(); let inspections = 0; const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => {
+      if (args[0] === 'inspect' && inspections++ === 0) return 'Blocked by phase capability: only read-only tools are available, so index.html cannot be created yet.';
+      return execute(...args);
+    };
+    const task = await f.controller.run('Create index.html for the requested page.', 0, f.adapter);
+    expect(task.status).toBe('completed');
+    expect(inspections).toBe(2);
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']);
+  });
+  it('turns a safe empty-directory default into an assumption instead of stopping the task', async () => {
+    const f = fixture(); let inspections = 0; const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => {
+      if (args[0] === 'inspect' && inspections++ === 0) return JSON.stringify({ ...handoff.brief, unresolved: ['The output filename is unspecified; defaulting to index.html'] });
+      return execute(...args);
+    };
+    const task = await f.controller.run('Create the requested web page in the empty project directory.', 0, f.adapter);
+    expect(task).toMatchObject({ status: 'completed', kind: 'change' });
+    expect(inspections).toBe(2);
+    expect(task.requirements?.unresolved).toEqual([]);
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']);
+  });
+  it('resumes a planned task from its saved implementation phase without re-inspecting or re-planning', async () => {
+    const f = fixture();
+    const completed = await f.controller.run('Fix the task', 0, f.adapter);
+    const previous = structuredClone(completed); previous.status = 'interrupted'; previous.phase = 'implement'; previous.error = 'stopped';
+    f.phases.length = 0; f.messages.length = 0;
+    const resumedController = new TaskController(() => {});
+    const resumed = await resumedController.run('Fix the task', 0, f.adapter, previous.id, undefined, { workflow: 'planned', mode: 'agent', resumeState: previous });
+    expect(resumed.status).toBe('completed');
+    expect(f.phases).toEqual(['implement', 'review']);
+    expect(f.messages.some((message) => message.includes('Continue the unfinished implementation'))).toBe(true);
+    expect(f.messages.some((message) => message.includes('HOST PHASE CONTRACT — INSPECT'))).toBe(false);
+    expect(f.messages.some((message) => message.includes('Return exactly one JSON object'))).toBe(false);
+  });
+  it.each(['verify', 'review'] as const)('continues from %s with fresh checks and preserves the original repair allowance', async (phase) => {
+    const f = fixture(); const previous = await f.controller.run('Fix the task', 1, f.adapter);
+    previous.status = 'interrupted'; previous.phase = phase; previous.repairs = 1;
+    f.phases.length = 0;
+    const pass = f.adapter.verify; let verifications = 0;
+    f.adapter.verify = async (signal) => { verifications++; return pass(signal); };
+    f.adapter.baseline = async () => { throw new Error('must reuse the original baseline'); };
+    const resumed = await f.controller.run(previous.prompt, 1, f.adapter, previous.id, undefined, { workflow: 'planned', resumeState: previous });
+    expect(resumed).toMatchObject({ status: 'completed', repairs: 1, requirements: previous.requirements, plan: previous.plan });
+    expect(verifications).toBe(1); expect(f.phases).toEqual(['review']);
+    expect(resumed.phases.map((item) => item.phase)).toEqual(['verify', 'review', 'complete']);
+  });
+  it('retains explicit constraints and acceptance when a safe-default correction omits them', async () => {
+    const f = fixture(); const original = f.adapter.execute; let inspections = 0;
+    f.adapter.execute = async (...args) => {
+      if (args[0] === 'inspect') return JSON.stringify({ ...handoff.brief, constraints: inspections++ ? [] : ['Never overwrite user.txt'], unresolved: inspections === 1 ? ['Default entry filename is index.html'] : [] });
+      return original(...args);
+    };
+    const result = await f.controller.run('Create the page without overwriting user.txt', 0, f.adapter);
+    expect(result.status).toBe('completed'); expect(result.requirements?.constraints).toContain('Never overwrite user.txt');
+    expect(result.plan?.constraints).toContain('Never overwrite user.txt');
+  });
+  it('never converts an implementation request into an answer while reconsidering a routine default', async () => {
+    const f = fixture(); let inspected = 0;
+    f.adapter.execute = async (phase) => phase === 'inspect' ? JSON.stringify({ ...handoff.brief, intent: inspected++ ? 'explore' : 'change', unresolved: inspected === 1 ? ['Default to index.html'] : [] }) : 'must not implement';
+    const result = await f.controller.run('Create the page', 0, f.adapter);
+    expect(result.status).toBe('needs_attention'); expect(result.brief?.intent).toBe('change');
+    expect(result.requirements?.acceptance).toHaveLength(handoff.brief.acceptance.length);
+  });
   it('routes an explicit host verification action without inferring intent from its descriptive text', async () => {
     const f = fixture(), prompt = '运行项目配置的验证命令，检查刚刚应用的子任务变更。';
     expect(taskKind(prompt)).toBe('verify');
@@ -207,6 +272,16 @@ describe('task workflow controller', () => {
     const result = await f.controller.run('Fix code', 0, f.adapter);
     expect(result).toMatchObject({ status: 'needs_attention', error: '审阅证据过大' }); expect(f.phases).not.toContain('review');
   });
+  it('runs the admitted no-review ablation through planning and current verification without reviewer calls', async () => {
+    const f = fixture(); f.adapter.review = async () => { throw new Error('review must not run'); };
+    const result = await f.controller.run('Fix code', 0, f.adapter, undefined, undefined, { workflow: 'planned', reviewRequired: false });
+    expect(result).toMatchObject({ status: 'completed', reviewRequired: false, verification: { status: 'passed' } });
+    expect(f.phases).toEqual(['inspect', 'plan', 'implement']); expect(result.review).toBeUndefined();
+    expect(withTaskEvidence(result, result.verification!).status).toBe('completed');
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: result }])?.reviewRequired).toBe(false);
+    const failed = withTaskEvidence(result, { ...result.verification!, evidence: { ...evidence, freshness: 'stale' } });
+    expect(failed.status).toBe('needs_attention');
+  });
   it('refuses to certify a planned change when the independent reviewer is unavailable', async () => {
     const f = fixture(); f.adapter.review = undefined;
     const result = await f.controller.run('Fix the task', 0, f.adapter);
@@ -319,6 +394,7 @@ describe('task workflow controller', () => {
   });
   it('invalidates completion when the Git fingerprint changes during review', async () => {
     const f = fixture(); let calls = 0;
+    f.adapter.reviewPatch = async () => ({ version: 1, files: [], characters: 0, lines: 0 });
     f.adapter.changes = async () => ({ available: true, truncated: false, files: [{ path: 'code.ts', status: ' M', fingerprint: String(++calls), preexisting: false, observed: true }] });
     const result = await f.controller.run('Fix', 0, f.adapter);
     expect(result.status).toBe('needs_attention'); expect(result.error).toContain('证据已过期');

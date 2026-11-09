@@ -25,6 +25,15 @@ export type TaskRequirements = z.infer<typeof taskRequirementsSchema>;
 export function taskRequirements(brief: TaskBrief): TaskRequirements {
   return taskRequirementsSchema.parse({ goal: brief.goal, affectedPaths: brief.affectedPaths, constraints: brief.constraints, acceptance: brief.acceptance, unresolved: brief.unresolved });
 }
+
+/** Corrections may resolve ambiguity, but cannot discard preserved requirements. */
+export function preserveTaskBrief(candidate: TaskBrief, previous?: TaskRequirements): TaskBrief {
+  if (!previous) return candidate;
+  const acceptance = previous.acceptance.length ? previous.acceptance : candidate.acceptance;
+  return taskBriefSchema.parse({ ...candidate, goal: previous.goal,
+    constraints: [...new Set([...previous.constraints, ...candidate.constraints])],
+    affectedPaths: [...new Set([...previous.affectedPaths, ...candidate.affectedPaths])], acceptance });
+}
 const fields = {
   version: z.literal(1), summary: text(4000),
   affectedPaths: z.array(text(1000)).max(50), constraints: z.array(text(1000)).max(20),
@@ -38,7 +47,7 @@ export const acceptanceReviewSchema = z.array(z.object({ id: z.string().regex(/^
 export type AcceptanceReview = z.infer<typeof acceptanceReviewSchema>;
 
 export const PLAN_OUTPUT_CONTRACT = 'Return exactly one JSON object, without Markdown, using this versioned handoff: {"version":1,"summary":"requested outcome","affectedPaths":["relevant path"],"constraints":["user constraint"],"steps":["bounded implementation step"],"acceptance":[{"criterion":"observable requirement from the user goal","check":"automated or inspection","evidence":"specific check or code evidence needed"}]}. Use check="automated" or check="inspection". Include 1-12 steps and 1-12 acceptance items. Do not invent requirements or permissions. Do not assign acceptance IDs: the host assigns them. Suggested checks are reference data; they do not replace the configured verification commands. Keep protected files and explicit scope constraints visible.';
-export const BRIEF_OUTPUT_CONTRACT = 'End inspection with exactly one JSON object, without Markdown: {"version":1,"intent":"change"|"explore"|"answer"|"verify"|"clarify","goal":"faithful requested outcome","affectedPaths":["relevant file"],"constraints":["every explicit protection or scope constraint"],"acceptance":[{"criterion":"observable required outcome","check":"automated"|"inspection","evidence":"specific evidence needed"}],"unresolved":["concrete unresolved question"]}. Read the ENTIRE original user request, including its ending. Capture constraints and acceptance before background details. Keep the whole JSON under 11000 characters, preserving complete requirements instead of truncating them. Use change for requested modifications even when unfamiliar words are used. Use clarify for genuine ambiguity; do not silently substitute research for implementation. This is task understanding, not permission: user mode, explicit restrictions and project trust remain authoritative. Do not assign acceptance IDs.';
+export const BRIEF_OUTPUT_CONTRACT = 'End inspection with exactly one JSON object, without Markdown: {"version":1,"intent":"change"|"explore"|"answer"|"verify"|"clarify","goal":"faithful requested outcome","affectedPaths":["relevant file"],"constraints":["every explicit protection or scope constraint and any safe default assumption"],"acceptance":[{"criterion":"observable required outcome","check":"automated"|"inspection","evidence":"specific evidence needed"}],"unresolved":["only a decision that genuinely requires the user"]}. Read the ENTIRE original user request, including its ending. Capture constraints and acceptance before background details. Keep the whole JSON under 11000 characters, preserving complete requirements instead of truncating them. Use change for requested modifications even when unfamiliar words are used. Use clarify for genuine ambiguity; do not silently substitute research for implementation. Do not put ordinary omissions, empty-directory conventions, likely filenames, or temporary read-only tool availability in unresolved; choose a safe conventional default and record it as a constraint or acceptance assumption. For an empty web project, default the entry file to index.html unless the user requested another convention. This is task understanding, not permission: user mode, explicit restrictions and project trust remain authoritative. Do not assign acceptance IDs.';
 
 /** A single final JSON object may follow evidence prose. Never guess among objects. */
 export function parseHandoffJson(output: string, maxChars: number): unknown {

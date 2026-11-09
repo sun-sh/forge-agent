@@ -46,7 +46,7 @@ export function sessionOutcome(data) {
       if (data.task.status === 'completed') return { label: data.task.workflow === 'planned' || readOnlyMode ? '回答结束 · 未执行修改' : '回答结束', kind: 'done' };
     }
     if (data.running) return { label: '正在' + (labels[data.task.phase] || '运行'), kind: 'running' };
-    if (data.task.status === 'budget_exceeded') return { label: '执行预算已用尽 · 可重新检查', kind: 'failed' };
+    if (data.task.status === 'budget_exceeded') return { label: '执行预算已用尽 · 可继续', kind: 'failed' };
     if (data.task.status === 'interrupted') return { label: '任务中断 · 等待明确继续', kind: 'failed' };
     if (data.task.status === 'needs_attention') return { label: '需要检查 · 尚未通过完成门槛', kind: 'failed' };
     if (data.task.status === 'failed') return { label: data.task.verification?.status === 'failed' ? '验证失败 · 任务未通过' : '任务失败', kind: 'failed' };
@@ -58,7 +58,8 @@ export function sessionOutcome(data) {
       const acceptanceMet = !acceptance || Array.isArray(findings) && findings.length === acceptance.length && new Set(findings.map((item) => item.id)).size === findings.length && acceptance.every((item) => findings.some((finding) => finding.id === item.id && finding.status === 'met' && finding.evidence?.trim()));
       const reviewed = data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
       const reviewLabel = data.task.reviewer?.context === 'independent' ? '独立审阅通过' : '模型审阅通过';
-      if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
+      if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || data.task.reviewRequired !== false && !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
+      if (data.task.workflow === 'planned' && data.task.reviewRequired === false) return { label: '执行结束 · ' + verificationLabel(verification) + ' · 评测：未启用审阅', kind: 'done' };
       return { label: (data.task.kind === 'verify' ? '验证结束' : '执行结束') + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };
     }
   }

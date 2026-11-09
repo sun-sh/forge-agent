@@ -264,6 +264,12 @@ try {
     await click(`[data-settings-tab="${tab}"]`);
     assert.equal(await evaluate(`document.querySelectorAll('[data-settings-panel]:not(.hidden)').length`), 1);
   }
+  await click('[data-settings-tab="system"]');
+  const initialCostCeiling = await evaluate(`document.getElementById('budget-cost').value`);
+  await click('[data-budget-preset="long"]');
+  assert.equal(await evaluate(`document.getElementById('budget-duration').value`), '240');
+  assert.equal(await evaluate(`document.getElementById('budget-cost').value`), initialCostCeiling);
+  await click('[data-budget-preset="standard"]');
   await click('[data-settings-tab="skills"]');
   await waitFor(`!!document.querySelector('#skills-settings .skill-card') && document.getElementById('skills-settings').getAttribute('aria-busy') === 'false'`);
   const searchSkills = async (value) => { await fill('skills-search', value); await evaluate(`document.getElementById('skills-search').dispatchEvent(new Event('input',{bubbles:true}))`); };
@@ -528,7 +534,12 @@ try {
   assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
+  assert.equal(await evaluate(`document.getElementById('task-panel').open`), false);
+  assert.ok(await evaluate(`document.getElementById('task-panel').getBoundingClientRect().height <= 46`));
   await screenshot('planned-task');
+  await click('#task-panel > summary');
+  assert.equal(await evaluate(`document.getElementById('task-panel').open`), true);
+  await screenshot('planned-task-expanded');
   await click('#open-execution');
   await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 6`);
   assert.equal(await evaluate(`document.querySelector('[data-review-view="execution"]').getAttribute('aria-selected')`), 'true');

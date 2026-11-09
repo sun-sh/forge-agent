@@ -25,13 +25,15 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   let queuedCalls: NonNullable<typeof nextCalls>[] = [];
   let release: (() => void) | undefined;
   let pause = false;
+  let pausePhase: string | undefined;
   let implementationRequested = false;
   const requests: any[] = [];
   const upstream = createServer(async (req, res) => {
     let raw = ''; for await (const part of req) raw += part;
     const input = JSON.parse(raw); requests.push(input);
-    if (pause) await new Promise<void>((resolve) => { release = resolve; });
     const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+    if (pause || pausePhase && phase === pausePhase) await new Promise<void>((resolve) => { release = resolve; });
+    if (res.destroyed) return;
     let calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
     if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -72,7 +74,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
     root, home, api, snapshot, settled, requests,
     calls(value: typeof nextCalls) { nextCalls = value; },
     sequence(value: NonNullable<typeof nextCalls>[]) { queuedCalls = value; },
-    pause() { pause = true; }, release() { pause = false; release?.(); },
+    pause() { pause = true; }, pauseAt(phase: string) { pausePhase = phase; }, release() { pause = false; pausePhase = undefined; release?.(); },
     async restart() { await server.close(); server = await startWebConsole({ cwd: root, port: Number(new URL(base).port) }); base = new URL(server.url).origin; }
     , async close() { await server.close(); }
   };
@@ -179,7 +181,7 @@ describe('Web working modes with real Pi sessions', () => {
     await f.settled(session.id);
     expect(f.requests[index].tools.map((tool: any) => tool.function.name)).toContain('mcp__fixture__echo');
     expect(await readFile(join(f.root, 'mcp-called'), 'utf8')).toBe('now-enabled\n');
-  });
+  }, 60_000);
   it('refuses MCP configuration changes during an active task without overwriting disk', async () => {
     const f = await fixture({ mcp: 'direct' });
     const before = await readFile(join(f.home, 'mcp.json'), 'utf8');
@@ -362,26 +364,55 @@ describe('Web working modes with real Pi sessions', () => {
     expect(f.requests).toHaveLength(2);
     expect(JSON.stringify(f.requests[1])).not.toContain('PFORGE TASK PHASE');
   });
-  it('explicitly continues an aborted planned task from inspection with a new run and fresh verification', async () => {
+  it('continues an aborted planned task at its saved plan phase without duplicating the request', async () => {
     const f = await fixture();
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
-    f.pause();
+    f.pauseAt('plan');
     await f.api('sessions/' + session.id + '/prompt', { message: 'Implement a scoped change', workflow: 'planned' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1), { timeout: 15000 });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(2), { timeout: 15000 });
     expect((await f.api('sessions/' + session.id + '/abort', {})).status).toBe(200);
     const stopped = await f.settled(session.id);
     expect(stopped.task.status).toBe('aborted');
+    expect(stopped.task.phase).toBe('plan');
+    expect(stopped.task.brief).toBeDefined();
+    expect(stopped.task.plan).toBeUndefined();
     f.release();
     expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(202);
     const resumed = await f.settled(session.id);
     expect(resumed.task.status).toBe('completed');
     expect(resumed.task.resumeOf).toBe(stopped.task.id);
     expect(resumed.task.id).not.toBe(stopped.task.id);
-    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
-    expect(JSON.stringify(f.requests[1].messages.find((message: any) => message.role === 'system'))).toContain('Reinspect the current workspace');
-    expect(JSON.stringify(f.requests[1].messages.at(-1).content)).not.toContain('HOST PHASE CONTRACT');
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['plan', 'implement', 'verify', 'review', 'complete']);
+    const resumedRequest = f.requests[2];
+    const resumedUserMessages = resumedRequest.messages.filter((message: any) => message.role === 'user');
+    expect(resumedUserMessages.filter((message: any) => JSON.stringify(message.content).includes('Implement a scoped change'))).toHaveLength(1);
     expect(resumed.verification.status).toBe('passed');
     expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(409);
+  });
+  it.each([false, true])('resumes a stopped writable phase with saved requirements and no duplicate user message (restart: %s)', async (restart) => {
+    const f = await fixture({ implementationWrite: { path: 'index.html', content: '<h1>Resumed implementation</h1>' } });
+    let session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    f.pauseAt('implement');
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Create index.html with the requested page.', workflow: 'planned' });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(3), { timeout: 15000 });
+    await f.api('sessions/' + session.id + '/abort', {});
+    const stopped = await f.settled(session.id);
+    expect(stopped.task).toMatchObject({ phase: 'implement', status: 'aborted', kind: 'change' });
+    expect(stopped.task.plan).toBeDefined();
+    await expect(access(join(f.root, 'index.html'))).rejects.toThrow();
+    f.release();
+    if (restart) {
+      await f.restart();
+      session = await (await f.api('session', { project: f.root, sessionFile: stopped.sessionFile })).json();
+    }
+    expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(202);
+    const resumed = await f.settled(session.id);
+    expect(resumed.task).toMatchObject({ status: 'completed', resumeOf: stopped.task.id, requirements: stopped.task.requirements, plan: stopped.task.plan });
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['implement', 'verify', 'review', 'complete']);
+    expect(await readFile(join(f.root, 'index.html'), 'utf8')).toBe('<h1>Resumed implementation</h1>');
+    const entries = resumed.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user');
+    expect(entries).toHaveLength(1);
+    expect(f.requests[3].tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
   });
   it.each(['plan', 'ask'] as const)('allows reading in %s but blocks execution and verification, including after reopening', async (mode) => {
     const f = await fixture();

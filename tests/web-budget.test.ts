@@ -21,7 +21,7 @@ describe('Web host controls', () => {
     const initial = await fetch(origin + '/api/settings', { headers });
     expect(initial.status).toBe(200);
     const initialPayload = await initial.json() as { budget?: { maxModelTurns?: number } };
-    expect(initialPayload.budget).toMatchObject({ maxModelTurns: 150 });
+    expect(initialPayload.budget).toMatchObject({ maxModelTurns: 240 });
     const invalid = await fetch(origin + '/api/settings/budget', { method: 'POST', headers, body: JSON.stringify({ budget: { maxModelTurns: 0 } }) });
     expect(invalid.status).toBe(400);
     const limits = { maxDurationMs: 120000, maxModelTurns: 7, maxToolCalls: 20, maxTotalTokens: 30000, maxOutputTokens: 50000, maxCostUsd: 2.5 };

@@ -39,7 +39,7 @@ import { CheckpointStore, CheckpointError } from '../task/checkpoints.js';
 import { TaskQueue, QueueError, QueueDeferredError } from '../task/queue.js';
 import { TaskProgress } from '../task/progress.js';
 
-export interface WebConsoleOptions { cwd: string; host?: string; port?: number; serviceInstance?: string; onServiceStop?(): void; }
+export interface WebConsoleOptions { cwd: string; host?: string; port?: number; serviceInstance?: string; onServiceStop?(): void; evaluation?: { allowReviewAblation: true }; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
 interface SessionEventRecord { id: number; event: unknown; bytes: number; }
 interface SessionState {
@@ -821,11 +821,14 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     task.progress = session.progress?.snapshot();
   }
 
-  async function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false, images: ImageContent[] = [], execution: { lease?: ProjectExecution; preserveWorkflow?: boolean; verificationOnly?: boolean } = {}) {
+  async function launchPrompt(session: SessionState, message: string, workflow: WebWorkflow, resumeOf?: string, runtimeCommand = false, images: ImageContent[] = [], execution: { lease?: ProjectExecution; preserveWorkflow?: boolean; verificationOnly?: boolean; reviewRequired?: boolean } = {}) {
     if (!agentSettings.valid) throw new HttpError(409, agentSettings.diagnostic ?? '执行预算配置无效，请先在设置中重新保存预算');
     // Take the verification rules at the same idle boundary as the model and
     // budget. A running execution keeps this snapshot even if the file changes.
     const verificationConfig = session.verification.reload();
+    const previousTask = resumeOf && session.controller.state?.id === resumeOf ? structuredClone(session.controller.state) : undefined;
+    if (resumeOf && !previousTask) throw new HttpError(409, '中断任务与当前会话不一致，请重新打开原会话');
+    const continuedVerification = previousTask ? structuredClone(session.verification.outcome) : undefined;
     // Reserve the project before changing session state or returning 202. This
     // makes a competing terminal/session request fail synchronously with 409,
     // instead of accepting work that will only fail in a detached promise.
@@ -851,10 +854,15 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           model: agent.model ? agent.model.provider + '/' + agent.model.id : undefined, intent,
           requestedKind: execution.verificationOnly ? 'verify' : undefined
         }, resumeOf);
+        if (previousTask) {
+          candidate.repairs = previousTask.repairs;
+          candidate.requirements = previousTask.requirements;
+          candidate.baseline = previousTask.baseline;
+        }
         {
           directTask = candidate;
           session.controller.setExternalState(candidate);
-          candidate.baseline = await captureGit(session.project, lease.signal);
+          candidate.baseline ??= await captureGit(session.project, lease.signal);
           session.controller.setExternalState(candidate);
         }
       }
@@ -879,13 +887,16 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       session.subagents?.beginPrompt();
       session.progress?.begin(workflow !== 'planned');
       const work = async () => {
-        if (workflow !== 'planned') { runBudget.start(); session.modePolicy.apply(agent); await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); runBudget.check(); session.progress?.check(); if (session.outcome !== 'aborted') session.subagents?.assertCollected(); return; }
+        if (workflow !== 'planned') { runBudget.start(); session.modePolicy.apply(agent); if (resumeOf) { session.verification.beginTurn(directTask!.id, continuedVerification); await agent.sendCustomMessage({ customType: 'pforge.task_resume', content: 'HOST CONTINUATION: Continue the interrupted task already present in this conversation from the current workspace. Do not repeat the original user request as a new message, do not replay completed tool calls, and do not stop merely because a previous attempt was interrupted. Inspect only what is needed and continue toward the original requested result.', display: false }, { triggerTurn: true }); } else await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); runBudget.check(); session.progress?.check(); if (session.outcome !== 'aborted') session.subagents?.assertCollected(); return; }
+        let verificationStarted = false;
+        const startVerification = () => { if (verificationStarted) return; verificationStarted = true; session.verification.beginTurn(session.controller.state!.id, continuedVerification); };
         const result = await session.controller.run(message, verificationConfig.config.verifyRetries, {
         async execute(_phase, text, first, signal) {
           signal.throwIfAborted(); if (session.closed) throw new Error('Session is closed');
+          startVerification();
           if (session.progress) session.controller.recordProgress(session.progress.snapshot());
           session.modePolicy.apply(agent);
-          if (first) { session.verification.beginTurn(session.controller.state!.id); await agent.prompt(text, { expandPromptTemplates: false, ...(images.length ? { images } : {}) }); }
+          if (first) { if (resumeOf) await agent.sendCustomMessage({ customType: 'pforge.task_resume', content: 'HOST CONTINUATION: Continue the interrupted task already present in this conversation from the current workspace. The original request, prior inspection and completed tool results are already in context. Do not repeat the original request as a new user message, do not replay completed operations, and do not tell the user that a read-only preparation phase blocks implementation; the host will advance phases and grant write tools. Return the required handoff for the current phase, then continue autonomously.', display: false }, { triggerTurn: true }); else await agent.prompt(text, { expandPromptTemplates: false, ...(images.length ? { images } : {}) }); }
           else await agent.sendCustomMessage({ customType: 'pforge.task_phase', content: text, display: false }, { triggerTurn: true });
           session.progress?.check();
           signal.throwIfAborted();
@@ -895,12 +906,14 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         },
         async verify(signal) {
           signal.throwIfAborted();
+          startVerification();
           if (session.progress) session.controller.recordProgress(session.progress.snapshot());
           if (session.controller.state!.kind === 'verify' && !session.controller.state!.phases.some((phase) => phase.phase === 'inspect')) {
-            session.verification.beginTurn(session.controller.state!.id);
+            if (!resumeOf) {
             const prompt = { role: 'user' as const, content: message, timestamp: Date.now() };
             session.manager.appendMessage(prompt);
             emit(session, { type: 'message_start', message: prompt });
+            }
           }
           session.verification.outcome.attempts = session.controller.state!.repairs;
           return session.verification.verifyTrusted(signal);
@@ -912,8 +925,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         changes: (baseline, signal) => compareGit(session.project, baseline, signal)
         }, resumeOf, runBudget, {
           workflow: 'planned', mode: session.mode,
+          reviewRequired: execution.reviewRequired,
           model: agent.model ? agent.model.provider + '/' + agent.model.id : undefined, intent,
-          requestedKind: execution.verificationOnly ? 'verify' : undefined
+          requestedKind: execution.verificationOnly ? 'verify' : undefined,
+          resumeState: previousTask
         });
         session.outcome = result.status === 'aborted' ? 'aborted' : result.status === 'completed' ? 'completed' : 'failed';
         if (result.status !== 'completed') session.lastError = result.error;
@@ -1816,6 +1831,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           // Staged orchestration is an explicit opt-in on the prompt. A restored
           // session preference alone must not silently enable extra model turns.
           const workflow = input.workflow ?? 'direct';
+          if (input.review !== undefined && typeof input.review !== 'boolean') throw new HttpError(400, 'invalid review option');
+          if (input.review === false && (!options.evaluation?.allowReviewAblation || workflow !== 'planned' || input.command === true)) throw new HttpError(403, '关闭审阅只允许隔离评测进程中的 planned 消融实验');
           if (workflow === 'planned' && session.mode !== 'agent') throw new HttpError(400, '计划并执行需要用户先切换 Agent 模式');
           if (Array.isArray(input.attachments) && input.attachments.some((item: any) => item?.type === 'file') && !trustView(trustStore, settingsManager, session.project).trusted) throw new HttpError(403, '请先信任项目后引用项目文件');
           let attachments: Awaited<ReturnType<typeof preparePromptAttachments>>;
@@ -1823,7 +1840,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '附件格式无效'); }
           const message = input.message + attachments.text;
           if (attachments.images.length && !session.session.model?.input?.includes('image')) throw new HttpError(400, '当前模型不支持图片输入，请切换到支持视觉输入的模型');
-          await launchPrompt(session, message, workflow, undefined, input.command === true, attachments.images);
+          await launchPrompt(session, message, workflow, undefined, input.command === true, attachments.images, { reviewRequired: input.review !== false });
           json(response, 202, { accepted: true });
           return;
         }

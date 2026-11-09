@@ -91,7 +91,7 @@ export class TaskRegistry {
       if (record.state.status !== 'running') continue;
       record.state.status = 'interrupted';
       record.state.updatedAt = now;
-      record.state.error = 'Forge 服务已重启。请明确继续，系统将从只读检查重新开始，不重放上次操作。';
+      record.state.error = 'Forge 服务已重启。请明确继续，系统将从中断阶段复用会话和工作区，不重放上次操作。';
       changed = true;
     }
     if (changed) { registry.scheduleWrite(); await registry.flush(); }

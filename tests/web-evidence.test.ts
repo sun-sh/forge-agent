@@ -22,14 +22,14 @@ async function fixture() {
   const upstream = createServer(async (request, response) => {
     let raw = ''; for await (const part of request) raw += part;
     const input = JSON.parse(raw); count++;
+    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
     const child = JSON.stringify(input.messages).includes("delegated worker");
     let call: { name: string; arguments: unknown } | undefined;
     if (child && input.messages.at(-1)?.role !== 'tool') call = { name: 'write', arguments: { path: 'sample.txt', content: 'worker proposal\n' } };
-    else if (!child && operation !== 'answer') {
+    else if (!child && operation !== 'answer' && (!phase || phase === 'implement')) {
       call = operation === 'edit' ? { name: 'write', arguments: { path: 'sample.txt', content: 'after\n' } } : { name: 'subagent', arguments: { tasks: [{ title: 'Isolated edit', role: 'worker', prompt: 'Change sample.txt to worker proposal.' }] } };
       operation = 'answer';
     }
-    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
     const delta = call ? { role: 'assistant', tool_calls: [{ index: 0, id: 'call-' + count, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } }] }
       : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Reviewed', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : 'Task response.' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -57,6 +57,21 @@ async function fixture() {
 }
 
 describe('Web verification evidence across workspace mutations', { timeout: 60000 }, () => {
+  it.each(['direct', 'planned'])('blocks %s completion when the actual Pi tool changes a protected file before passing verification', async (workflow) => {
+    const f = await fixture();
+    await writeFile(join(f.project, 'forge-agent.json'), JSON.stringify({ protect: ['sample.txt'], verify: [{ name: 'gate', command: 'node --version' }], verifyRetries: 0 }));
+    const parent = await f.open(); f.setOperation('edit');
+    const done = await f.run(parent.id, 'Implement the requested change while preserving protected files.', workflow);
+    expect(await readFile(join(f.project, 'sample.txt'), 'utf8')).toBe('after\n');
+    expect(done).toMatchObject({ outcome: 'failed', running: false, verification: { status: 'failed', report: { passed: true }, protection: { status: 'changed', changes: [{ path: 'sample.txt', kind: 'modified' }] } }, task: { status: 'failed' } });
+    const index = await f.api('tasks'); expect(index.tasks.find((task: any) => task.id === done.task.id)?.status).toBe('failed');
+    expect(done.subagents.filter((child: any) => child.purpose === 'review_gate')).toEqual([]);
+  });
+  it('rejects HTTP attempts to disable production review before model execution', async () => {
+    const f = await fixture(), parent = await f.open(), calls = f.modelRequests();
+    expect((await f.request('sessions/' + parent.id + '/prompt', { message: 'Fix the code', workflow: 'planned', review: false })).status).toBe(403);
+    expect(f.modelRequests()).toBe(calls); expect((await f.snapshot(parent.id)).running).toBe(false);
+  });
   it.each(['direct', 'planned'])('keeps %s session, task index and recovered history failed when checkpoint sealing fails', async (workflow) => {
     const f = await fixture(), parent = await f.open();
     const seal = vi.spyOn(CheckpointStore.prototype, 'seal').mockRejectedValueOnce(new Error('injected checkpoint seal failure'));

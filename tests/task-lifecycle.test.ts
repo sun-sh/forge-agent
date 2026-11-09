@@ -11,7 +11,7 @@ describe('shared execution finalization', () => {
     const task = createExecutionState('Fix task', { workflow });
     const restored = restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }]);
     expect(restored).toMatchObject({ workflow, status: 'interrupted' });
-    expect(restored?.error).toContain(workflow === 'direct' ? '保留自适应执行策略' : '从只读检查重新开始');
+    expect(restored?.error).toContain(workflow === 'direct' ? '复用当前会话和工作区' : '从当前阶段复用会话和工作区');
   });
   it('keeps adaptive intent hints out of execution phases and completion gates', () => {
     for (const prompt of ['Inspect and fix login, do not modify tests', 'Run tests, then finish the requested work']) {
