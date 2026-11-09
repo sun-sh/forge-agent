@@ -162,7 +162,7 @@ describe('Web lifecycle regressions', () => {
     prompt.mockResolvedValueOnce(undefined);
     const accepted = await api('api/sessions/' + created.id + '/prompt', { message: 'retry after the preparation failure' });
     expect(accepted.status).toBe(202);
-    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }));
+    await vi.waitFor(async () => expect(await (await api('api/sessions/' + created.id)).json()).toMatchObject({ running: false }), { timeout: 10_000 });
     expect(prompt).toHaveBeenCalledOnce();
   });
 

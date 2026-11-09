@@ -45,13 +45,13 @@ flowchart LR
   Review -->|证据缺失、过期或审阅不一致| Attention[needs_attention]
 ```
 
-`TaskAdapter` 分开提供执行、验证、证据复核和 Git 观察能力。inspect 形成版本化 `brief`：目标、相关文件、完整约束、验收条件、未解决问题及任务理解；宿主分配 `A1…` 编号。plan 组织可执行步骤，宿主保留 brief 的约束与验收，防止重新规划时静默遗漏。格式无效或目标有歧义时停在只读阶段。交接 JSON 有整体大小上限，超过时需要更简洁的完整表达，不截断必需条件。implement 交还宿主后，宿主独立执行配置的检查。
+`TaskAdapter` 分开提供执行、验证、证据复核和 Git 观察能力。inspect 形成版本化 `brief`：目标、相关文件、完整约束、验收条件、未解决问题及任务理解；宿主同时生成独立的 `requirements` 账本，作为跨阶段和压缩的稳定交接，不让后续模型意图或计划覆盖它；宿主分配 `A1…` 编号。plan 组织可执行步骤，宿主保留 requirements 的约束与验收，防止重新规划时静默遗漏。格式无效或目标有歧义时停在只读阶段。交接 JSON 有整体大小上限，超过时需要更简洁的完整表达，不截断必需条件。implement 交还宿主后，宿主独立执行配置的检查。
 
-Reflection 当前实现为结构化 review：`verdict`、`summary`、阻断 `issues`、非阻断 `notes` 及逐项 `acceptance` 依据。必须恰好覆盖全部验收 ID；遗漏、重复、凭空增加和 unconfirmed 都不能完成。无法解析、存在问题、工作区已变或验证未确认，同样不能取得完成状态。具体审阅缺陷可以进入修复，但与检查失败**共用** `verifyRetries`，自动继续、切换阶段或修复原因变化都不会重置额度。检查失败的原始输出交回 Pi，输出本身不获得指令权限。格式验证不能证明模型没有误解原始需求，自审仍需独立验收。
+Reflection 当前实现为结构化 review：`verdict`、`summary`、阻断 `issues`、非阻断 `notes` 及逐项 `acceptance` 依据。必须恰好覆盖全部验收 ID；遗漏、重复、凭空增加和 unconfirmed 都不能完成。无法解析、存在问题、工作区已变或验证未确认，同样不能取得完成状态。具体审阅缺陷可以进入修复，但与检查失败**共用** `verifyRetries`，自动继续、切换阶段或修复原因变化都不会重置额度。检查失败的原始输出交回 Pi，输出本身不获得指令权限。格式验证不能证明模型正确理解原始需求，仍需外部验收。
 
-目前 plan、implement 和 review 使用同一个父 Pi 会话。review 能利用前文，但也可能继承实施时的偏见；它不是独立评审证明。子 `reviewer` 有独立上下文，但还没有自动替代这道门禁。把方法机械拆成 Planner/Executor/Reflection 三个空壳模块不会改变这一点。当前保留小型可注入状态机；当计划策略、独立审阅器或阶段交接协议需要分别演进时，再提取对应策略模块。
+plan 和 implement 保持在父 Pi 会话中，以便继续使用同一项目上下文。review 阶段现在通过宿主专用的 `reviewGate` 启动一个全新的、只读的 Pi 子会话：只交付原始请求的有界摘要、完整结构化要求、验证结果和工作区变更证据，不交付实施 transcript，也不能续问。它使用既有的受限子 Agent 生命周期、父预算和项目读权限；审阅记录保存独立 session ID 与模型，门禁不能退回同上下文自审。独立审阅仍是模型证据，不能替代外部验证或证明通用代码质量。
 
-`mode`、`intentHint`、解析后的 `kind` 和验收条件分别记录。有限规则只对明确的问答、只读要求、变更和验证请求给提示；陌生表达保留 `undetermined`，在原有只读 inspect 内形成结构化理解。无法确定就 needs_attention 等待澄清，不能把“不认识动词”当成“调研即可完成”。已明确的实现请求若交接变成纯调研，也阻止静默降级。权限仍由用户模式、信任和工具策略决定，模型理解不能增加权限。
+`mode`、`intentHint`、解析后的 `kind` 和验收条件分别记录。有限规则只作为遥测提示，不能选择阶段、授予权限或跳过实现。所有规划模式的用户请求先保持 `undetermined`，由只读 inspect 形成结构化理解；明确的宿主动作另行处理。结构化交接明确回答、探索、验证或澄清时才走相应短路径；缺少目标、实现验收或存在未解决问题就 needs_attention 等待澄清。自适应 Agent 不用提示推定 kind，保持 `undetermined` 并由 Pi 继续原生回合，避免提示绕过证据或待应用提案门禁。权限仍由用户模式、信任和工具策略决定，模型理解不能增加权限。
 
 “应用并验证”是明确的宿主动作，直接携带内部 verify 意图，不从按钮描述文字反推行为；HTTP 用户提示和模型输出不能设置这个字段。交接解析兼容证据说明之后唯一的末尾 JSON，但仍拒绝多个对象、尾随指令和未知控制字段。该格式兼容性由真实模型的一次 needs_attention 失败推动，失败与修复后复跑分别记录。
 
@@ -136,7 +136,7 @@ Conversation → Episode → Fact → Preference → Skill 不应直接被当成
 
 **查看历史**可以安全回放已记录的状态；**重新执行**可能再次发邮件、写文件或部署。它们不能共用一个不加区分的 Replay 按钮。当前没有任意工具调用的 exactly-once 保证，也不能从崩溃前任意指令位置继续。
 
-`task/timeline.ts` 已从 Pi 分支日志与宿主状态构建 version 1 只读执行投影：task → phase → model → tool/check，包含 contains、next、retry 边，身份由任务、阶段序号、Pi entry ID 和 toolCallId 稳定生成。右侧“执行”视图展示阶段、用量、实际工具结果与检查；缺失结果保持进行中或中断。历史通过与当前 freshness 分开展示；工具时长是消息间隔估算，包含等待。超过 1,600 节点明确提示省略。它不保存第二套动作日志，不包含私有思考或原始参数/输出，不承担调度，也不是任意节点可恢复的 DAG。协议见[执行记录](execution-records.md)。
+`task/timeline.ts` 已从 Pi 分支日志与宿主状态构建 version 1 只读执行投影：task → phase → model → tool/check，包含 contains、next、retry 边，身份由任务、阶段序号、Pi entry ID、toolCallId 和独立 reviewer session ID 稳定生成。独立 reviewer 运行在新 Pi 子会话中，因此在父分支没有消息；时间线会在 review 阶段挂出明确的 `independent reviewer` model 节点，避免把它伪装成父会话的模型回合。右侧“执行”视图展示阶段、用量、实际工具结果与检查；缺失结果保持进行中或中断。历史通过与当前 freshness 分开展示；工具时长是消息间隔估算，包含等待。超过 1,600 节点明确提示省略。它不保存第二套动作日志，不包含私有思考或原始参数/输出，不承担调度，也不是任意节点可恢复的 DAG。协议见[执行记录](execution-records.md)。
 
 后续再明确动作依赖、审批与幂等边界。只有可幂等或有明确补偿策略的动作才考虑重新执行；不能通过事件日志反推授权。
 
@@ -169,7 +169,7 @@ Pi shell 的 `wall_time_seconds` 是波动的观察元数据：对符合内置 `
 | [OpenCode Agents](https://opencode.ai/docs/agents/) / [Compaction](https://opencode.ai/docs/compaction/) | Agent 能力配置和压缩职责 | 用户模式、只读策略及作用域参考；压缩继续由 Pi 执行 |
 | [DeepSeek Harness 子任务](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/subagent/subagent/README.md) | 异步生命周期和独立子任务视图 | 父归属句柄、结果回收、受限 worktree proposal；暂不开放任意团队拓扑 |
 | [OpenHands SDK LocalCritic](https://github.com/OpenHands/software-agent-sdk/blob/main/openhands-sdk/openhands/sdk/critic/impl/local.py) | 可观察的卡滞信号和升级处理 | 当前用确定性重复证据观察；尚无学习型 critic 或效果比较 |
-| [Anthropic 长程 harness 文章](https://www.anthropic.com/engineering/harness-design-long-running-apps) | 任务状态与独立验收 | 宿主检查点、原始失败回传、外部 oracle；同会话自审仍单独标注 |
+| [Anthropic 长程 harness 文章](https://www.anthropic.com/engineering/harness-design-long-running-apps) | 任务状态与独立验收 | 宿主检查点、原始失败回传、外部 oracle；Forge 的交付 reviewer 使用新上下文，仍单独标注为模型证据 |
 
 近期投入围绕三个可交付结果：
 
@@ -183,9 +183,9 @@ Bridge 数量不作为质量指标。工具评分、动态团队和向量库只�
 
 Forge is a host orchestration and product layer over pinned Pi Coding Agent 1.4.0. Pi owns model/tool turns, authentication, session history, compaction, MCP and resource discovery. Forge owns task admission, phase policies, bounded verification/review repairs, evidence freshness, project ownership, queues, child lifecycles and Web presentation.
 
-The task-center, staged workflow, child-agent and memory interactions described here belong to the Web client; the CLI retains Pi's TUI with Forge verification. Adaptive execution remains the default; explicit planned changes use Inspect → Plan → Implement → Verify → Review. Review currently shares the parent context and is not independent proof. Verification claims require current host evidence rather than model prose; ordinary answers do not require project checks. Cross-project queued tasks and parent-owned child agents have distinct concurrency and cancellation rules. Recovery re-inspects the workspace after explicit user action rather than replaying side effects.
+The task-center, staged workflow, child-agent and memory interactions described here belong to the Web client; the CLI retains Pi's TUI with Forge verification. Adaptive execution remains the default; explicit planned changes use Inspect → Plan → Implement → Verify → Review. The delivery review is a host-owned read-only gate with a fresh Pi context; it is independent of the implementation transcript but remains model evidence rather than proof of correctness. Verification claims require current host evidence rather than model prose; ordinary answers do not require project checks. Cross-project queued tasks and parent-owned child agents have distinct concurrency and cancellation rules. Recovery re-inspects the workspace after explicit user action rather than replaying side effects.
 
-Structured inspection preserves goals, constraints and acceptance IDs; unknown routing hints require read-only understanding or clarification. Planning retains these requirements and review must cover every ID. A shared host finalizer prevents checkpoint, mode-restoration or persistence errors from being shown as success. Counters are coalesced while critical transitions persist immediately.
+Structured inspection preserves goals, constraints and acceptance IDs for all planned user prompts. Hints never select stages or bypass completion gates, including in adaptive runs. Planning retains these requirements and review must cover every ID. A shared host finalizer prevents checkpoint, mode-restoration or persistence errors from being shown as success. Counters are coalesced while critical transitions persist immediately.
 
 Context combines Pi compaction, prioritized structured requirements and lexical recall of accepted scoped memory; unstructured legacy/adaptive requests have explicitly partial head/tail references. The right-side execution view projects stable phase/model/tool/check identities from the existing Pi journal. It is read-only history, not a recoverable action scheduler. Semantic retrieval, measured memory gains, universal per-action approvals, independent-review benefits, cost-scored tool routing, arbitrary teams, exactly-once side effects and comparative product benchmarks are not claimed.
 

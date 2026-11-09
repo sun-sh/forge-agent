@@ -55,8 +55,9 @@ export function sessionOutcome(data) {
       const acceptance = data.task.plan?.acceptance, findings = data.task.review?.acceptance;
       const acceptanceMet = !acceptance || Array.isArray(findings) && findings.length === acceptance.length && new Set(findings.map((item) => item.id)).size === findings.length && acceptance.every((item) => findings.some((finding) => finding.id === item.id && finding.status === 'met' && finding.evidence?.trim()));
       const reviewed = data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
+      const reviewLabel = data.task.reviewer?.context === 'independent' ? '独立审阅通过' : '模型审阅通过';
       if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
-      return { label: (data.task.kind === 'verify' ? '验证结束' : '执行结束') + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · 模型审阅通过' : ' · 未进行模型审阅'), kind: 'done' };
+      return { label: (data.task.kind === 'verify' ? '验证结束' : '执行结束') + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };
     }
   }
   if (data.running) return { label: '正在运行', kind: 'running' };

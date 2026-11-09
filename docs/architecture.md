@@ -31,8 +31,11 @@ flowchart TD
 The Web client's managed subagents use independent Pi sessions with a
 parent-owned catalog, restricted tools, shared budgets and cancellation. Writers
 use detached worktrees and produce proposals requiring explicit user application.
-See [subagent design and current boundaries](subagents.md). The planned workflow's
-existing self-review remains a separate gate; it is not automatically delegated.
+See [subagent design and current boundaries](subagents.md). Planned delivery uses
+a host-owned reviewer gate in a fresh read-only Pi child context, supplied with
+the goal, preserved requirements, observed changes and verification evidence.
+It receives no implementation transcript and remains model evidence rather than
+proof of correctness.
 
 | Capability | Implementation |
 | --- | --- |

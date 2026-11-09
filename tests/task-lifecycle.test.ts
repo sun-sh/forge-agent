@@ -7,6 +7,23 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 describe('shared execution finalization', () => {
+  it.each(['direct', 'planned'] as const)('restores interrupted %s work with its original strategy and an accurate diagnostic', (workflow) => {
+    const task = createExecutionState('Fix task', { workflow });
+    const restored = restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }]);
+    expect(restored).toMatchObject({ workflow, status: 'interrupted' });
+    expect(restored?.error).toContain(workflow === 'direct' ? '保留自适应执行策略' : '从只读检查重新开始');
+  });
+  it('keeps adaptive intent hints out of execution phases and completion gates', () => {
+    for (const prompt of ['Inspect and fix login, do not modify tests', 'Run tests, then finish the requested work']) {
+      const task = createExecutionState(prompt, { workflow: 'direct', mode: 'agent' });
+      expect(task).toMatchObject({ kind: 'undetermined', phase: 'implement' });
+      expect(task.intentHint).toMatch(/explore|verify/);
+      task.verification = { status: 'passed', attempts: 0, evidence: { freshness: 'stale', configHash: 'a'.repeat(64), workspace: { version: 1, scope: 'git', files: 1, digest: 'b'.repeat(64) } } };
+      expect(executionResult(task, { outcome: 'completed' }).status).toBe('needs_attention');
+      task.verification = undefined;
+      expect(executionResult(task, { outcome: 'completed' }, { pendingProposals: true }).status).toBe('needs_attention');
+    }
+  });
   it('keeps a model-completed run pending in durable and public state until host finalization succeeds', () => {
     const task = createExecutionState('Fix task', { workflow: 'planned' }); task.status = 'completed';
     const pending = pendingExecutionState(task, true)!;

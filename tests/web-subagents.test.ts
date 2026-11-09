@@ -28,6 +28,9 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
   const requests: any[] = [];
   const modelServer = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
+    // An abort can close a request before the body arrives. It is expected
+    // during child cancellation and must not become an unhandled test error.
+    if (!raw.trim()) { res.destroy(); return; }
     const input = JSON.parse(raw); requests.push(input);
     try { await handler(input, res); } catch (error) { if (!res.destroyed) res.writeHead(500).end(String(error)); }
   });
@@ -42,7 +45,7 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
   manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'parent context' }], api: 'openai-completions', provider: 'mock', model: 'test', stopReason: 'stop', timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
   const budget = new BudgetRuntime({ ...DEFAULT_BUDGET_LIMITS }); budget.start();
   let allowed = true;
-  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, allowed: () => allowed, onChange: () => {} };
+  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, allowed: () => allowed, reviewAllowed: () => allowed, onChange: () => {} };
   const agents = new ForgeSubagents(options); budget.setAbort(() => { void agents.cancelAll(); });
   closers.push(async () => { await agents.close(); budget.finish('aborted'); });
   return { home, project, runtime, manager, agents, budget, requests, options, setAllowed: (value: boolean) => { allowed = value; } };
@@ -50,6 +53,29 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('runs the host review gate in a fresh read-only child context', async () => {
+    const f = await fixture((input, res) => answer(res, input, '{"verdict":"ready","summary":"Independent","issues":[],"acceptance":[]}'));
+    const review = await f.agents.reviewGate('Original goal: inspect sample.txt. Evidence: current changes.', new AbortController().signal);
+    expect(review.model).toBe('mock/test');
+    expect(review.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(f.requests).toHaveLength(1);
+    expect(text(f.requests[0])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
+    expect(text(f.requests[0])).toContain('Return exactly the structured review JSON');
+    expect(text(f.requests[0])).not.toContain('result with explicit sections');
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
+    expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'review_gate', role: 'reviewer', status: 'completed', collectedAt: expect.any(String) });
+    await expect(f.agents.delegate([{ title: 'continue gate', role: 'reviewer', prompt: 'continue', id: review.sessionId }], 'follow-up')).rejects.toThrow('交付审阅不能续问');
+  });
+  it('carries a structured scope and acceptance handoff into an independent child', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'Completed: inspected sample.txt. Unverified: parent must run tests. Next: compare the result with acceptance.'));
+    const scope = { files: ['src/login.ts', 'test/login.test.ts'], deliverables: ['a focused implementation note'], acceptance: ['preserve the public API'], dependencies: ['the configured test command'] };
+    const [child] = await f.agents.delegate([{ ...task('Structured handoff'), scope }], 'structured-handoff');
+    expect(child).toMatchObject({ status: 'completed', scope });
+    expect(text(f.requests[0])).toContain('preserve the public API');
+    expect(text(f.requests[0])).toContain('HOST STRUCTURED HANDOFF');
+    expect(text(f.requests[0])).toContain('what the parent must do next');
+    expect((await f.agents.detail(child!.id)).agent).toMatchObject({ scope });
+  });
   it('never certifies an unread result when collection persistence fails', async () => {
     const f = await fixture((input, res) => answer(res, input, 'Result ready.'));
     const [child] = await f.agents.start([task()], 'async-result');

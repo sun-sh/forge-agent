@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'verify'; implementationWrite?: { path: string; content: string } } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string } } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
@@ -75,7 +75,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
 }
 
 describe('Web working modes with real Pi sessions', () => {
-  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', '请解决登录错误，不要修改现有测试', '请分析并解决登录问题，然后运行测试'])('implements unfamiliar change phrasing through actual writable Pi turns: %s', async (message) => {
+  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', '请解决登录错误，不要修改现有测试', '请分析并解决登录问题，然后运行测试', 'Inspect and fix login, do not modify tests', '查看并修复接口，不要删除数据库', 'Run tests, then fix the failing behavior'])('implements change phrasing through actual writable Pi turns regardless of the hint: %s', async (message) => {
     const f = await fixture({ implementationWrite: { path: 'implementation-result.txt', content: 'implemented through Pi write' } });
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
@@ -229,7 +229,9 @@ describe('Web working modes with real Pi sessions', () => {
     const timeline: any = await (await f.api('sessions/' + session.id + '/timeline?task=' + state.task.id)).json();
     expect(timeline.timeline).toMatchObject({ taskId: state.task.id, readOnly: true, truncated: false });
     expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(6);
-    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'model')).toHaveLength(4);
+    const modelNodes = timeline.timeline.nodes.filter((node: any) => node.kind === 'model');
+    expect(modelNodes).toHaveLength(4);
+    expect(modelNodes.find((node: any) => node.label === 'independent reviewer')).toMatchObject({ source: 'pi', status: 'completed' });
     expect((await f.api('sessions/' + session.id + '/timeline?task=unknown')).status).toBe(404);
     expect(state.verification).toMatchObject({ status: 'passed', runId: state.task.id, evidenceId: expect.any(String) });
     expect(f.requests).toHaveLength(4);
@@ -242,14 +244,14 @@ describe('Web working modes with real Pi sessions', () => {
     expect(restoredTimeline.timeline).toEqual(timeline.timeline);
     expect(f.requests).toHaveLength(4);
   });
-  it('short-circuits planned answer prompts instead of running the change pipeline', async () => {
-    const f = await fixture();
+  it('answers a planned prompt after structured inspection without running the change pipeline', async () => {
+    const f = await fixture({ briefIntent: 'answer' });
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     expect((await f.api('sessions/' + session.id + '/prompt', { message: 'What can you do?', workflow: 'planned' })).status).toBe(202);
     const state = await f.settled(session.id);
     expect(state.task).toMatchObject({ kind: 'answer', status: 'completed', phase: 'complete' });
-    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'complete']);
-    expect(f.requests).toHaveLength(1);
+    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'inspect', 'complete']);
+    expect(f.requests).toHaveLength(2);
     expect(f.requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('write');
     expect(state.verification?.status).not.toBe('passed');
     await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
@@ -257,10 +259,10 @@ describe('Web working modes with real Pi sessions', () => {
     await f.restart();
     const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
     expect(restored.task).toMatchObject({ kind: 'answer', status: 'completed' });
-    expect(f.requests).toHaveLength(1);
+    expect(f.requests).toHaveLength(2);
   });
   it.each(['What can you do?', 'Explain the project structure without changing files.'] as const)('keeps planned %s read-only even when the model requests a write', async (message) => {
-    const f = await fixture();
+    const f = await fixture({ briefIntent: message === 'What can you do?' ? 'answer' : 'explore' });
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     f.calls([{ name: 'write', arguments: { path: 'blocked-by-answer-router', content: 'must not write' } }]);
     await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
@@ -275,7 +277,7 @@ describe('Web working modes with real Pi sessions', () => {
     expect(session.workflow).toBe('direct');
     await f.api('sessions/' + session.id + '/prompt', { message: 'Fix the task' });
     const state = await f.settled(session.id);
-    expect(state.task).toMatchObject({ workflow: 'direct', kind: 'change', status: 'completed', phase: 'complete', budget: { status: 'completed' } }); expect(f.requests).toHaveLength(1);
+    expect(state.task).toMatchObject({ workflow: 'direct', kind: 'undetermined', intentHint: 'change', status: 'completed', phase: 'complete', budget: { status: 'completed' } }); expect(f.requests).toHaveLength(1);
     expect(f.requests[0].tools.map((tool: any) => tool.function.name)).toContain('write');
     expect(state.verification.status).toBe('passed');
   });
@@ -299,18 +301,18 @@ describe('Web working modes with real Pi sessions', () => {
     await f.api('sessions/' + restored.id + '/prompt', { message: 'Fix the next task' });
     const adaptive = await f.settled(restored.id);
     expect(adaptive.workflow).toBe('direct');
-    expect(adaptive.task).toMatchObject({ workflow: 'direct', kind: 'change', status: 'completed', phase: 'complete' });
+    expect(adaptive.task).toMatchObject({ workflow: 'direct', kind: 'undetermined', intentHint: 'change', status: 'completed', phase: 'complete' });
     expect(f.requests).toHaveLength(2);
   });
-  it.each([false, true])('runs verification-only tasks with fresh evidence and no model turns (untrusted: %s)', async (untrusted) => {
-    const f = await fixture({ untrusted });
+  it.each([false, true])('resolves a user verification request in read-only inspection before the trusted gate (untrusted: %s)', async (untrusted) => {
+    const f = await fixture({ untrusted, briefIntent: 'verify' });
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     await f.api('sessions/' + session.id + '/prompt', { message: 'Run the configured tests', workflow: 'planned' });
     const state = await f.settled(session.id);
-    expect(f.requests).toHaveLength(0);
+    expect(f.requests).toHaveLength(1);
     expect(state.task).toMatchObject({ kind: 'verify', status: untrusted ? 'failed' : 'completed' });
     expect(state.verification.runId).toBe(state.task.id);
-    expect(state.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user').at(-1).message.content).toBe('Run the configured tests');
+    expect(state.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user').at(-1).message.content).toEqual([{ type: 'text', text: 'Run the configured tests' }]);
     if (untrusted) await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
     else expect(state.verification.report.results[0].output).toContain('verified-exact-output');
   });
@@ -327,6 +329,34 @@ describe('Web working modes with real Pi sessions', () => {
     const state = await f.settled(session.id); expect(state.task.status).toBe('aborted');
     f.release(); expect(f.requests).toHaveLength(1);
     await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
+  });
+  it.each([false, true])('resumes an aborted adaptive task without switching to planning (restart: %s)', async (restart) => {
+    const f = await fixture();
+    let session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    f.pause();
+    expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Explain the source code', workflow: 'direct' })).status).toBe(202);
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1), { timeout: 15000 });
+    expect((await f.api('sessions/' + session.id + '/abort', {})).status).toBe(200);
+    const stopped = await f.settled(session.id);
+    expect(stopped.task).toMatchObject({ workflow: 'direct', status: 'aborted' });
+    f.release();
+    // A preference for the next message must not change the interrupted run.
+    expect((await f.api('sessions/' + session.id + '/workflow', { workflow: 'planned' })).status).toBe(200);
+    if (restart) {
+      await f.restart();
+      session = await (await f.api('session', { project: f.root, sessionFile: stopped.sessionFile })).json();
+      expect(session.task).toMatchObject({ id: stopped.task.id, workflow: 'direct', status: 'aborted' });
+    }
+    expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(202);
+    const resumed = await f.settled(session.id);
+    expect(resumed.workflow).toBe('direct');
+    expect(resumed.task).toMatchObject({ workflow: 'direct', status: 'completed', resumeOf: stopped.task.id, finalization: 'succeeded' });
+    expect(resumed.task.id).not.toBe(stopped.task.id);
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['implement']);
+    expect(resumed.task.review).toBeUndefined();
+    expect(resumed.verification.status).toBe('passed');
+    expect(f.requests).toHaveLength(2);
+    expect(JSON.stringify(f.requests[1])).not.toContain('PFORGE TASK PHASE');
   });
   it('explicitly continues an aborted planned task from inspection with a new run and fresh verification', async () => {
     const f = await fixture();

@@ -166,7 +166,7 @@ try {
     assert.equal(await evaluate(`localStorage.getItem('forge.composerHeight.v1')`), null);
     await fillComposer(id, original);
   };
-  captureFailure = async (error) => { await screenshot('failure'); const current = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession') || 'null')`); const snapshot = current?.id ? await (await fetch(origin + '/api/sessions/' + current.id, { headers: { 'x-pforge-token': server.token } })).json() : undefined; await writeFile(join(output, 'failure.json'), JSON.stringify({ error: String(error), pageText: await evaluate('document.body.innerText'), subagents: snapshot?.subagents, subagentRequests }, null, 2)); };
+  captureFailure = async (error) => { await screenshot('failure'); const current = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession') || 'null')`); const snapshot = current?.id ? await (await fetch(origin + '/api/sessions/' + current.id, { headers: { 'x-pforge-token': server.token } })).json() : undefined; await writeFile(join(output, 'failure.json'), JSON.stringify({ error: String(error), pageText: await evaluate('document.body.innerText'), outcome: snapshot?.outcome, workflow: snapshot?.workflow, task: snapshot?.task, subagents: snapshot?.subagents, subagentRequests }, null, 2)); };
   await cdp('Runtime.enable'); await cdp('Page.enable');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url: origin + '/?token=' + 'expired'.repeat(5) });
@@ -524,7 +524,7 @@ try {
   await click('#mode-picker [data-choose-mode="agent:planned"]');
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划')`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 模型审阅通过'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 独立审阅通过'`);
   assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
@@ -533,6 +533,7 @@ try {
   await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 6`);
   assert.equal(await evaluate(`document.querySelector('[data-review-view="execution"]').getAttribute('aria-selected')`), 'true');
   assert.ok((await evaluate(`document.getElementById('task-plan').textContent`)).includes('A1'));
+  assert.ok((await evaluate(`document.getElementById('execution-timeline').textContent`)).includes('独立交付审阅'));
   await click('#task-plan summary');
   await click('#execution-timeline .execution-phase:nth-of-type(3) > summary');
   await screenshot('execution-history');
@@ -600,7 +601,7 @@ try {
   await screenshot('streaming-markdown');
   await click('#stop-button');
   await waitFor(`!document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('resume-task-button').disabled`);
-  assert.equal(await evaluate(`document.getElementById('run-status-label').textContent`), '回答已停止');
+  assert.equal(await evaluate(`document.getElementById('run-status-label').textContent`), '任务已停止');
   assert.equal(await evaluate(`document.getElementById('resume-task-button').closest('form').id`), 'followup-form');
   assert.equal(modelRequests, previousRunRequests + 1);
   await cdp('Page.reload');
@@ -608,7 +609,7 @@ try {
   assert.equal(modelRequests, previousRunRequests + 1);
   await screenshot('composer-stopped');
   await click('#resume-task-button');
-  await waitFor(`document.getElementById('run-status-label').textContent === '回答结束 · 未执行修改'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 未进行模型审阅'`);
   assert.equal(modelRequests, previousRunRequests + 2);
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('followup-send').classList.contains('hidden')`), true);
   holdNextModel = true;
@@ -630,7 +631,7 @@ try {
   const drafted = 'unsent planned task follow-up';
   await evaluate(`document.getElementById('followup-prompt').value = ${JSON.stringify(drafted)}; document.getElementById('followup-prompt').dispatchEvent(new Event('input'))`);
   await cdp('Page.reload');
-  await waitFor(`document.getElementById('run-status-label').textContent === '回答结束 · 未执行修改'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 未进行模型审阅'`);
   assert.equal(await evaluate(`document.getElementById('followup-prompt').value`), drafted);
   assert.equal(await evaluate(`document.getElementById('followup-mode-select').value`), 'agent:planned');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('#followup-mode-picker-button [data-workflow-label]')).display === 'none'`), false);

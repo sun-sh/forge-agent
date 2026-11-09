@@ -1316,6 +1316,7 @@ describe('Web client integration', () => {
     const nodes = [
       { id: 'task', kind: 'task' }, { id: 'phase', parentId: 'task', kind: 'phase', label: 'implement', status: 'completed', durationMs: 1000, attempt: 2 },
       { id: 'model', parentId: 'phase', kind: 'model', status: 'completed', tokens: 42 },
+      { id: 'reviewer', parentId: 'phase', kind: 'model', label: 'independent reviewer', status: 'completed' },
       { id: 'tool', parentId: 'model', kind: 'tool', label: '<img src=x>', status: 'interrupted', durationMs: 500, timing: 'message_interval' }
     ];
     const original = window.fetch;
@@ -1326,6 +1327,7 @@ describe('Web client integration', () => {
     const timeline = window.document.getElementById('execution-timeline');
     await vi.waitFor(() => expect(timeline.textContent).toContain('第 2 次'));
     expect(app.state.changes.reviewView).toBe('execution'); expect(timeline.textContent).toContain('42 tokens');
+    expect(timeline.textContent).toContain('独立交付审阅');
     expect(timeline.textContent).toContain('已中断 · 约 0.5s'); expect(timeline.querySelector('img')).toBeNull();
     expect(window.document.getElementById('task-plan').textContent).toContain('A1'); expect(window.document.getElementById('task-plan').querySelector('img')).toBeNull();
     timeline.querySelector('details').open = true;

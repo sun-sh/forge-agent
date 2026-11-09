@@ -53,6 +53,30 @@ export function executionTimeline(entries: readonly TimelineEntry[], options: { 
     add({ id: phaseId(index), parentId: task.id, kind: 'phase', label: phase.phase, status: phaseStatus, source: 'host', startedAt: phase.startedAt, endedAt: phase.endedAt, durationMs: duration(phase.startedAt, phase.endedAt), timing: 'host', attempt });
     if (index) result.edges.push({ from: phaseId(index - 1), to: phaseId(index), kind: phase.phase === 'implement' && attempt > 1 ? 'retry' : 'next' });
   }
+  // The delivery reviewer runs in a fresh Pi sub-session, so it has no
+  // assistant message in the parent branch to project. Record the host-owned
+  // reviewer handoff explicitly instead of pretending it was another parent
+  // model turn. The durable reviewer id keeps this projection stable after a
+  // restart and across repeated timeline reads.
+  for (const { task: observed } of history) {
+    if (!observed.reviewer) continue;
+    const reviewIndex = observed.phases.reduce((latest, phase, index) => phase.phase === 'review' ? index : latest, -1);
+    if (reviewIndex >= 0) {
+      const reviewPhase = task.phases[reviewIndex]!;
+      add({
+        id: task.id + ':reviewer:' + observed.reviewer.sessionId,
+        parentId: phaseId(reviewIndex),
+        kind: 'model',
+        label: 'independent reviewer',
+        status: 'completed',
+        source: 'pi',
+        startedAt: reviewPhase.startedAt,
+        endedAt: reviewPhase.endedAt,
+        durationMs: duration(reviewPhase.startedAt, reviewPhase.endedAt),
+        timing: 'host'
+      });
+    }
+  }
   const start = history[0]!.index;
   const end = snapshots.find((item) => item.index > start && item.task.id !== task.id)?.index ?? entries.length;
   let phaseIndex = Math.max(0, history[0]!.task.phases.length - 1);

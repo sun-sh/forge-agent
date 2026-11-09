@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { createExecutionState, type TaskState } from '../src/task/controller.js';
 import { executionTimeline, type TimelineEntry } from '../src/task/timeline.js';
 
@@ -7,6 +8,24 @@ const call = (id: string, time = 1000): TimelineEntry => ({ type: 'message', id,
 const output = (time = 1050): TimelineEntry => ({ type: 'message', message: { role: 'toolResult', toolCallId: 'same-tool-id', timestamp: time, content: [{ type: 'text', text: 'PRIVATE_OUTPUT' }], isError: false } });
 
 describe('Pi-backed read-only execution projection', () => {
+  it('retains each independent reviewer under its own attempt and does not attach the previous result to a running retry', () => {
+    const task = createExecutionState('Fix task', { workflow: 'planned' });
+    task.phase = 'review'; task.phases = [{ phase: 'review', startedAt: task.startedAt, endedAt: task.updatedAt }];
+    const first = randomUUID(), second = randomUUID();
+    task.reviewer = { sessionId: first, model: 'mock/reviewer', context: 'independent' };
+    const entries = [snapshot(task)];
+    task.phases.push({ phase: 'implement', startedAt: task.updatedAt, endedAt: task.updatedAt }, { phase: 'review', startedAt: task.updatedAt });
+    task.reviewer = undefined; entries.push(snapshot(task));
+    const running = executionTimeline(entries, { activeTaskId: task.id })!;
+    expect(running.nodes.filter((node) => node.label === 'independent reviewer')).toMatchObject([{ parentId: task.id + ':phase:0' }]);
+    task.reviewer = { sessionId: second, model: 'mock/reviewer', context: 'independent' };
+    task.phases[2]!.endedAt = task.updatedAt; task.status = 'completed'; entries.push(snapshot(task));
+    const restored = executionTimeline(JSON.parse(JSON.stringify(entries)))!;
+    expect(restored.nodes.filter((node) => node.label === 'independent reviewer').map((node) => ({ id: node.id, parentId: node.parentId }))).toEqual([
+      { id: task.id + ':reviewer:' + first, parentId: task.id + ':phase:0' },
+      { id: task.id + ':reviewer:' + second, parentId: task.id + ':phase:2' }
+    ]);
+  });
   it('uses stable identities, actual results and token usage without exposing content or replay controls', () => {
     const task = createExecutionState('Fix project', { workflow: 'direct' });
     const entries = [snapshot(task), call('entry-1'), output()];

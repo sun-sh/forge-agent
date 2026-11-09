@@ -8,6 +8,23 @@ const briefDraftSchema = z.object({ ...briefFields, acceptance: z.array(criterio
 export const taskBriefSchema = z.object({ ...briefFields, acceptance: z.array(identifiedCriterion).max(12) }).strict()
   .refine((brief) => (brief.intent !== 'change' || brief.acceptance.length > 0) && brief.acceptance.every((item, index) => item.id === 'A' + (index + 1)) && JSON.stringify(brief).length <= 12000, 'Incomplete or oversized task understanding');
 export type TaskBrief = z.infer<typeof taskBriefSchema>;
+/**
+ * Host-owned requirements carried across phases and context compaction.
+ * Keep this separate from the model's intent classification so a later
+ * phase cannot silently replace the user's goal or acceptance conditions.
+ */
+export const taskRequirementsSchema = z.object({
+  goal: text(4000),
+  affectedPaths: z.array(text(1000)).max(50),
+  constraints: z.array(text(1000)).max(20),
+  acceptance: z.array(identifiedCriterion).max(12),
+  unresolved: z.array(text(1000)).max(10)
+}).strict().refine((requirements) => requirements.acceptance.every((item, index) => item.id === 'A' + (index + 1)) && JSON.stringify(requirements).length <= 12000, 'Incomplete or oversized task requirements');
+export type TaskRequirements = z.infer<typeof taskRequirementsSchema>;
+
+export function taskRequirements(brief: TaskBrief): TaskRequirements {
+  return taskRequirementsSchema.parse({ goal: brief.goal, affectedPaths: brief.affectedPaths, constraints: brief.constraints, acceptance: brief.acceptance, unresolved: brief.unresolved });
+}
 const fields = {
   version: z.literal(1), summary: text(4000),
   affectedPaths: z.array(text(1000)).max(50), constraints: z.array(text(1000)).max(20),

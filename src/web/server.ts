@@ -703,6 +703,9 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       allowed: () => !session.closed && session.running && session.mode === 'agent' && !session.controller.readOnly
         && !(session.controller.active && ['answer', 'explore'].includes(session.controller.state?.kind ?? ''))
         && trustView(trustStore, session.settingsManager, session.project).trusted,
+      reviewAllowed: () => !session.closed && session.running && session.mode === 'agent'
+        && session.controller.active && session.controller.state?.phase === 'review'
+        && trustView(trustStore, session.settingsManager, session.project).trusted,
       onChange: (agents) => emit(session, { type: 'forge_subagents', agents })
     });
   }
@@ -902,6 +905,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           session.verification.outcome.attempts = session.controller.state!.repairs;
           return session.verification.verifyTrusted(signal);
         },
+        review: (text, signal) => session.subagents!.reviewGate('PFORGE TASK PHASE: review\n' + text, signal),
         refreshVerification: (signal) => session.verification.refreshEvidence(signal),
         baseline: (signal) => captureGit(session.project, signal),
         changes: (baseline, signal) => compareGit(session.project, baseline, signal)
@@ -1829,7 +1833,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请选择可用模型并切换 Agent 模式后继续');
           const previous = session.controller.state;
           if (!previous || !['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(previous.status)) throw new HttpError(409, 'No interrupted task to continue');
-          await launchPrompt(session, previous.prompt, 'planned', previous.id);
+          const workflow: WebWorkflow = previous.workflow === 'direct' ? 'direct' : 'planned';
+          await launchPrompt(session, previous.prompt, workflow, previous.id);
           json(response, 202, { accepted: true }); return;
         }
         if (action === 'changes' && request.method === 'GET') {

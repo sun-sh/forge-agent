@@ -8,15 +8,20 @@ export const budgetLimitsSchema = z.object({
   maxDurationMs: z.number().int().min(60_000).max(86_400_000),
   maxModelTurns: z.number().int().min(1).max(1000),
   maxToolCalls: z.number().int().min(1).max(10_000),
-  maxTotalTokens: z.number().int().min(1_000).max(100_000_000),
+  // Zero disables the optional cumulative request-token guard (includes cache reads).
+  maxTotalTokens: z.number().int().min(0).max(100_000_000),
+  maxOutputTokens: z.number().int().min(1_000).max(10_000_000).default(200_000),
   maxCostUsd: z.number().finite().min(0).max(100_000)
-}).strict();
+}).strict().refine((limits) => limits.maxTotalTokens === 0 || limits.maxTotalTokens >= 1_000, {
+  message: '累计 token 上限只能为 0（关闭）或至少 1000'
+});
 export type BudgetLimits = z.infer<typeof budgetLimitsSchema>;
 export const DEFAULT_BUDGET_LIMITS: BudgetLimits = {
   maxDurationMs: 60 * 60 * 1000,
   maxModelTurns: 150,
   maxToolCalls: 300,
-  maxTotalTokens: 5_000_000,
+  maxTotalTokens: 0,
+  maxOutputTokens: 200_000,
   maxCostUsd: 25
 };
 
@@ -95,9 +100,15 @@ export class BudgetRuntime {
   private abort?: () => void;
   private onChange?: (snapshot: BudgetSnapshot) => void;
   private readonly observers = new Set<(snapshot: BudgetSnapshot) => void>();
-  constructor(readonly limits: BudgetLimits, onChange?: (snapshot: BudgetSnapshot) => void) {
+  readonly limits: BudgetLimits;
+  constructor(limits: BudgetLimits, onChange?: (snapshot: BudgetSnapshot) => void) {
+    // Persisted settings are parsed by budgetLimitsSchema. The small merge here
+    // also keeps programmatic callers and older test/integration adapters safe
+    // when they construct a runtime from a pre-output-cap object.
+    this.limits = { ...DEFAULT_BUDGET_LIMITS, ...limits, maxOutputTokens: Number.isInteger((limits as Partial<BudgetLimits>).maxOutputTokens)
+      ? (limits as Partial<BudgetLimits>).maxOutputTokens! : DEFAULT_BUDGET_LIMITS.maxOutputTokens };
     this.onChange = onChange;
-    this.snapshotValue = { version: 1, status: 'running', startedAt: new Date().toISOString(), limits: { ...limits }, modelTurns: 0, toolCalls: 0, totalTokens: 0, costUsd: 0, costIncomplete: false, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    this.snapshotValue = { version: 1, status: 'running', startedAt: new Date().toISOString(), limits: { ...this.limits }, modelTurns: 0, toolCalls: 0, totalTokens: 0, costUsd: 0, costIncomplete: false, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   }
   start() {
     this.timer = setTimeout(() => this.exceed(`任务超过总时限 ${Math.round(this.limits.maxDurationMs / 60000)} 分钟`), this.limits.maxDurationMs);
@@ -145,7 +156,8 @@ export class BudgetRuntime {
       this.snapshotValue.usage![key] += typeof count === 'number' && Number.isFinite(count) ? Math.round(Math.max(0, count)) : 0;
     }
     if (this.snapshotValue.status === 'running') {
-      if (this.snapshotValue.totalTokens > this.limits.maxTotalTokens) this.exceed(`任务超过累计 token 上限 ${this.limits.maxTotalTokens}（含缓存读取）`);
+      if (this.limits.maxTotalTokens > 0 && this.snapshotValue.totalTokens > this.limits.maxTotalTokens) this.exceed(`任务超过显式配置的累计请求 token 上限 ${this.limits.maxTotalTokens}（含缓存读取）`);
+      else if (this.snapshotValue.usage!.output > this.limits.maxOutputTokens) this.exceed(`任务超过生成 token 上限 ${this.limits.maxOutputTokens}`);
       else if (this.snapshotValue.costUsd > this.limits.maxCostUsd) this.exceed(`任务超过费用上限 $${this.limits.maxCostUsd}`);
     }
     this.changed(); return this.snapshotValue.status === 'running';

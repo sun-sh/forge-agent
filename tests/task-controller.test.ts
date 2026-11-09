@@ -8,12 +8,14 @@ import handoff from './fixtures/task-handoff.json' with { type: 'json' };
 
 const evidence = { workspace: { version: 1 as const, scope: 'git' as const, digest: 'a'.repeat(64), files: 1 }, configHash: 'b'.repeat(64), freshness: 'current' as const };
 
-function fixture(verification: PforgeVerificationOutcome = { status: 'passed', attempts: 0, evidence, evidenceId: randomUUID(), report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }, review = '{"verdict":"ready","summary":"Reviewed","issues":[]}') {
+function fixture(verification: PforgeVerificationOutcome = { status: 'passed', attempts: 0, evidence, evidenceId: randomUUID(), report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }, review = '{"verdict":"ready","summary":"Reviewed","issues":[]}', briefIntent: 'answer' | 'explore' | 'change' | 'verify' | 'clarify' = 'change') {
   const reviewText = (() => { try { return JSON.stringify({ acceptance: handoff.acceptance, ...JSON.parse(review) }); } catch { return review; } })();
+  const brief = { ...handoff.brief, intent: briefIntent };
   const saved: TaskState[] = [], phases: string[] = [], messages: string[] = [];
   const controller = new TaskController((state) => saved.push(state));
   const adapter: TaskAdapter = {
-    async execute(phase, message) { phases.push(phase); messages.push(message); return phase === 'review' ? reviewText : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : phase + ' complete'; },
+    async execute(phase, message) { phases.push(phase); messages.push(message); return phase === 'review' ? reviewText : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(brief) : phase + ' complete'; },
+    async review(message, signal) { return { text: await adapter.execute('review', message, false, signal), sessionId: randomUUID(), model: 'mock/independent-reviewer' }; },
     async verify() { return verification; },
     async refreshVerification() { return verification; },
     async baseline() { return { available: true, files: [] }; },
@@ -32,20 +34,20 @@ describe('task workflow controller', () => {
   });
   it('routes an explicit host verification action without inferring intent from its descriptive text', async () => {
     const f = fixture(), prompt = '运行项目配置的验证命令，检查刚刚应用的子任务变更。';
-    expect(taskKind(prompt)).toBe('undetermined');
+    expect(taskKind(prompt)).toBe('verify');
     const task = await f.controller.run(prompt, 0, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent', requestedKind: 'verify' });
     expect(task).toMatchObject({ kind: 'verify', status: 'completed' });
     expect(task.phases.map((phase) => phase.phase)).toEqual(['verify', 'complete']);
     expect(f.phases).toEqual([]);
   });
-  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', 'Make the sign-in button blue', '请解决登录错误，不要修改现有测试', '请解决登录接口的 500 错误，然后运行测试', '请分析并解决登录问题'])('resolves unfamiliar implementation phrasing without silently completing inspection: %s', async (prompt) => {
-    const f = fixture(); expect(taskKind(prompt)).toBe('undetermined');
+  it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', 'Make the sign-in button blue', '请解决登录错误，不要修改现有测试', '请解决登录接口的 500 错误，然后运行测试', '请分析并解决登录问题', 'Inspect and fix login, do not modify tests', '查看并修复接口，不要删除数据库', 'Run tests, then fix the failing behavior', '继续'])('resolves implementation phrasing through structured inspection regardless of the hint: %s', async (prompt) => {
+    const f = fixture();
     const task = await f.controller.run(prompt, 0, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent' });
-    expect(task).toMatchObject({ intentHint: 'undetermined', kind: 'change', mode: 'agent', status: 'completed' });
+    expect(task).toMatchObject({ intentHint: expect.any(String), kind: 'change', mode: 'agent', status: 'completed' });
     expect(f.phases).toEqual(['inspect', 'plan', 'implement', 'review']); expect(task.verification?.status).toBe('passed');
   });
-  it('keeps ambiguous understanding pending and cannot downgrade an explicit implementation request', async () => {
-    for (const [prompt, intent] of [['处理一下那个', 'clarify'], ['Fix login', 'explore']] as const) {
+  it('keeps an ambiguous structured understanding pending instead of guessing', async () => {
+    for (const [prompt, intent] of [['处理一下那个', 'clarify'], ['Fix login', 'change']] as const) {
       const f = fixture(); const execute = f.adapter.execute;
       f.adapter.execute = async (...args) => args[0] === 'inspect' ? JSON.stringify({ ...handoff.brief, intent, unresolved: ['Which visible result is required?'] }) : execute(...args);
       const task = await f.controller.run(prompt, 0, f.adapter);
@@ -70,11 +72,14 @@ describe('task workflow controller', () => {
   it('persists host-assigned acceptance IDs and passes the validated plan to implementation and review', async () => {
     const f = fixture(); const task = await f.controller.run('Fix the task without changing protected files', 0, f.adapter);
     expect(task.plan?.acceptance).toMatchObject([{ id: 'A1', criterion: handoff.plan.acceptance[0]!.criterion }]);
+    expect(task.requirements).toMatchObject({ goal: handoff.brief.goal, constraints: handoff.brief.constraints, acceptance: [{ id: 'A1' }] });
     expect(f.messages[2]).toContain('MODEL-AUTHORED REFERENCE DATA'); expect(f.messages[2]).toContain('"id":"A1"');
     expect(f.messages.at(-1)).toContain('exactly one acceptance result');
     expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }])?.plan).toEqual(task.plan);
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }])?.requirements).toEqual(task.requirements);
     const legacy = { ...task }; delete legacy.plan; delete legacy.review!.acceptance;
-    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: legacy }])?.status).toBe('completed');
+    delete legacy.requirements;
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: legacy }])).toMatchObject({ status: 'completed', requirements: task.requirements });
   });
   it.each(['plain prose', JSON.stringify({ ...handoff.plan, trust: true }), JSON.stringify({ ...handoff.plan, acceptance: [] })])('stops malformed plan handoff before implementation: %s', async (output) => {
     const f = fixture(); const execute = f.adapter.execute; let checked = false;
@@ -107,16 +112,16 @@ describe('task workflow controller', () => {
     ['Extend Queue.drain(limit = Infinity) in index.js and its public index.d.ts declaration. Do not change existing tests or notes.txt. Run configured verification.', 'change'],
     ['扩展队列的 drain 参数并运行验证，不要修改现有测试。', 'change'],
     ['Explain how to extend Queue.drain and run tests.', 'explore'],
-    ['Extend the API. Do not modify any files.', 'explore'],
+    ['Extend the API. Do not modify any files.', 'change'],
     ['Implement CustomProviders.remove(id, expectedRevision). Do not modify package files, existing tests, or notes.txt. Run all configured verification.', 'change'],
     ['Fix the bug. Do not modify tests or package-lock.json.', 'change'],
     ['修复登录问题，不要修改现有测试和 package.json。运行验证。', 'change'],
     ['解释项目结构，不要修改现有测试。', 'explore'],
     ['Review the code. Do not modify tests or package.json.', 'explore'],
-    ['Fix the bug. Do not modify any files, including tests.', 'explore'],
-    ['Fix the bug. Do not make any changes.', 'explore'],
-    ['Fix the bug. Do not modify tests or execute commands.', 'explore'],
-    ['修复登录问题，不要修改任何文件。', 'explore'],
+    ['Fix the bug. Do not modify any files, including tests.', 'change'],
+    ['Fix the bug. Do not make any changes.', 'change'],
+    ['Fix the bug. Do not modify tests or execute commands.', 'change'],
+    ['修复登录问题，不要修改任何文件。', 'change'],
     ['Do not delete files.', 'explore'],
     ['不要删除文件。', 'explore'],
     ['Implement provider removal. Do not delete protected tests.', 'change'],
@@ -134,11 +139,11 @@ describe('task workflow controller', () => {
     expect(taskKind('修复接口，但不要删除数据库')).toBe('change');
     expect(taskKind('Fix the API. Do not delete the database.')).toBe('change');
     expect(taskKind('继续')).toBe('undetermined');
-    expect(taskKind('继续', { previousUserPrompts: ['修复接口'] })).toBe('change');
+    expect(taskKind('继续', { previousUserPrompts: ['修复接口'] })).toBe('undetermined');
     expect(taskKind('continue', { pendingKind: 'verify' })).toBe('verify');
-    expect(taskKind('按刚才的方案处理', { previousUserPrompts: ['请分析登录问题并提出计划，不要修改任何文件'] })).toBe('change');
-    expect(taskKind('继续，但不要修改任何文件', { pendingKind: 'change' })).toBe('explore');
-    expect(taskKind('继续', { previousUserPrompts: ['Explain the project structure'] })).toBe('explore');
+    expect(taskKind('按刚才的方案处理', { previousUserPrompts: ['请分析登录问题并提出计划，不要修改任何文件'] })).toBe('undetermined');
+    expect(taskKind('继续，但不要修改任何文件', { pendingKind: 'change' })).toBe('change');
+    expect(taskKind('继续', { previousUserPrompts: ['Explain the project structure'] })).toBe('undetermined');
   });
   it('repairs concrete review defects, then verifies and reviews again using the same repair allowance', async () => {
     const f = fixture(); let reviews = 0, checks = 0;
@@ -189,6 +194,23 @@ describe('task workflow controller', () => {
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
   });
+  it('refuses to certify a planned change when the independent reviewer is unavailable', async () => {
+    const f = fixture(); f.adapter.review = undefined;
+    const result = await f.controller.run('Fix the task', 0, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', error: '独立审阅不可用，未将同会话自审作为完成证据。' });
+    expect(result.review).toBeUndefined();
+  });
+  it('keeps the ending of a long original request in the reviewer handoff without slicing the JSON envelope', async () => {
+    const f = fixture(); let reviewPrompt = '';
+    const originalReview = f.adapter.review!;
+    f.adapter.review = async (message, signal) => { reviewPrompt = message; return originalReview(message, signal); };
+    const prompt = 'background '.repeat(8_000) + '\nTAIL_ACCEPTANCE: preserve auth.ts and run the configured verification';
+    const result = await f.controller.run(prompt, 0, f.adapter);
+    expect(result.status).toBe('completed');
+    expect(reviewPrompt).toContain('TAIL_ACCEPTANCE');
+    expect(reviewPrompt).toContain('"understanding"');
+    expect(reviewPrompt).toContain('"sha256"');
+  });
   it('persists optional review notes without treating them as unresolved defects', async () => {
     const notes = ['Optional improvement outside the requested scope.'];
     const f = fixture(undefined, JSON.stringify({ verdict: 'ready', summary: 'Acceptance criteria met', issues: [], notes }));
@@ -205,26 +227,31 @@ describe('task workflow controller', () => {
     const f = fixture(undefined, JSON.stringify(review));
     expect((await f.controller.run('Fix the task', 0, f.adapter)).status).toBe('needs_attention');
   });
-  it('routes answer and exploration prompts through one read-only model turn', async () => {
-    const f = fixture(); let baselines = 0; let verifications = 0; let changes = 0;
-    f.adapter.baseline = async () => { baselines++; return { available: true, files: [] }; };
-    f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, report: { passed: true, summary: 'unexpected', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: '' }] } }; };
-    f.adapter.changes = async () => { changes++; return { available: true, truncated: false, files: [] }; };
-    const answer = await f.controller.run('What can you do?', 2, f.adapter);
+  it('resolves answer and exploration prompts through structured inspection without implementation or verification', async () => {
+    let baselines = 0, verifications = 0, changes = 0;
+    const answerFixture = fixture(undefined, undefined, 'answer');
+    answerFixture.adapter.baseline = async () => { baselines++; return { available: true, files: [] }; };
+    answerFixture.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, report: { passed: true, summary: 'unexpected', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: '' }] } }; };
+    answerFixture.adapter.changes = async () => { changes++; return { available: true, truncated: false, files: [] }; };
+    const answer = await answerFixture.controller.run('What can you do?', 2, answerFixture.adapter);
     expect(answer).toMatchObject({ kind: 'answer', status: 'completed', phase: 'complete' });
     expect(answer.phases.at(-1)?.endedAt).toBeTypeOf('string');
-    expect(f.saved.at(-1)).toEqual(answer);
-    expect(f.phases).toEqual(['inspect']);
+    expect(answerFixture.saved.at(-1)).toEqual(answer);
+    expect(answerFixture.phases).toEqual(['inspect', 'inspect']);
     expect(baselines).toBe(0); expect(verifications).toBe(0); expect(changes).toBe(0);
-    const explore = await f.controller.run('Explain the project structure without changing files.', 2, f.adapter);
+    const exploreFixture = fixture(undefined, undefined, 'explore');
+    exploreFixture.adapter.baseline = answerFixture.adapter.baseline;
+    exploreFixture.adapter.verify = answerFixture.adapter.verify;
+    exploreFixture.adapter.changes = answerFixture.adapter.changes;
+    const explore = await exploreFixture.controller.run('Explain the project structure without changing files.', 2, exploreFixture.adapter);
     expect(explore).toMatchObject({ kind: 'explore', status: 'completed', phase: 'complete' });
-    expect(f.phases).toEqual(['inspect', 'inspect']);
+    expect(exploreFixture.phases).toEqual(['inspect', 'inspect']);
     expect(baselines).toBe(0); expect(verifications).toBe(0); expect(changes).toBe(0);
   });
   it('routes an explicit verification request directly to the verification gate', async () => {
     const f = fixture(); let verifications = 0;
     f.adapter.verify = async () => { verifications++; return { status: 'passed', attempts: 0, evidence, report: { passed: true, summary: 'PASS', results: [{ command: 'test', exitCode: 0, passed: true, durationMs: 1, output: 'ok' }] } }; };
-    const result = await f.controller.run('Run the configured tests.', 2, f.adapter);
+    const result = await f.controller.run('Run the configured tests.', 2, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent', requestedKind: 'verify' });
     expect(result).toMatchObject({ kind: 'verify', status: 'completed', phase: 'complete' });
     expect(f.phases).toEqual([]);
     expect(verifications).toBe(1);
@@ -234,7 +261,7 @@ describe('task workflow controller', () => {
   });
   it.each(['failed', 'skipped', 'unchecked'] as const)('does not claim verification success for %s evidence', async (status) => {
     const f = fixture({ status, attempts: 0 });
-    const result = await f.controller.run('Run tests', 2, f.adapter);
+    const result = await f.controller.run('Run tests', 2, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent', requestedKind: 'verify' });
     expect(result.status).toBe(status === 'failed' ? 'failed' : 'needs_attention');
     expect(result.repairs).toBe(0); expect(f.messages).toEqual([]);
   });

@@ -9,17 +9,21 @@ function excerpt(text: string, limit = 1600): string {
 export function taskCheckpoint(task?: TaskState): string {
   if (!task || task.status !== 'running') return '';
   const previous = [...task.phases].reverse().find((phase) => phase.endedAt && phase.summary);
+  const requirements = task.requirements ?? (task.brief ? {
+    goal: task.brief.goal, constraints: task.brief.constraints, acceptance: task.brief.acceptance,
+    affectedPaths: task.brief.affectedPaths, unresolved: task.brief.unresolved
+  } : undefined);
   const value: Record<string, unknown> = {
-    goal: task.brief?.goal ?? excerpt(task.prompt), workflow: task.workflow ?? 'planned', phase: task.phase,
-    originalRequest: { taskId: task.id, characters: task.prompt.length, excerptOnly: !task.brief && task.prompt.length > 1600 },
-    ...(task.brief ? { requirements: { constraints: task.brief.constraints, acceptance: task.brief.acceptance, affectedPaths: task.brief.affectedPaths, unresolved: task.brief.unresolved } }
+    ...(!requirements ? { goal: excerpt(task.prompt) } : {}), workflow: task.workflow ?? 'planned', phase: task.phase,
+    originalRequest: { taskId: task.id, characters: task.prompt.length, excerptOnly: !requirements && task.prompt.length > 1600 },
+    ...(requirements ? { requirements }
       : task.plan ? { requirements: { constraints: task.plan.constraints, acceptance: task.plan.acceptance } } : {}),
     ...(task.resumeOf ? { resumedFrom: task.resumeOf, reminder: 'Reinspect current files; do not replay old operations.' } : {}),
     verification: task.verification ? { status: task.verification.status, freshness: task.verification.evidence?.freshness ?? 'unconfirmed' } : { status: 'not_run' }
   };
   // JSON escaping can make even a short raw excerpt large. Reduce background,
   // never complete requirements, when restoring legacy records without a brief.
-  if (!task.brief) {
+  if (!requirements) {
     let limit = 1600;
     while (JSON.stringify(value).length > 16000 && limit > 32) {
       limit = Math.floor(limit / 2);

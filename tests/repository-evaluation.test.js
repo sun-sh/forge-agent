@@ -5,7 +5,7 @@ import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadRepositorySuite } from '../scripts/repository-suite.mjs';
+import { checkoutRepositoryRevision, loadRepositorySuite } from '../scripts/repository-suite.mjs';
 const execute = promisify(execFile), cleanups = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 async function fixture() {
@@ -52,6 +52,17 @@ describe('pinned repository evaluation harness', () => {
     f.suite.tasks[0].oracle = '../outside.mjs'; await writeFile(f.path, JSON.stringify(f.suite)); await expect(loadRepositorySuite(f.path)).rejects.toThrow();
     f.suite.tasks[0].oracle = 'oracle.mjs'; f.suite.tasks.push({ ...f.suite.tasks[0] }); await writeFile(f.path, JSON.stringify(f.suite)); await expect(loadRepositorySuite(f.path)).rejects.toThrow('unique');
   });
+  it('uses a temporary worktree for local partial or full mirrors and removes it after evaluation', async () => {
+    const f = await fixture(), project = join(f.root, 'worktree');
+    const cleanup = await checkoutRepositoryRevision(f.source, f.suite.tasks[0].revision, project);
+    expect((await execute('git', ['rev-parse', 'HEAD'], { cwd: project, windowsHide: true })).stdout.trim()).toBe(f.suite.tasks[0].revision);
+    await writeFile(join(project, 'solution.mjs'), 'export const add = (a, b) => a + b;\n');
+    expect(await readFile(join(f.source, 'solution.mjs'), 'utf8')).toContain('a - b');
+    await cleanup();
+    await expect(readFile(join(project, 'solution.mjs'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(f.source, 'solution.mjs'), 'utf8')).toContain('a - b');
+    await cleanup();
+  });
   it('prepares without model calls and refuses command execution without explicit suite trust', async () => {
     const f = await fixture();
     const prepared = await execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--prepare'], { windowsHide: true });
@@ -60,6 +71,33 @@ describe('pinned repository evaluation harness', () => {
     const invalidBudget = join(f.root, 'invalid-budget.json'); await writeFile(invalidBudget, JSON.stringify({ maxTotalTokens: 0, unrecognized: true }));
     await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--trust-suite', '--budget', invalidBudget], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('ZodError') });
   });
+  it('writes a fatal report when evaluation setup fails after the output directory is created', async () => {
+    const f = await fixture(), output = join(f.root, 'fatal-report');
+    await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/missing', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--output', output], { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
+    const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8'));
+    expect(report.metrics).toMatchObject({ total: 0, executed: 0, validationSkipped: 0 });
+    expect(report.fatalError).toContain('unavailable');
+  }, 60000);
+  it('skips an invalid validation cohort before any model request', async () => {
+    const f = await fixture(); let modelCalls = 0;
+    const model = createServer(async (_request, response) => {
+      modelCalls++;
+      response.writeHead(500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'model must not be called' }));
+    });
+    await new Promise((done) => model.listen(0, '127.0.0.1', done));
+    cleanups.push(() => new Promise((done) => { model.closeAllConnections(); model.close(() => done()); }));
+    await writeFile(join(f.home, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1', models: [{ id: 'mock' }] } } }));
+    const validationPath = join(f.root, 'validation.json');
+    const { fingerprint } = await loadRepositorySuite(f.path);
+    await writeFile(validationPath, JSON.stringify({ schemaVersion: 2, suiteFingerprint: fingerprint, valid: 0, total: 1, results: [{ id: 'add-bug', valid: false, error: 'reference oracle failed' }] }));
+    const output = join(f.root, 'validation-skipped');
+    await expect(execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--validation', validationPath, '--output', output], { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 })).rejects.toMatchObject({ code: 1 });
+    const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8'));
+    expect(report.metrics).toMatchObject({ total: 1, executed: 0, validationSkipped: 1, infrastructureFailures: 1 });
+    expect(report.validation).toMatchObject({ suiteFingerprint: fingerprint, valid: 0, total: 1 });
+    expect(report.results[0]).toMatchObject({ skipped: true, infrastructureFailure: true, error: 'reference oracle failed' });
+    expect(modelCalls).toBe(0);
+  }, 60000);
   it('runs the actual pinned clone with a scripted provider and records held-out failures as false completions', async () => {
     const f = await fixture(); let correct = true, modelCalls = 0;
     const model = createServer(async (request, response) => {
@@ -74,7 +112,7 @@ describe('pinned repository evaluation harness', () => {
     });
     await new Promise((done) => model.listen(0, '127.0.0.1', done)); cleanups.push(() => new Promise((done) => { model.closeAllConnections(); model.close(() => done()); }));
     await writeFile(join(f.home, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1', models: [{ id: 'mock' }] } } }));
-    const limits = { maxDurationMs: 60000, maxModelTurns: 10, maxToolCalls: 30, maxTotalTokens: 12345, maxCostUsd: 1 };
+    const limits = { maxDurationMs: 60000, maxModelTurns: 10, maxToolCalls: 30, maxTotalTokens: 12345, maxOutputTokens: 200000, maxCostUsd: 1 };
     const budgetPath = join(f.root, 'budget.json'); await writeFile(budgetPath, JSON.stringify(limits));
     const argumentsFor = (output) => ['scripts/evaluate-repository.mjs', '--suite', f.path, '--model', 'fixture/mock', '--config-home', f.home, '--workflow', 'direct', '--trust-suite', '--budget', budgetPath, '--output', output];
     const passedOutput = join(f.root, 'passed'); await execute(process.execPath, argumentsFor(passedOutput), { windowsHide: true, timeout: 60000, maxBuffer: 1_000_000 });

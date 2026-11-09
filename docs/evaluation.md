@@ -45,11 +45,25 @@ This repository includes regression tests for the supported Pi-backed product,
 a browser acceptance script, and a small coding-task evaluation harness. They
 answer different questions and must not be combined into a frontier-performance claim.
 
+## Latest real-model pilot
+
+The [DeepSeek pinned-repository pilot](evaluations/deepseek-swe-multilingual-pilot-2026-11-09.md)
+is the first public result from the fixed third-party cohort. The cohort has 20
+tasks, of which 11 passed baseline/reference validation and 9 were skipped before
+any model request. A one-task Axios extraction was then run once in each workflow:
+direct produced one false completion because protected files changed after the
+oracle and verification passed; planned reached its time budget and left a
+Windows test-process cleanup failure before verification/review. These are real
+observations of the current protocol, not a 20-task model score. The report keeps
+the suite and harness fingerprints, token breakdowns, unknown cost, and the
+distinction between model outcome and infrastructure failure.
+
 | Command | What it establishes |
 | --- | --- |
 | `npm run check` | Types, active regression tests, build and CLI/bin integration. |
 | `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --prepare` | Inspect the fixed public repository commit, commands and oracle fingerprint without running repository code or a model. |
-| `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --model provider/model --workflow both --repeat 3 --trust-suite` | Execute a reviewed suite in fresh pinned clones, with independent external acceptance and false-completion reporting. |
+| `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --model provider/model --workflow both --repeat 3 --trust-suite` | Execute a reviewed suite in temporary pinned worktrees for local sources or fresh clones for HTTPS sources, with independent external acceptance and false-completion reporting. |
+| `npm run eval:repo -- --suite path/to/suite.json --model provider/model --workflow both --trust-suite --validation path/to/cohort-validation.json` | Reuse baseline/reference validation for the matching suite fingerprint; invalid tasks are explicitly skipped before any model request. |
 | `npm run test:web` | A real Chromium browser can operate the local Web client against a local fixture model. |
 | `npm run eval:smoke` | Five scripted solutions execute through actual Pi tools and forge-agent's workflow, then pass independent assertions and completion checks. No model coding judgment is measured. |
 | `npm run eval:agent -- --model provider/model --workflow direct` | Runs the five public tasks through adaptive/direct execution against the selected real model. The evaluator copies the selected Forge model catalog and credentials into an isolated evaluation home, sends task content to that provider, and incurs its usage. |
@@ -129,8 +143,10 @@ ranking.
 `scripts/evaluate-repository.mjs` accepts a strict versioned JSON manifest.
 Each task needs a unique ID, local/HTTPS source, immutable 40/64-character Git
 revision, prompt, setup commands, at least one verification command, protected
-files and an independent standalone Node oracle. `dirtyFiles` can seed existing
-user work. The oracle receives the workspace as `process.argv[2]`; it must be
+files and an independent standalone Node oracle. A task may also provide a
+`testPatch`; when present, the runner applies it only around the external oracle
+and reverses it before checking workspace integrity, so the agent never sees
+held-out tests during its run. `dirtyFiles` can seed existing user work. The oracle receives the workspace as `process.argv[2]`; it must be
 within the suite directory and cannot use an escaping symlink. The manifest
 and oracle bytes determine the fingerprint.
 
@@ -152,22 +168,65 @@ browser-neutral declaration checks so unrelated ambient Node definitions cannot
 invalidate acceptance. A regression verifies both that isolation and rejection
 of wrong runtime behavior and parameter declarations.
 
-The runner clones without hardlinks, checks out the exact revision, runs reviewed
+The runner creates a temporary worktree for a local source mirror (or clones an
+HTTPS source without hardlinks), checks out the exact revision, runs reviewed
 setup, seeds dirty files and configures the checks. It refuses symlinked/sensitive
 fixture paths and rejects repository/legacy configuration that overrides the
 suite's verification. The baseline oracle must fail before the model starts.
+Before publishing a cohort comparison, separately confirm that a known reference
+patch passes the same held-out oracle. A non-zero baseline alone does not validate
+an oracle; the runner does not perform the reference-patch check itself.
 A copy of the oracle stays outside the project; afterward its assertions,
 protected hashes, effective configuration, host completion and verification must
 all pass. The default per-execution budget follows the Web host: 60 minutes,
-150 model turns, 300 tool calls, 5,000,000 cumulative tokens and 25 dollars of configured cost;
+150 model turns, 300 tool calls, 200,000 generated tokens, cumulative request
+tokens disabled, and 25 dollars of configured cost;
 a provider's single response can cross a limit before usage is available.
 
+### Validation gate for a fixed cohort
+
+For a multi-repository comparison, validate every task before spending model
+requests. The validation artifact records the suite fingerprint and the result
+of running both the baseline and a known-correct reference patch in the pinned
+environment. This repository accepts an externally prepared artifact; it does
+not currently ship a cohort/reference-patch validator. Its required shape is:
+
+```json
+{
+  "suiteFingerprint": "<fingerprint from --prepare>",
+  "valid": 1,
+  "total": 2,
+  "results": [
+    { "id": "task-one", "valid": true },
+    { "id": "task-two", "valid": false, "error": "Reference oracle failed" }
+  ]
+}
+```
+
+Include exactly one result per suite task. Retain the baseline/reference logs
+with the artifact; a `valid: true` value is an assertion by its author, not a
+proof checked by the evaluator. After reviewing the commands, oracle and logs,
+pass the artifact to the evaluator:
+
+```powershell
+npm run eval:repo -- --suite path/to/suite.json --model provider/model --workflow both --trust-suite --validation .forge-agent/cohort-validation.json
+```
+
+The evaluator refuses a mismatched suite fingerprint. A task whose baseline or
+reference validation is invalid is recorded as `validationSkipped` and
+`infrastructureFailure`; it does not run setup, repository code, or a model
+request. Skipped tasks remain in the report so the cohort size and environment
+limitations are visible. Latency percentiles exclude skipped tasks. The gate
+separates model behavior from a broken oracle or unavailable test environment;
+it does not make the remaining tasks representative by itself.
+
 `--budget path/to/limits.json` selects an explicit per-execution budget. Supply
-all five `BudgetLimits` fields: `maxDurationMs`, `maxModelTurns`, `maxToolCalls`,
-`maxTotalTokens` and `maxCostUsd`; unknown or invalid fields are rejected before
+all six `BudgetLimits` fields: `maxDurationMs`, `maxModelTurns`, `maxToolCalls`,
+`maxTotalTokens`, `maxOutputTokens` and `maxCostUsd`; set `maxTotalTokens` to 0
+to disable its cumulative request-token guard. Unknown or invalid fields are rejected before
 tasks start. Reports and each execution record the effective limits. Token
-totals include cached input across turns, rather than only newly generated
-tokens. Preserve failed baseline runs when comparing a larger budget. The cost
+totals still include cached input across turns for measurement, even when that
+guard is disabled. Preserve failed baseline runs when comparing a larger budget. The cost
 guard depends on configured prices and cannot enforce billing when prices are
 unknown.
 
@@ -184,13 +243,18 @@ environment, baseline failure, external result, workspace integrity, completion,
 verification, false completions, infrastructure failures, latency percentiles,
 tokens and cost. Repository results separate setup time from agent execution
 time, and retain final snapshots and tracked diffs under `evidence/`. A fixture test checks that visible-test success with an external
-oracle failure is recorded as false completion. Temporary clones and credentials
-are cleaned afterward; logs and reports remain and need review before sharing.
+oracle failure is recorded as false completion. Temporary worktrees/clones and
+credentials are cleaned afterward; logs and reports remain and need review before
+sharing. Oracle timeouts terminate the complete child-process tree before cleanup,
+and the Windows evaluator waits for Pi's asynchronous tree termination before
+removing the temporary worktree. A locked test runner is recorded as an
+infrastructure failure rather than a model result; the report is still written
+when cleanup itself fails.
 
 ## 中文说明
 
 五个公开小任务的 smoke 验证链路，真实模型执行才测模型行为；两者不能合并宣传。
-固定仓库评测使用独立 clone、不可变 commit、外部 oracle、保护文件和已有脏内容，
+固定仓库评测使用临时 worktree（HTTPS 源使用独立 clone）、不可变 commit、外部 oracle、保护文件和已有脏内容，
 同时核对验证门禁和宿主完成状态，并记录错误完成率。示例 suite 是可复现开发任务，
 模板本身不等于模型成绩；已完成的实测与首批失败分析见本文开头链接。先执行 `--prepare` 并审阅仓库、命令与判题脚本；明确
 `--trust-suite` 后才执行项目代码。运行、安装和 oracle 都不是 OS 沙箱。
