@@ -66,6 +66,8 @@ Only `verify`, `verifyRetries` and `protect` are accepted; unknown fields fail. 
 
 Missing checks never imply verified success. Planned implementation still requires current verification evidence; adaptive execution explicitly reports whether checks ran.
 
+The Web host detects a single-response output-limit stop, including reasoning-only output with no text or tool calls. It requests at most two continuations through Pi settlement under the same task budget; repeated failure stops implementation with its actual cause. Continuing a legacy record returns to incomplete implementation instead of verifying an empty result.
+
 ## Long tasks and local data
 
 New installations allow 90 minutes, 240 model turns, 500 tool calls and 300,000 generated tokens per segment, with cumulative request tokens measured by default and a $40 cost ceiling. **Settings → About → Execution budget** provides a four-hour preset that preserves the cost ceiling. Saving affects the next execution or continuation; existing saved limits remain unchanged.

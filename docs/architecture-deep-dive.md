@@ -59,6 +59,8 @@ plan 和 implement 保持在父 Pi 会话中，以便继续使用同一项目上
 
 验收：[控制器](../tests/task-controller.test.ts)、[模式与路由](../tests/web-modes.test.ts)、[CLI 完成与重试](../tests/pi-e2e.test.ts)。
 
+Web 的 `output-guard.ts` 在 Pi `agent_before_settle` 边界识别 `length` 和无正文/无工具的空结果，最多请求两次原会话续接，不另建模型/工具循环。失败保留在原阶段，不将“无文件、只有思考”的截断执行误当实现结束；父用量与取消仍由已有 Pi hooks 统计。旧记录已错误进入 verify 时，宿主依据最后模型 stopReason 恢复 implement。它不会提高用户配置的单次输出上限，也不暗中降低思考档位。
+
 ## 3. 完成是证据判断，不是模型文本
 
 需要分别回答三个问题：模型执行结束了吗，自动检查通过了吗，模型审阅通过了吗。direct 执行结束不能被界面渲染成“已审阅”；未配置命令不能显示“验证通过”。

@@ -38,6 +38,7 @@ import { ForgeSubagents } from './subagents.js';
 import { CheckpointStore, CheckpointError } from '../task/checkpoints.js';
 import { TaskQueue, QueueError, QueueDeferredError } from '../task/queue.js';
 import { TaskProgress } from '../task/progress.js';
+import { createModelOutputGuard, incompleteModelOutput } from '../task/output-guard.js';
 
 export interface WebConsoleOptions { cwd: string; host?: string; port?: number; serviceInstance?: string; onServiceStop?(): void; evaluation?: { allowReviewAblation: true }; }
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
@@ -51,6 +52,7 @@ interface SessionState {
   events: SessionEventRecord[];
   clients: Set<ServerResponse>;
   running: boolean;
+  outputGuard?: ReturnType<typeof createModelOutputGuard>;
   readOnly: boolean;
   mode: WebMode;
   workflow: WebWorkflow;
@@ -616,7 +618,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   async function attachAgent(session: SessionState, model: any, selectedThinking?: string) {
     session.mcpRuntime = new McpRuntimeView();
     session.progress = new TaskProgress((snapshot) => session.controller.recordProgress(snapshot));
-    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'forge-memory', factory: memoryStore.extension(session.project, session.manager, () => session.controller.state) }, { name: 'forge-subagents', factory: session.subagents!.extension }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'forge-budget', factory: (pi) => {
+    session.outputGuard = createModelOutputGuard({ executionId: () => session.controller.state?.id, active: () => session.running,
+      phase: () => session.controller.state?.phase,
+      onFailure: (message) => { session.lastError = message; session.outcome = 'failed'; } });
+    const resourceLoader = new DefaultResourceLoader({ cwd: session.project, agentDir: home, settingsManager: session.settingsManager, extensionFactories: [...webBuiltinExtensions(session.mcpRuntime), { name: 'forge-identity', factory: createForgeIdentityExtension('web') }, { name: 'forge-memory', factory: memoryStore.extension(session.project, session.manager, () => session.controller.state) }, { name: 'forge-subagents', factory: session.subagents!.extension }, { name: 'forge-output-guard', factory: session.outputGuard.extension }, { name: 'pforge-verification', factory: session.verification.extension }, { name: 'pforge-web-mode', factory: session.modePolicy.extension }, { name: 'forge-budget', factory: (pi) => {
       pi.on('tool_result', (event, ctx) => {
         if (!session.running) return;
         const notice = session.progress!.observe(event, session.controller.state?.phase);
@@ -765,7 +770,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const modePolicy = createWebModePolicy(effectiveMode, sessionManager);
     const previousVerification = [...sessionManager.getBranch()].reverse().find((entry) => entry.type === 'custom' && entry.customType === 'pforge.verification');
     const verification = createPforgeVerification(project, {
-      executionBlockReason: () => current?.progress?.snapshot().status === 'stalled' ? current.progress.snapshot().reason : effectiveMode() === 'agent' ? undefined : '当前为只读阶段，不执行项目验证命令。',
+      executionBlockReason: () => current?.outputGuard?.error ?? (current?.progress?.snapshot().status === 'stalled' ? current.progress.snapshot().reason : effectiveMode() === 'agent' ? undefined : '当前为只读阶段，不执行项目验证命令。'),
       isProjectTrusted: () => trustView(trustStore, projectSettings, project).trusted,
       managed: () => controller.active,
       initialOutcome: restoredTask?.verification ?? verificationOutcomeSchema.safeParse(previousVerification?.type === 'custom' ? previousVerification.data : undefined).data,
@@ -829,6 +834,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const previousTask = resumeOf && session.controller.state?.id === resumeOf ? structuredClone(session.controller.state) : undefined;
     if (resumeOf && !previousTask) throw new HttpError(409, '中断任务与当前会话不一致，请重新打开原会话');
     const continuedVerification = previousTask ? structuredClone(session.verification.outcome) : undefined;
+    const lastAssistant = [...session.manager.buildSessionContext().messages].reverse().find((item) => item.role === 'assistant');
+    if (previousTask?.kind === 'change' && previousTask.plan && incompleteModelOutput(lastAssistant)) previousTask.phase = 'implement';
     // Reserve the project before changing session state or returning 202. This
     // makes a competing terminal/session request fail synchronously with 409,
     // instead of accepting work that will only fail in a detached promise.
@@ -887,7 +894,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       session.subagents?.beginPrompt();
       session.progress?.begin(workflow !== 'planned');
       const work = async () => {
-        if (workflow !== 'planned') { runBudget.start(); session.modePolicy.apply(agent); if (resumeOf) { session.verification.beginTurn(directTask!.id, continuedVerification); await agent.sendCustomMessage({ customType: 'pforge.task_resume', content: 'HOST CONTINUATION: Continue the interrupted task already present in this conversation from the current workspace. Do not repeat the original user request as a new message, do not replay completed tool calls, and do not stop merely because a previous attempt was interrupted. Inspect only what is needed and continue toward the original requested result.', display: false }, { triggerTurn: true }); } else await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); runBudget.check(); session.progress?.check(); if (session.outcome !== 'aborted') session.subagents?.assertCollected(); return; }
+        if (workflow !== 'planned') { runBudget.start(); session.modePolicy.apply(agent); if (resumeOf) { session.verification.beginTurn(directTask!.id, continuedVerification); await agent.sendCustomMessage({ customType: 'pforge.task_resume', content: 'HOST CONTINUATION: Continue the interrupted task already present in this conversation from the current workspace. Do not repeat the original user request as a new message, do not replay completed tool calls, and do not stop merely because a previous attempt was interrupted. Inspect only what is needed and continue toward the original requested result.', display: false }, { triggerTurn: true }); } else await agent.prompt(message, { expandPromptTemplates: session.mode === 'agent', ...(images.length ? { images } : {}) }); runBudget.check(); session.outputGuard?.assertComplete(); session.progress?.check(); if (session.outcome !== 'aborted') session.subagents?.assertCollected(); return; }
         let verificationStarted = false;
         const startVerification = () => { if (verificationStarted) return; verificationStarted = true; session.verification.beginTurn(session.controller.state!.id, continuedVerification); };
         const result = await session.controller.run(message, verificationConfig.config.verifyRetries, {
@@ -902,6 +909,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           signal.throwIfAborted();
           if (session.lastError) throw new Error(session.lastError);
           session.subagents?.assertCollected();
+          session.outputGuard?.assertComplete();
           return agent.getLastAssistantText() ?? '';
         },
         async verify(signal) {

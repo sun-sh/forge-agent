@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recover Web model length/empty stops through two bounded Pi settlement continuations without changing model effort or resetting parent usage. Do not advance incomplete output to verification; repair legacy continuation records that hid a truncated implementation behind a missing-checks error. Add actual-file Pi integration regressions.
+
 - Resume planned tasks at a validated saved phase with their goal, acceptance, plan, original protection baseline and consumed repair count; revalidate before review and preserve same-session context without duplicating user messages. Reconsider ordinary defaults once during inspection, retain blocking ambiguities, and expose stop reasons beside a compact, collapsible task summary. Add explicit standard/long-task budget form presets.
 
 - Add strict `protect` configuration for literal files and directories. Capture content before model execution, preserve initial dirty content across repairs, and reject changed or unconfirmed protection even when checks pass. CLI, Web and persisted verification share this gate.
