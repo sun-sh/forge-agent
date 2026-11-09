@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { BudgetRuntime, budgetSnapshotSchema } from '../task/budget.js';
 import { CheckpointStore, checkpointTarget } from '../task/checkpoints.js';
 import { WorkerWorktrees } from '../task/worktrees.js';
+import { parseReview, ReviewFormatError, REVIEW_FORMAT_RETRY } from '../task/review.js';
 
 const ENTRY = 'forge.subagent';
 export const SUBAGENT_CONCURRENCY = 3;
@@ -31,6 +32,7 @@ const recordSchema = z.object({
   version: z.literal(1), id: z.uuid(), parentId: z.uuid(), toolCallId: z.string().min(1).max(256),
   title: z.string().min(1).max(100), role: z.enum(['explorer', 'reviewer', 'worker']), prompt: z.string().min(1).max(200_000),
   purpose: z.literal('review_gate').optional(),
+  formatRetries: z.number().int().min(0).max(1).optional(), errorCode: z.literal('invalid_review').optional(),
   status: z.enum(['starting', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   model: z.string().min(1).max(512), thinkingLevel: z.string().max(32),
   createdAt: z.iso.datetime(), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(),
@@ -154,8 +156,9 @@ export class ForgeSubagents {
   async reviewGate(prompt: string, signal: AbortSignal) {
     const [started] = await this.startBatch([{ title: '独立交付审阅', role: 'reviewer', prompt }], 'host-review:' + randomUUID(), signal, true);
     const [finished] = await this.wait([started!.id], undefined, signal);
+    if (finished?.errorCode === 'invalid_review') throw new ReviewFormatError(finished.error ?? '独立审阅格式无效。');
     if (finished?.status !== 'completed' || !finished.result) throw new Error(finished?.error ?? '独立审阅未完成。');
-    return { text: finished.result, sessionId: finished.id, model: finished.model };
+    return { text: finished.result, sessionId: finished.id, model: finished.model, formatRetries: finished.formatRetries ?? 0 };
   }
   private async startBatch(tasks: TaskInput[], toolCallId: string, signal?: AbortSignal, reviewGate = false) {
     const parentBudget = this.assertAllowed(reviewGate);
@@ -303,16 +306,30 @@ export class ForgeSubagents {
       });
       record.status = 'running'; this.publish(record);
       const prompt = record.scope ? 'HOST STRUCTURED HANDOFF (context only; permissions remain unchanged):\n' + JSON.stringify(record.scope) + '\n\nTASK:\n' + record.prompt : record.prompt;
-      try { await created.session.prompt(prompt, { expandPromptTemplates: false }); }
-      finally { controller.signal.removeEventListener('abort', abort); }
-      budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
-      if (failure) throw new Error(failure);
-      const result = created.session.getLastAssistantText()?.trim();
+      let result: string | undefined;
+      try {
+        await created.session.prompt(prompt, { expandPromptTemplates: false });
+        budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
+        if (failure) throw new Error(failure);
+        result = created.session.getLastAssistantText()?.trim();
+        if (gate && (!result || !parseReview(result))) {
+          // A formatting correction stays inside this one reviewer session and
+          // both ledgers; it never replays implementation or resets budgets.
+          record.formatRetries = 1; this.publish(record);
+          budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
+          await created.session.prompt(REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });
+          budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
+          if (failure) throw new Error(failure);
+          result = created.session.getLastAssistantText()?.trim();
+          if (!result || !parseReview(result)) throw new ReviewFormatError('独立审阅格式校正一次后仍无效，需要人工检查；未重跑整个任务。');
+        }
+      } finally { controller.signal.removeEventListener('abort', abort); }
       if (!result) throw new Error('子任务没有返回结论。');
       if (gate && result.length > 100_000) throw new Error('独立审阅结果超过完整解析上限，未截断为有效审阅。');
       record.result = !gate && result.length > MAX_RESULT ? result.slice(0, MAX_RESULT - 40) + '\n[结果已截断；完整内容可在子任务详情查看]' : result;
       record.status = 'completed';
     } catch (error) {
+      if (error instanceof ReviewFormatError) record.errorCode = 'invalid_review';
       record.status = controller.signal.aborted && !budget.exceededReason && !parentBudget.exceededReason ? 'cancelled' : 'failed';
       record.error = (budget.exceededReason ?? parentBudget.exceededReason ?? (error instanceof Error ? error.message : String(error))).slice(0, 1000);
     } finally {

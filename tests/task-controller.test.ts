@@ -5,6 +5,7 @@ import type { PforgeVerificationOutcome } from '../src/verification/pi-extension
 import { VerificationInterruptedError } from '../src/verification/verify.js';
 import { randomUUID } from 'node:crypto';
 import handoff from './fixtures/task-handoff.json' with { type: 'json' };
+import { ReviewEvidenceError } from '../src/task/git.js';
 
 const evidence = { workspace: { version: 1 as const, scope: 'git' as const, digest: 'a'.repeat(64), files: 1 }, configHash: 'b'.repeat(64), freshness: 'current' as const };
 
@@ -193,6 +194,18 @@ describe('task workflow controller', () => {
     expect(result.review?.verdict).toBe('ready');
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
+  });
+  it('passes the full bounded patch into the independent reviewer and never persists it on task snapshots', async () => {
+    const f = fixture();
+    f.adapter.reviewPatch = async () => ({ version: 1, files: [{ path: 'code.ts', status: ' M', preexisting: false, observed: true, patch: '@@ -1 +1 @@\n-old implementation\n+new implementation' }], characters: 60, lines: 3 });
+    const result = await f.controller.run('Fix code', 0, f.adapter);
+    expect(result.status).toBe('completed'); expect(f.messages.at(-1)).toContain('+new implementation');
+    expect(JSON.stringify(f.saved)).not.toContain('+new implementation');
+  });
+  it('stops before review when a patch cannot be read completely', async () => {
+    const f = fixture(); f.adapter.reviewPatch = async () => { throw new ReviewEvidenceError('审阅证据过大'); };
+    const result = await f.controller.run('Fix code', 0, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', error: '审阅证据过大' }); expect(f.phases).not.toContain('review');
   });
   it('refuses to certify a planned change when the independent reviewer is unavailable', async () => {
     const f = fixture(); f.adapter.review = undefined;

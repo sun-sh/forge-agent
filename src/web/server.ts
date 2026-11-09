@@ -20,7 +20,7 @@ import { createExecutionState, restoreTask, taskPhaseContract, TaskController, w
 import { executionTimeline } from '../task/timeline.js';
 import { finalizeExecution, pendingExecutionState } from '../task/lifecycle.js';
 import { TaskRegistry, type TaskRecord } from '../task/registry.js';
-import { captureGit, compareGit, readGitDiff } from '../task/git.js';
+import { captureGit, captureReviewPatch, compareGit, readGitDiff } from '../task/git.js';
 import { McpControlPlane, McpError } from './mcp.js';
 import { McpRuntimeView } from './mcp-runtime.js';
 import { isRuntimeCommand, runtimeCommands } from './commands.js';
@@ -908,6 +908,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         review: (text, signal) => session.subagents!.reviewGate('PFORGE TASK PHASE: review\n' + text, signal),
         refreshVerification: (signal) => session.verification.refreshEvidence(signal),
         baseline: (signal) => captureGit(session.project, signal),
+        reviewPatch: (changes, signal) => captureReviewPatch(session.project, changes, signal),
         changes: (baseline, signal) => compareGit(session.project, baseline, signal)
         }, resumeOf, runBudget, {
           workflow: 'planned', mode: session.mode,

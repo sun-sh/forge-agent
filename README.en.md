@@ -210,3 +210,5 @@ Report issues with sanitized reproduction steps through [Issues](https://github.
 [MIT License](LICENSE). Thanks to [Pi](https://github.com/earendil-works/pi) and the project's open-source dependencies.
 
 `protect` fingerprints literal project-relative files and directories before model execution. It preserves pre-existing dirty content; changes or incomplete observations block delivery even when commands pass. This is a delivery check, not an OS sandbox.
+
+Independent delivery review receives bounded complete text patches (2,000 lines per file, 60,000 characters overall). Oversized/incomplete evidence needs attention. Invalid review JSON gets one correction in the same reviewer session and parent budget.

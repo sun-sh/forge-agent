@@ -8,6 +8,7 @@ import { SessionManager, type AgentSession, type ExtensionAPI } from '@earendil-
 import { createWebModePolicy, restoredWebMode, type WebMode } from '../src/web/modes.js';
 import { startWebConsole } from '../src/web/server.js';
 import handoff from './fixtures/task-handoff.json' with { type: 'json' };
+import { checkpointGit } from '../src/task/checkpoints.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 beforeEach(async () => {
@@ -54,6 +55,9 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   await writeFile(join(root, 'verify.cjs'), "require('node:fs').writeFileSync('.forge-agent/verified', 'yes'); console.log('verified-exact-output')");
   await writeFile(join(root, 'pforge.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node verify.cjs' }], verifyRetries: 0 }));
   await writeFile(join(root, 'readme.txt'), 'read-only evidence');
+  await writeFile(join(root, '.gitignore'), '.forge-agent/\n.pforge/\n');
+  await checkpointGit(root, ['init', '-q']); await checkpointGit(root, ['add', '.']);
+  await checkpointGit(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'fixture']);
   let server = await startWebConsole({ cwd: root, port: 0 });
   closers.push(() => server.close());
   let base = new URL(server.url).origin;

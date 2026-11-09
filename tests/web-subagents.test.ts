@@ -8,6 +8,7 @@ import { ForgeSubagents } from '../src/web/subagents.js';
 import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../src/task/budget.js';
 import { startWebConsole } from '../src/web/server.js';
 import { checkpointGit } from '../src/task/checkpoints.js';
+import { ReviewFormatError } from '../src/task/review.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
@@ -75,6 +76,24 @@ describe('managed Pi subagents', () => {
     expect(text(f.requests[0])).toContain('HOST STRUCTURED HANDOFF');
     expect(text(f.requests[0])).toContain('what the parent must do next');
     expect((await f.agents.detail(child!.id)).agent).toMatchObject({ scope });
+  });
+  it('retries malformed review JSON once in the same child session, charging both turns to the parent', async () => {
+    let calls = 0;
+    const f = await fixture((input, res) => answer(res, input, ++calls === 1 ? 'My review is ready but not JSON.' : '{"verdict":"ready","summary":"Corrected JSON","issues":[],"acceptance":[]}'));
+    const review = await f.agents.reviewGate('Review the supplied goal and evidence.', new AbortController().signal);
+    expect(review).toMatchObject({ formatRetries: 1, text: expect.stringContaining('Corrected JSON') });
+    expect(f.requests).toHaveLength(2); expect(text(f.requests[1])).toContain('My review is ready but not JSON.');
+    expect(text(f.requests[1])).toContain('only format retry'); expect(text(f.requests[1])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
+    expect(f.agents.snapshot()).toHaveLength(1); expect(f.agents.snapshot()[0]).toMatchObject({ id: review.sessionId, activation: 1, formatRetries: 1, status: 'completed' });
+    expect(f.budget.snapshot().modelTurns).toBe(2);
+  });
+  it('does not retry malformed JSON more than once or exceed the parent turn budget', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'not JSON'));
+    await expect(f.agents.reviewGate('Review evidence.', new AbortController().signal)).rejects.toBeInstanceOf(ReviewFormatError);
+    expect(f.requests).toHaveLength(2); expect(f.agents.snapshot()[0]).toMatchObject({ status: 'failed', errorCode: 'invalid_review', formatRetries: 1, collectedAt: expect.any(String) });
+    f.agents.beginPrompt(); const before = f.requests.length; f.budget.limits.maxModelTurns = 3;
+    await expect(f.agents.reviewGate('Review other evidence.', new AbortController().signal)).rejects.toThrow();
+    expect(f.requests.length - before).toBe(1); expect(f.budget.snapshot().status).toBe('exceeded');
   });
   it('never certifies an unread result when collection persistence fails', async () => {
     const f = await fixture((input, res) => answer(res, input, 'Result ready.'));

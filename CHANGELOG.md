@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Give independent reviewers complete bounded patches and one same-session JSON format correction, preserving evidence limits and parent budgets.
+
 - Enforce strict protected-path delivery checks with pre-model content baselines, unchanged dirty user work across repairs, bounded observation, and shared CLI/Web failure semantics.
 
 - Preserve an interrupted task's adaptive/planned workflow from the composer as well as the task center, including after restart; cover resume without unwanted planning, review or extra model calls.

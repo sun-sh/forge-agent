@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { captureGit, compareGit, readGitDiff } from '../src/task/git.js';
+import { captureGit, captureReviewPatch, compareGit, readGitDiff } from '../src/task/git.js';
 const exec = promisify(execFile);
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'pforge-git-'));
@@ -24,6 +24,29 @@ describe('Git task evidence', () => {
     expect(changes.files.find((file) => file.path === 'new & name.txt')).toMatchObject({ preexisting: false, observed: true });
     const diff = await readGitDiff(f.root, 'base.txt'); expect(diff.diff).toContain('existing user work'); expect(diff.diff).toContain('later change');
     expect((await readGitDiff(f.root, 'new & name.txt')).diff).toContain('+new');
+    const patch = await captureReviewPatch(f.root, changes);
+    expect(patch.files.find((file) => file.path === 'base.txt')).toMatchObject({ preexisting: true, patch: expect.stringContaining('-before') });
+    expect(patch.files.find((file) => file.path === 'base.txt')?.patch).toContain('+later change');
+    expect(patch.files.find((file) => file.path === 'new & name.txt')?.patch).toContain('+new');
+  });
+  it('rejects oversized patches and changed evidence instead of truncating a review', async () => {
+    const f = await fixture(), baseline = await captureGit(f.root);
+    await writeFile(join(f.root, 'many-lines.txt'), 'line\n'.repeat(2001));
+    await expect(captureReviewPatch(f.root, await compareGit(f.root, baseline))).rejects.toThrow('审阅证据过大');
+    await writeFile(join(f.root, 'many-lines.txt'), 'x'.repeat(60001));
+    await expect(captureReviewPatch(f.root, await compareGit(f.root, baseline))).rejects.toThrow('审阅证据过大');
+    await writeFile(join(f.root, 'many-lines.txt'), 'small');
+    const changes = await compareGit(f.root, baseline); await writeFile(join(f.root, 'many-lines.txt'), 'different');
+    await expect(captureReviewPatch(f.root, changes)).rejects.toThrow('工作区发生变化');
+    await expect(captureReviewPatch(f.root, { ...changes, truncated: true })).rejects.toThrow('不完整');
+  });
+  it('refuses sensitive and binary changes without disclosing their bytes to the reviewer', async () => {
+    const f = await fixture(), baseline = await captureGit(f.root);
+    await writeFile(join(f.root, '.env.local'), 'PRIVATE-SECRET');
+    await expect(captureReviewPatch(f.root, await compareGit(f.root, baseline))).rejects.toThrow('敏感内容');
+    await f.git(['add', '.env.local']); await f.git(['commit', '-m', 'baseline secret']);
+    await writeFile(join(f.root, 'binary.bin'), Buffer.from([1, 0, 2]));
+    await expect(captureReviewPatch(f.root, await compareGit(f.root, await captureGit(f.root)))).rejects.toThrow('二进制');
   });
   it('supports unborn repositories and reports non-Git directories honestly', async () => {
     const root = await mkdtemp(join(tmpdir(), 'pforge-unborn-'));
