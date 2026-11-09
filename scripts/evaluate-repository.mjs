@@ -8,11 +8,12 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkoutRepositoryRevision, loadRepositorySuite } from './repository-suite.mjs';
 import { modelEvaluationMetadata, saveEvaluationEvidence, saveHarnessEvidence } from './evaluation-evidence.mjs';
+import { summarizeWorkflows } from './evaluation-metrics.mjs';
 
 const args = process.argv.slice(2), option = (key, fallback) => { const index = args.indexOf(key); return index < 0 ? fallback : args[index + 1]; };
-const suitePath = option('--suite'); if (!suitePath) throw new Error('Use --suite path/to/suite.json --prepare, or --model provider/model --trust-suite [--workflow direct|planned|both] [--repeat N]');
+const suitePath = option('--suite'); if (!suitePath) throw new Error('Use --suite path/to/suite.json --prepare, or --model provider/model --trust-suite [--workflow direct|planned|planned-no-review|both|ablation] [--repeat N]');
 const loaded = await loadRepositorySuite(suitePath), { suite, directory, oracles, testPatches, fingerprint } = loaded;
-const model = option('--model'), workflow = option('--workflow', 'both'), workflows = workflow === 'both' ? ['direct', 'planned'] : [workflow], repeat = Number(option('--repeat', '1'));
+const model = option('--model'), workflow = option('--workflow', 'both'), workflows = workflow === 'ablation' ? ['direct', 'planned', 'planned-no-review'] : workflow === 'both' ? ['direct', 'planned'] : [workflow], repeat = Number(option('--repeat', '1'));
 const thinking = option('--thinking');
 const validationPath = option('--validation');
 function validateCohortArtifact(candidate) {
@@ -29,7 +30,7 @@ function validateCohortArtifact(candidate) {
 const validation = validationPath ? validateCohortArtifact(JSON.parse(await readFile(resolve(validationPath), 'utf8'))) : undefined;
 const validationById = validation ? new Map((validation.results ?? []).map((item) => [item.id, item])) : undefined;
 if (thinking && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid thinking level');
-if (workflows.some((item) => !['direct', 'planned'].includes(item)) || !Number.isInteger(repeat) || repeat < 1 || repeat > 20) throw new Error('Invalid workflow or repeat (1..20)');
+if (workflows.some((item) => !['direct', 'planned', 'planned-no-review'].includes(item)) || !Number.isInteger(repeat) || repeat < 1 || repeat > 20) throw new Error('Invalid workflow (direct|planned|planned-no-review|both|ablation) or repeat (1..20)');
 if (args.includes('--prepare')) {
   console.log(JSON.stringify({ suite: suite.name, fingerprint, workflows, repeat, tasks: suite.tasks.map(({ id, source, revision, setup, verify, testPatch, protected: protectedFiles }) => ({ id, source, revision, setup, verify, heldOutTestPatch: Boolean(testPatch), protected: protectedFiles })) }, null, 2));
 } else {
@@ -41,13 +42,14 @@ if (args.includes('--prepare')) {
   const { executeCommand, CommandExecutionError } = await import('../dist/tools/command.js');
   const { loadConfig } = await import('../dist/config.js');
   const { checkpointTarget } = await import('../dist/task/checkpoints.js');
+  const { captureProtectedPaths, compareProtectedPaths } = await import('../dist/verification/protected.js');
   const { budgetLimitsSchema, DEFAULT_BUDGET_LIMITS } = await import('../dist/task/budget.js');
   const budgetFile = option('--budget');
   const limits = budgetLimitsSchema.parse(budgetFile ? JSON.parse(await readFile(resolve(budgetFile), 'utf8')) : DEFAULT_BUDGET_LIMITS);
   const sourceHome = resolve(option('--config-home', pforgeHome())), root = await mkdtemp(join(tmpdir(), 'forge-repo-eval-'));
   const output = resolve(option('--output', '.forge-agent/repository-evals/' + new Date().toISOString().replaceAll(':', '-')));
   await mkdir(output, { recursive: true });
-  const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./repository-suite.mjs', './evaluation-evidence.mjs', '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+  const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./repository-suite.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', '../dist/config.js', '../dist/task/controller.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
   const home = join(root, 'home'); await mkdir(home);
   const execute = promisify(execFile), results = [], startedAt = new Date().toISOString();
   let modelMetadata;
@@ -81,6 +83,7 @@ if (args.includes('--prepare')) {
     const report = { schemaVersion: 2, kind: 'pinned-repository-model-evaluation', suite: suite.name, fingerprint, harnessFingerprint, model, modelMetadata: metadata, requestedThinkingLevel: thinking, limits, workflows, repeat, startedAt, finishedAt: new Date().toISOString(), gitRevision: revision,
       environment: { pi: VERSION, node: process.version, platform: process.platform },
       validation: validation ? { suiteFingerprint: validation.suiteFingerprint, valid: validation.valid, total: validation.total } : undefined,
+      byWorkflow: summarizeWorkflows(results, workflows, metadata.pricingKnown),
       note: 'Repository code and oracles run with the launching user permissions. Public test tasks and model review do not prove general coding quality.',
       ...(failure ? { fatalError: failure } : {}),
       metrics: { passed: results.filter((item) => item.passed).length, total: results.length, executed: results.filter((item) => !item.skipped).length, validationSkipped: results.filter((item) => item.skipped).length, falseCompletions: results.filter((item) => item.falseCompletion).length, infrastructureFailures: results.filter((item) => item.infrastructureFailure).length,
@@ -128,12 +131,13 @@ if (args.includes('--prepare')) {
         if (actual !== task.revision) throw new Error('Pinned revision mismatch');
         for (const [index, setup] of task.setup.entries()) { const result = await run(setup.command, project, id + '.setup-' + index, setup.timeoutMs); if (result.exitCode !== 0 || result.failure) throw new Error('Setup failed: ' + setup.name); }
         for (const [path, content] of Object.entries(task.dirtyFiles)) { const target = await checkpointTarget(project, path); await mkdir(dirname(target), { recursive: true }); await writeFile(target, content); }
-        await writeFile(await checkpointTarget(project, 'forge-agent.json'), JSON.stringify({ verify: task.verify, verifyRetries: 1 }));
-        const expectedConfig = JSON.stringify({ verify: task.verify, verifyRetries: 1 });
+        const protectedFiles = [...new Set([...task.protected, 'forge-agent.json'])];
+        const expectedConfig = JSON.stringify({ verify: task.verify, verifyRetries: 1, protect: protectedFiles });
+        await writeFile(await checkpointTarget(project, 'forge-agent.json'), expectedConfig);
         const effective = loadConfig(project);
         if (effective.warnings.length || JSON.stringify(effective.config) !== expectedConfig) throw new Error('Repository configuration overrides the suite verification commands');
-        const protectedFiles = [...new Set([...task.protected, 'forge-agent.json'])];
-        const before = new Map(await Promise.all(protectedFiles.map(async (path) => [path, sha(await readFile(await checkpointTarget(project, path)))])));
+        const before = await captureProtectedPaths(project, protectedFiles);
+        if (!before.complete) throw new Error('Cannot observe initial protected paths: ' + before.reason);
         const oracleCommand = quoted(process.execPath) + ' ' + quoted(oraclePath) + ' ' + quoted(project);
         const baseline = await withHeldOutTests(project, heldOutPatch, id + '.baseline', () => run(oracleCommand, root, id + '.baseline', task.oracleTimeoutMs));
         if (baseline.failure) throw new Error('Baseline oracle infrastructure failed: ' + baseline.failure);
@@ -141,14 +145,14 @@ if (args.includes('--prepare')) {
         if (!baselineFails) throw new Error('Invalid task: oracle already passes at the pinned revision');
         setupMs = Math.round(performance.now() - started);
         console.log('READY ' + id + ' · baseline oracle failed as required · setup ' + setupMs + 'ms');
-        gateway = await startWebConsole({ cwd: project, port: 0 });
+        gateway = await startWebConsole({ cwd: project, port: 0, evaluation: { allowReviewAblation: true } });
         const origin = new URL(gateway.url).origin;
         const api = async (path, input) => { const response = await fetch(origin + '/api/' + path, { headers: { 'x-pforge-token': gateway.token, 'content-type': 'application/json' }, ...(input ? { method: 'POST', body: JSON.stringify(input) } : {}) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'HTTP ' + response.status); return data; };
         // --trust-suite is the user's explicit authorization for these pinned projects.
         await api('projects/trust', { path: project, trusted: true });
         const session = await api('session', { project, model, mode: 'agent', ...(thinking ? { thinkingLevel: thinking } : {}), title: task.id + ' · ' + flow });
         const executionStarted = performance.now();
-        await api('sessions/' + session.id + '/prompt', { message: task.prompt, workflow: flow });
+        await api('sessions/' + session.id + '/prompt', { message: task.prompt, workflow: flow === 'planned-no-review' ? 'planned' : flow, ...(flow === 'planned-no-review' ? { review: false } : {}) });
         const deadline = Date.now() + limits.maxDurationMs + 60000;
         let nextProgressAt = Date.now() + 30000;
         do {
@@ -162,7 +166,7 @@ if (args.includes('--prepare')) {
         executionMs = Math.round(performance.now() - executionStarted);
         const evaluated = await withHeldOutTests(project, heldOutPatch, id + '.oracle', () => run(oracleCommand, root, id + '.oracle', task.oracleTimeoutMs));
         heldOutPass = evaluated.exitCode === 0 && !evaluated.failure;
-        integrity = (await Promise.all([...before].map(async ([path, digest]) => sha(await readFile(await checkpointTarget(project, path))) === digest))).every(Boolean)
+        integrity = compareProtectedPaths(before, await captureProtectedPaths(project, protectedFiles)).status === 'unchanged'
           && sha(await readFile(oraclePath)) === sha(oracles.get(task.id)) && JSON.stringify(loadConfig(project).config) === expectedConfig;
       } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); infrastructureFailure = !baselineFails; }
       finally {
@@ -183,7 +187,10 @@ if (args.includes('--prepare')) {
       const passed = !error && baselineFails && heldOutPass && integrity && complete && verification;
       const result = { id: task.id, workflow: flow, iteration, revision: task.revision, baselineFails, heldOutPass, workspaceIntegrity: integrity, completed: complete, verification, passed, infrastructureFailure, falseCompletion: Boolean(complete && (!heldOutPass || !integrity || !verification)),
         latencyMs: Math.round(performance.now() - started), setupMs, executionMs, thinkingLevel: snapshot?.thinkingLevel, evidence, cleanupError,
-        budget: snapshot?.budget, repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, error };
+        budget: snapshot?.budget, repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts,
+        reviewRequired: snapshot?.task?.reviewRequired, reviewCalls: snapshot?.subagents?.filter((child) => child.purpose === 'review_gate').length ?? 0,
+        reviewRepairs: snapshot?.task?.phases?.filter((phase, index, phases) => phase.phase === 'implement' && phases[index - 1]?.phase === 'review').length ?? 0,
+        reviewFormatRetries: snapshot?.subagents?.filter((child) => child.purpose === 'review_gate').reduce((sum, child) => sum + (child.formatRetries ?? 0), 0) ?? 0, error };
       results.push(result); await writeFile(join(output, id + '.json'), JSON.stringify(result, null, 2));
       console.log((passed ? 'PASS ' : 'FAIL ') + id + (error ? ' · ' + error : ''));
     }

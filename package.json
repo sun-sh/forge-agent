@@ -19,6 +19,7 @@
     "eval:smoke": "npm run build && node scripts/evaluate-agent.mjs",
     "eval:agent": "npm run build && node scripts/evaluate-agent.mjs --real",
     "eval:repo": "npm run build && node scripts/evaluate-repository.mjs",
+    "eval:repo:validate": "npm run build && node scripts/validate-repository.mjs",
     "pack:check": "npm run build && node scripts/check-package.mjs",
     "prepack": "npm run build",
     "check": "node scripts/check.mjs",

@@ -25,6 +25,13 @@ The corrected repository runs passed 4/4; the small suite passed 10/10.
 These are small engineering regressions with different runtime fingerprints,
 not a competitor benchmark or measured memory/multi-agent quality gains.
 
+The [review-ablation diagnostic](evaluations/review-ablation-2026-11-09.md)
+and [allowlisted aggregate](evaluations/deepseek-review-ablation-2026-11-09.json)
+retain the initial 3/9 batch and a separately fingerprinted 3/3 regression.
+One small task and differing repetition counts/budgets do not establish a
+planning or independent-review benefit. A separate empty-directory real-model
+run created index.html and stopped honestly at missing verification.
+
 ## Reviewed real-model regression
 
 The [2026-11-08 aggregate](evaluations/deepseek-small-task-2026-11-08.json) records
@@ -62,6 +69,7 @@ distinction between model outcome and infrastructure failure.
 | --- | --- |
 | `npm run check` | Types, active regression tests, build and CLI/bin integration. |
 | `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --prepare` | Inspect the fixed public repository commit, commands and oracle fingerprint without running repository code or a model. |
+| `npm run eval:repo:validate -- --suite path/to/suite.json --trust-suite --repeat 3` | Run baseline and a known-correct `referencePatch` in separate fresh workspaces for every repetition; no model is called. |
 | `npm run eval:repo -- --suite evals/repositories/forge-provider-removal.json --model provider/model --workflow both --repeat 3 --trust-suite` | Execute a reviewed suite in temporary pinned worktrees for local sources or fresh clones for HTTPS sources, with independent external acceptance and false-completion reporting. |
 | `npm run eval:repo -- --suite path/to/suite.json --model provider/model --workflow both --trust-suite --validation path/to/cohort-validation.json` | Reuse baseline/reference validation for the matching suite fingerprint; invalid tasks are explicitly skipped before any model request. |
 | `npm run test:web` | A real Chromium browser can operate the local Web client against a local fixture model. |
@@ -69,6 +77,7 @@ distinction between model outcome and infrastructure failure.
 | `npm run eval:agent -- --model provider/model --workflow direct` | Runs the five public tasks through adaptive/direct execution against the selected real model. The evaluator copies the selected Forge model catalog and credentials into an isolated evaluation home, sends task content to that provider, and incurs its usage. |
 | `npm run eval:agent -- --model provider/model --workflow planned` | Runs the same tasks through the explicit staged workflow for comparison. |
 | `npm run eval:agent -- --model provider/model --workflow both --repeat 3` | Repeats both workflows with the same task set and records run number, variance-relevant metadata, and aggregate metrics. |
+| `npm run eval:agent -- --model provider/model --workflow ablation --repeat 3` | Runs evaluator-only `direct`, `planned` and `planned-no-review` arms. Production requests cannot disable planned review. |
 
 Before a real run starts, the harness performs one model-availability check. By
 default it reads the current Forge home; use `--config-home <path>` to choose a
@@ -89,7 +98,9 @@ the parent Pi transcript statistics remain available separately. The report also
 revision, suite version and fingerprint, Node/platform/Pi versions, workflow,
 repeat number, p50/p95 latency, and aggregate rates for these gates. The
 workspace and evaluation home are isolated by default; use `--home` when a
-retained home is needed for inspection.
+retained home is needed for inspection. `report.byWorkflow` keeps workflow totals
+separate: completed runs, false-completion rate, review calls and repairs,
+p50/p95 execution time, tokens and cost. Unknown pricing remains `null`.
 
 The public suite checks bound handling, strict port parsing, stable duplicate
 removal, normalization across a two-file module, and safe path joining across a
@@ -138,6 +149,32 @@ real-model benchmark result on a complex repository is currently claimed by
 this implementation, and five small public tasks cannot support an industry
 ranking.
 
+### Three-arm review ablation
+
+`--workflow ablation` runs `direct`, `planned`, and `planned-no-review` on the
+same tasks with the same model, reasoning setting, budget and repetition count.
+The last arm retains inspection, planning, implementation, verification,
+protected-path checks and finalization, skipping only the independent reviewer.
+It is admitted only by the evaluator's programmatic gateway option; ordinary
+Web prompts cannot request it, including after a session is restored.
+
+Use this to compare delivery success, false completions, tokens, execution
+latency and known cost. Reports retain review calls, review-triggered repairs
+and format retries. Parent budgets include reviewer usage. `falseCompletionRate`
+uses completed runs as its denominator; a workflow that never completes has a
+`null` rate. Scripted smoke only checks that the three arms and measurements
+work; real-model repetitions are required for conclusions.
+
+### Protected content in the product
+
+The evaluator configures the same `protect` delivery gate as the CLI and Web
+product. Fingerprints are captured before model tools, and automatic repair
+retains that baseline. An unchanged protected tree is required even when tests
+pass; command success and protection failure remain separate fields. The
+external oracle and integrity observation remain independent checks against
+false completion. This observes final content; it does not prevent transient
+writes or replace operating-system isolation.
+
 ## Pinned repository evaluations
 
 `scripts/evaluate-repository.mjs` accepts a strict versioned JSON manifest.
@@ -175,12 +212,13 @@ fixture paths and rejects repository/legacy configuration that overrides the
 suite's verification. The baseline oracle must fail before the model starts.
 Before publishing a cohort comparison, separately confirm that a known reference
 patch passes the same held-out oracle. A non-zero baseline alone does not validate
-an oracle; the runner does not perform the reference-patch check itself.
+an oracle; `scripts/validate-repository.mjs` runs this check in a separate fresh
+workspace for each baseline and reference repetition, retaining failures.
 A copy of the oracle stays outside the project; afterward its assertions,
 protected hashes, effective configuration, host completion and verification must
-all pass. The default per-execution budget follows the Web host: 60 minutes,
-150 model turns, 300 tool calls, 200,000 generated tokens, cumulative request
-tokens disabled, and 25 dollars of configured cost;
+all pass. The default per-execution budget follows the Web host: 90 minutes,
+240 model turns, 500 tool calls, 300,000 generated tokens, cumulative request
+tokens disabled, and 40 dollars of configured cost;
 a provider's single response can cross a limit before usage is available.
 
 ### Validation gate for a fixed cohort
@@ -188,8 +226,11 @@ a provider's single response can cross a limit before usage is available.
 For a multi-repository comparison, validate every task before spending model
 requests. The validation artifact records the suite fingerprint and the result
 of running both the baseline and a known-correct reference patch in the pinned
-environment. This repository accepts an externally prepared artifact; it does
-not currently ship a cohort/reference-patch validator. Its required shape is:
+environment. `npm run eval:repo:validate` ships this model-free validator.
+Each task supplies a `referencePatch` relative to the suite directory; its bytes
+are included in the suite fingerprint. The model evaluator never applies that
+patch. Missing references invalidate the task without executing code. The
+validation artifact includes this required shape:
 
 ```json
 {
@@ -203,13 +244,15 @@ not currently ship a cohort/reference-patch validator. Its required shape is:
 }
 ```
 
-Include exactly one result per suite task. Retain the baseline/reference logs
-with the artifact; a `valid: true` value is an assertion by its author, not a
-proof checked by the evaluator. After reviewing the commands, oracle and logs,
-pass the artifact to the evaluator:
+Include exactly one result per suite task. The validator retains per-task JSON,
+setup/oracle logs, repetitions and cleanup failures. `valid` requires baseline
+failure and reference success in every repetition without infrastructure faults.
+An externally authored artifact remains an assertion by its author. After
+reviewing the commands, oracle and logs, pass the artifact to the evaluator:
 
 ```powershell
-npm run eval:repo -- --suite path/to/suite.json --model provider/model --workflow both --trust-suite --validation .forge-agent/cohort-validation.json
+npm run eval:repo:validate -- --suite path/to/suite.json --trust-suite --repeat 3 --output .forge-agent/validation
+npm run eval:repo -- --suite path/to/suite.json --model provider/model --workflow ablation --trust-suite --validation .forge-agent/validation/cohort-validation.json --repeat 3
 ```
 
 The evaluator refuses a mismatched suite fingerprint. A task whose baseline or
@@ -219,6 +262,7 @@ request. Skipped tasks remain in the report so the cohort size and environment
 limitations are visible. Latency percentiles exclude skipped tasks. The gate
 separates model behavior from a broken oracle or unavailable test environment;
 it does not make the remaining tasks representative by itself.
+
 
 `--budget path/to/limits.json` selects an explicit per-execution budget. Supply
 all six `BudgetLimits` fields: `maxDurationMs`, `maxModelTurns`, `maxToolCalls`,

@@ -7,6 +7,7 @@
 - Add strict `protect` configuration for literal files and directories. Capture content before model execution, preserve initial dirty content across repairs, and reject changed or unconfirmed protection even when checks pass. CLI, Web and persisted verification share this gate.
 - Supply independent reviewers complete staged/unstaged/untracked text patches, bounded to 2,000 lines per file and 60,000 characters overall. Incomplete, sensitive, binary or oversized evidence requires attention instead of silent truncation.
 - Retry malformed review JSON once inside the same reviewer Pi session and parent budget; preserve format-retry evidence and stop after the second invalid result.
+- Add evaluator-only `planned-no-review` / three-arm `ablation` execution and a reproducible baseline/reference validator with isolated workspaces and retained failure logs. Production HTTP requests cannot disable review.
 - Make continuation a real same-session operation: stopped, interrupted and budget-limited tasks use a hidden host continuation message, preserve the current workspace context, retry malformed inspect/plan handoffs once, and no longer expose a duplicated original user prompt. Increase new-install execution defaults to 90 minutes, 240 model turns, 500 tool calls, 300,000 generated tokens and 40 USD; existing settings remain unchanged.
 
 - Preserve an interrupted task's adaptive/planned workflow from the composer as well as the task center, including after restart; cover resume without unwanted planning, review or extra model calls.

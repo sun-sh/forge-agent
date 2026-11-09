@@ -63,6 +63,38 @@ describe('pinned repository evaluation harness', () => {
     expect(await readFile(join(f.source, 'solution.mjs'), 'utf8')).toContain('a - b');
     await cleanup();
   });
+  it('validates baseline/reference on separate fresh workspaces for every repetition and fingerprints the reference', async () => {
+    const f = await fixture();
+    await writeFile(join(f.source, 'solution.mjs'), 'export const add = (a, b) => a + b;\n');
+    const patch = (await execute('git', ['diff', '--no-ext-diff', '--no-textconv'], { cwd: f.source, windowsHide: true })).stdout;
+    await writeFile(join(f.root, 'reference.patch'), patch);
+    f.suite.tasks[0].referencePatch = 'reference.patch'; await writeFile(f.path, JSON.stringify(f.suite));
+    const original = (await loadRepositorySuite(f.path)).fingerprint;
+    await writeFile(join(f.root, 'reference.patch'), patch + '\n');
+    expect((await loadRepositorySuite(f.path)).fingerprint).not.toBe(original);
+    await writeFile(join(f.root, 'reference.patch'), patch);
+    await writeFile(join(f.root, 'oracle.mjs'), 'import assert from "node:assert/strict"; import { existsSync, writeFileSync } from "node:fs"; import { pathToFileURL } from "node:url"; import { join } from "node:path"; const root = process.argv[2]; assert.equal(existsSync(join(root,"baseline-artifact")), false); const {add} = await import(pathToFileURL(join(root,"solution.mjs"))); writeFileSync(join(root,"baseline-artifact"), "created"); assert.equal(add(1,2),3);');
+    const output = join(f.root, 'validated');
+    await execute(process.execPath, ['scripts/validate-repository.mjs', '--suite', f.path, '--trust-suite', '--repeat', '2', '--output', output], { windowsHide: true, timeout: 90000, maxBuffer: 1_000_000 });
+    const report = JSON.parse(await readFile(join(output, 'cohort-validation.json'), 'utf8'));
+    expect(report).toMatchObject({ schemaVersion: 3, repeat: 2, total: 1, valid: 1 });
+    expect(report.results[0]).toMatchObject({ valid: true, baselineFails: true, referencePasses: true });
+    expect(report.results[0].runs).toHaveLength(2);
+    for (const run of report.results[0].runs) expect(run).toMatchObject({ baseline: { passed: false, oracle: { exitCode: 1 } }, reference: { passed: true, oracle: { exitCode: 0 } } });
+    expect(report.suiteFingerprint).toBe((await loadRepositorySuite(f.path)).fingerprint);
+  }, 100000);
+  it('retains invalid reference validation and refuses to run a cohort without known-correct patches', async () => {
+    const f = await fixture(), output = join(f.root, 'missing-reference');
+    await expect(execute(process.execPath, ['scripts/validate-repository.mjs', '--suite', f.path, '--trust-suite', '--output', output], { windowsHide: true, timeout: 30000 })).rejects.toMatchObject({ code: 1 });
+    const missing = JSON.parse(await readFile(join(output, 'cohort-validation.json'), 'utf8'));
+    expect(missing).toMatchObject({ valid: 0, results: [{ valid: false, runs: [], error: expect.stringContaining('referencePatch') }] });
+    await writeFile(join(f.root, 'reference.patch'), 'invalid patch\n'); f.suite.tasks[0].referencePatch = 'reference.patch'; await writeFile(f.path, JSON.stringify(f.suite));
+    const failedOutput = join(f.root, 'failed-reference');
+    await expect(execute(process.execPath, ['scripts/validate-repository.mjs', '--suite', f.path, '--trust-suite', '--output', failedOutput], { windowsHide: true, timeout: 60000 })).rejects.toMatchObject({ code: 1 });
+    const failed = JSON.parse(await readFile(join(failedOutput, 'cohort-validation.json'), 'utf8'));
+    expect(failed).toMatchObject({ valid: 0, results: [{ valid: false, baselineFails: true, referencePasses: false }] });
+    expect(failed.results[0].runs[0].reference.error).toBeTruthy();
+  }, 90000);
   it('prepares without model calls and refuses command execution without explicit suite trust', async () => {
     const f = await fixture();
     const prepared = await execute(process.execPath, ['scripts/evaluate-repository.mjs', '--suite', f.path, '--prepare'], { windowsHide: true });

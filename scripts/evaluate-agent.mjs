@@ -14,11 +14,12 @@ import { isVerified } from '../dist/verification/pi-extension.js';
 import { pforgeHome } from '../dist/pforge-home.js';
 import { tasks } from './eval-tasks.mjs';
 import { modelEvaluationMetadata, saveEvaluationEvidence, saveHarnessEvidence } from './evaluation-evidence.mjs';
+import { summarizeWorkflows } from './evaluation-metrics.mjs';
 
 const args = process.argv.slice(2), real = args.includes('--real');
 const option = (name, fallback) => { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1]; };
 const workflowArg = option('--workflow', 'planned');
-const workflows = workflowArg === 'both' ? ['direct', 'planned'] : [workflowArg];
+const workflows = workflowArg === 'ablation' ? ['direct', 'planned', 'planned-no-review'] : workflowArg === 'both' ? ['direct', 'planned'] : [workflowArg];
 const repeat = Math.max(1, Math.min(20, Number(option('--repeat', '1')) || 1));
 const model = option('--model', real ? undefined : 'eval/mock');
 const taskFilter = option('--task');
@@ -26,13 +27,13 @@ const selectedTasks = taskFilter ? tasks.filter((task) => task.id === taskFilter
 if (!selectedTasks.length) throw new Error('Unknown task: ' + taskFilter);
 const thinking = option('--thinking');
 if (thinking && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid thinking level');
-if (!model || workflows.some((workflow) => !['planned', 'direct'].includes(workflow))) throw new Error('Use --real --model provider/model [--workflow direct|planned|both] [--repeat N], or omit --real for the isolated scripted smoke evaluation.');
+if (!model || workflows.some((workflow) => !['planned', 'direct', 'planned-no-review'].includes(workflow))) throw new Error('Use --real --model provider/model [--workflow direct|planned|planned-no-review|both|ablation] [--repeat N], or omit --real for the isolated scripted smoke evaluation.');
 
 const execute = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'forge-evaluation-'));
 const output = resolve(option('--output', '.forge-agent/evals/' + new Date().toISOString().replaceAll(':', '-')));
 await mkdir(output, { recursive: true });
-const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', '../tests/fixtures/task-handoff.json', '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', '../tests/fixtures/task-handoff.json', '../dist/config.js', '../dist/task/controller.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
 const evalHome = resolve(option('--home', join(root, 'home')));
 await mkdir(evalHome, { recursive: true });
 const explicitHome = args.includes('--home');
@@ -82,7 +83,7 @@ if (real && (!explicitHome || args.includes('--config-home'))) {
 
 let gitRevision = 'unavailable';
 try { gitRevision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: process.cwd(), windowsHide: true })).stdout.trim() || gitRevision; } catch { /* evaluation can run from a source archive */ }
-const suiteVersion = 'forge-eval-small-repo-v5';
+const suiteVersion = 'forge-eval-small-repo-v6';
 const suiteFingerprint = createHash('sha256').update(JSON.stringify(selectedTasks)).digest('hex').slice(0, 16);
 let modelMetadata;
 let activeTask, requests = 0;
@@ -143,10 +144,10 @@ try {
     const visible = 'import assert from "node:assert/strict"; import * as mod from ' + JSON.stringify('./' + entry) + '; ' + task.visible + '\nconsole.log("visible assertions passed");\n';
     await writeFixture(project, 'verify.mjs', visible);
     await writeFixture(project, 'notes.txt', 'pre-existing user work\n');
-    await writeFixture(project, 'pforge.json', JSON.stringify({ verify: [{ name: 'visible-tests', command: 'node verify.mjs', timeoutMs: 30000 }], verifyRetries: 1 }));
     const protectedFiles = task.protectedFiles ?? ['notes.txt', 'verify.mjs'];
+    await writeFixture(project, 'pforge.json', JSON.stringify({ verify: [{ name: 'visible-tests', command: 'node verify.mjs', timeoutMs: 30000 }], verifyRetries: 1, protect: [...protectedFiles, 'pforge.json'] }));
     const protectedBefore = new Map(await Promise.all(protectedFiles.map(async (path) => [path, await textFile(join(project, path))])));
-    const gateway = await startWebConsole({ cwd: project, port: 0 });
+    const gateway = await startWebConsole({ cwd: project, port: 0, evaluation: { allowReviewAblation: true } });
     const origin = new URL(gateway.url).origin;
     const api = async (path, input) => { const response = await fetch(origin + '/api/' + path, { headers: { 'content-type': 'application/json', 'x-pforge-token': gateway.token }, ...(input ? { method: 'POST', body: JSON.stringify(input) } : {}) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || String(response.status)); return data; };
     let snapshot, session, error, evidence;
@@ -154,7 +155,7 @@ try {
     try {
       await api('projects/trust', { path: project, trusted: true });
       session = await api('session', { project, mode: 'agent', model, ...(thinking ? { thinkingLevel: thinking } : {}), title: 'Evaluation ' + task.id + ' · ' + workflow + ' · r' + run });
-      await api('sessions/' + session.id + '/prompt', { message: task.prompt, workflow });
+      await api('sessions/' + session.id + '/prompt', { message: task.prompt, workflow: workflow === 'planned-no-review' ? 'planned' : workflow, ...(workflow === 'planned-no-review' ? { review: false } : {}) });
       const deadline = Date.now() + 180000;
       do { await new Promise((done) => setTimeout(done, 100)); snapshot = await api('sessions/' + session.id); if (Date.now() > deadline) { await api('sessions/' + session.id + '/abort', {}); throw new Error('Evaluation timed out after 180000ms'); } } while (snapshot.running);
       const evaluator = join(root, `${task.id}-${workflow}-r${run}-held-out.mjs`);
@@ -188,6 +189,9 @@ try {
       tokenUsage: executionBudget ? { total: executionBudget.totalTokens } : stats?.tokens ?? null,
       costUsd: real && !modelMetadata?.pricingKnown ? null : executionBudget?.costUsd ?? (typeof stats?.cost === 'number' ? stats.cost : null),
       taskStatus: snapshot?.task?.status ?? snapshot?.outcome, verification: snapshot?.verification?.status,
+      reviewRequired: snapshot?.task?.reviewRequired, reviewCalls: snapshot?.subagents?.filter((child) => child.purpose === 'review_gate').length ?? 0,
+      reviewRepairs: snapshot?.task?.phases?.filter((phase, index, phases) => phase.phase === 'implement' && phases[index - 1]?.phase === 'review').length ?? 0,
+      reviewFormatRetries: snapshot?.subagents?.filter((child) => child.purpose === 'review_gate').reduce((sum, child) => sum + (child.formatRetries ?? 0), 0) ?? 0,
       repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: executionBudget?.toolCalls ?? stats?.toolCalls ?? snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0,
       executionBudget,
       stats, workspace: project, sessionFile: snapshot?.sessionFile
@@ -203,6 +207,7 @@ const percentile = (value) => sortedLatencies.length ? sortedLatencies[Math.min(
 const report = {
   schemaVersion: 4, timestamp: new Date().toISOString(), kind: real ? 'real-model' : 'scripted-smoke', suiteVersion, suiteFingerprint, harnessFingerprint,
   model, modelMetadata, requestedThinkingLevel: thinking, workflows, repeat, environment: { node: process.version, platform: process.platform, arch: process.arch, piVersion: VERSION, gitRevision },
+  byWorkflow: summarizeWorkflows(results, workflows, !real || Boolean(modelMetadata?.pricingKnown)),
   isolation: { home: evalHome, workspaceRoot: root, explicitHome: args.includes('--home') },
   note: real ? 'Small public repository task suite; this is an engineering harness, not a frontier benchmark. Compare repeated runs with fixed model/provider settings.' : 'Known solutions are scripted by an isolated local fixture. These results validate tool execution, evidence, completion and evaluation plumbing, not model coding ability.',
   metrics: {

@@ -28,6 +28,8 @@ export const repositorySuiteSchema = z.object({
     // Held-out tests are applied only to the post-model oracle workspace and
     // are removed before the agent workspace is inspected or reported.
     testPatch: safePath.optional(),
+    // Used only by the model-free validator, never applied during agent runs.
+    referencePatch: safePath.optional(),
     protected: z.array(safePath).min(1).max(100),
     dirtyFiles: z.record(safePath, z.string().max(1_000_000)).default({})
   }).strict()).min(1).max(100)
@@ -77,7 +79,7 @@ export async function checkoutRepositoryRevision(source, revision, project) {
 
 export async function loadRepositorySuite(path) {
   const file = await realpath(resolve(path)), directory = dirname(file), suite = repositorySuiteSchema.parse(JSON.parse(await readFile(file, 'utf8')));
-  const oracles = new Map(), testPatches = new Map();
+  const oracles = new Map(), testPatches = new Map(), referencePatches = new Map();
   for (const task of suite.tasks) {
     if (/^[a-z][a-z\d+.-]*:/i.test(task.source) && !isAbsolute(task.source) && !/^https:\/\//i.test(task.source)) throw new Error('Repository sources must be local paths or HTTPS URLs');
     const oraclePath = await realpath(resolve(directory, task.oracle)), rest = relative(directory, oraclePath);
@@ -91,9 +93,16 @@ export async function loadRepositorySuite(path) {
       const patchBytes = await readFile(patchPath); if (patchBytes.length > 5_000_000) throw new Error('Held-out test patch exceeds 5 MB');
       testPatches.set(task.id, patchBytes);
     }
+    if (task.referencePatch) {
+      const referencePath = await realpath(resolve(directory, task.referencePatch)), rest = relative(directory, referencePath);
+      if (rest === '..' || rest.startsWith('..' + sep) || isAbsolute(rest)) throw new Error('Reference patch must be inside the suite directory');
+      const bytes = await readFile(referencePath); if (bytes.length > 5_000_000) throw new Error('Reference patch exceeds 5 MB');
+      referencePatches.set(task.id, bytes);
+    }
   }
   const fingerprint = createHash('sha256').update(JSON.stringify(suite));
   for (const [id, bytes] of oracles) fingerprint.update(id).update(bytes);
   for (const [id, bytes] of testPatches) fingerprint.update('test-patch:' + id).update(bytes);
-  return { suite, directory, oracles, testPatches, fingerprint: fingerprint.digest('hex') };
+  for (const [id, bytes] of referencePatches) fingerprint.update('reference-patch:' + id).update(bytes);
+  return { suite, directory, oracles, testPatches, referencePatches, fingerprint: fingerprint.digest('hex') };
 }
