@@ -24,6 +24,20 @@ export interface PforgeVerificationOutcome {
   protection?: ProtectedCheck;
 }
 
+/**
+ * A missing verification command is an explicit project configuration state,
+ * not a failed verification. Callers may report the implementation as
+ * complete while keeping the result visibly unverified.
+ */
+export function isVerificationUnconfigured(outcome?: PforgeVerificationOutcome): boolean {
+  return outcome?.status === 'skipped'
+    && !outcome.report
+    && !outcome.error
+    && (!outcome.protection || outcome.protection.status === 'unchanged')
+    && (!outcome.evidence || outcome.evidence.freshness === 'current')
+    && /^No verification commands configured(?:\.|; protected paths are unchanged\.)$/i.test(outcome.reason ?? '');
+}
+
 export interface PforgeVerificationRuntime {
   extension: ExtensionFactory;
   outcome: PforgeVerificationOutcome;

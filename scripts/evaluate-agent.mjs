@@ -15,27 +15,36 @@ import { pforgeHome } from '../dist/pforge-home.js';
 import { tasks } from './eval-tasks.mjs';
 import { modelEvaluationMetadata, saveEvaluationEvidence, saveHarnessEvidence } from './evaluation-evidence.mjs';
 import { summarizeWorkflows } from './evaluation-metrics.mjs';
+import { evaluationSchedule } from './evaluation-protocol.mjs';
+import { budgetLimitsSchema, DEFAULT_BUDGET_LIMITS, saveAgentSettings } from '../dist/task/budget.js';
 
 const args = process.argv.slice(2), real = args.includes('--real');
 const option = (name, fallback) => { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1]; };
 const workflowArg = option('--workflow', 'planned');
 const workflows = workflowArg === 'ablation' ? ['direct', 'planned', 'planned-no-review'] : workflowArg === 'both' ? ['direct', 'planned'] : [workflowArg];
 const repeat = Math.max(1, Math.min(20, Number(option('--repeat', '1')) || 1));
+const reviewChallenge = args.includes('--review-challenge');
 const model = option('--model', real ? undefined : 'eval/mock');
 const taskFilter = option('--task');
-const selectedTasks = taskFilter ? tasks.filter((task) => task.id === taskFilter) : tasks;
+const requestedTasks = taskFilter?.split(',');
+const selectedTasks = requestedTasks ? tasks.filter((task) => requestedTasks.includes(task.id)) : tasks;
+if (requestedTasks?.some((id) => !tasks.some((task) => task.id === id))) throw new Error('Unknown task in selection');
+const limits = budgetLimitsSchema.parse(option('--budget') ? JSON.parse(await readFile(resolve(option('--budget')), 'utf8')) : { ...DEFAULT_BUDGET_LIMITS });
+const schedule = evaluationSchedule(selectedTasks, workflows, repeat);
 if (!selectedTasks.length) throw new Error('Unknown task: ' + taskFilter);
+if (reviewChallenge && selectedTasks.some((task) => !task.reviewFault)) throw new Error('--review-challenge requires every selected task to define reviewFault; run it with --task config-normalize-cross-file or add a validated candidate pair.');
 const thinking = option('--thinking');
 if (thinking && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid thinking level');
-if (!model || workflows.some((workflow) => !['planned', 'direct', 'planned-no-review'].includes(workflow))) throw new Error('Use --real --model provider/model [--workflow direct|planned|planned-no-review|both|ablation] [--repeat N], or omit --real for the isolated scripted smoke evaluation.');
+if (!model || workflows.some((workflow) => !['planned', 'direct', 'planned-no-review'].includes(workflow))) throw new Error('Use --real --model provider/model [--workflow direct|planned|planned-no-review|both|ablation] [--repeat N] [--review-challenge], or omit --real for the isolated scripted smoke evaluation.');
 
 const execute = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'forge-evaluation-'));
 const output = resolve(option('--output', '.forge-agent/evals/' + new Date().toISOString().replaceAll(':', '-')));
 await mkdir(output, { recursive: true });
-const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', '../tests/fixtures/task-handoff.json', '../dist/config.js', '../dist/task/controller.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/output-guard.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', './evaluation-protocol.mjs', '../tests/fixtures/task-handoff.json', '../dist/config.js', '../dist/task/controller.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/review-handoff.js', '../dist/task/output-guard.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
 const evalHome = resolve(option('--home', join(root, 'home')));
 await mkdir(evalHome, { recursive: true });
+await saveAgentSettings(evalHome, { budget: limits });
 const explicitHome = args.includes('--home');
 const configHome = resolve(option('--config-home', pforgeHome()));
 process.env.FORGE_AGENT_HOME = evalHome; process.env.PFORGE_HOME = evalHome;
@@ -86,7 +95,7 @@ try { gitRevision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: process.
 const suiteVersion = 'forge-eval-small-repo-v6';
 const suiteFingerprint = createHash('sha256').update(JSON.stringify(selectedTasks)).digest('hex').slice(0, 16);
 let modelMetadata;
-let activeTask, requests = 0;
+let activeTask, activeWorkflow, challengeReviewCalls = 0, requests = 0;
 if (!real) {
   mock = createServer(async (request, response) => {
     let raw = ''; for await (const chunk of request) raw += chunk;
@@ -96,7 +105,10 @@ if (!real) {
     const solutionFiles = activeTask.solutionFiles ?? { [activeTask.entry ?? 'solution.mjs']: activeTask.solution };
     const calls = Object.entries(solutionFiles).map(([path, content], index) => ({ index, id: 'eval-' + requests + '-' + index, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path, content }) } }));
     const handoff = JSON.parse(await readFile(new URL('../tests/fixtures/task-handoff.json', import.meta.url), 'utf8'));
-    const delta = write ? { role: 'assistant', tool_calls: calls } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Scripted fixture review; no real model judgment measured.', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : phase + ' fixture response' };
+    const review = phase === 'review' && reviewChallenge && activeWorkflow === 'planned' && challengeReviewCalls++ === 0
+      ? { verdict: 'changes_requested', summary: 'Synthetic challenge defect requires repair.', issues: [activeTask.reviewFault?.label ?? 'Injected hidden defect'], acceptance: handoff.acceptance }
+      : { verdict: 'ready', summary: 'Scripted fixture review; no real model judgment measured.', issues: [], acceptance: handoff.acceptance };
+    const delta = write ? { role: 'assistant', tool_calls: calls } : { role: 'assistant', content: phase === 'review' ? JSON.stringify(review) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify({ ...handoff.brief, steps: handoff.plan.steps }) : phase + ' fixture response' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const [part, finish] of [[delta, null], [{}, write ? 'tool_calls' : 'stop']]) response.write('data: ' + JSON.stringify({ id: 'eval', object: 'chat.completion.chunk', model: 'mock', created: 1, choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
     response.end('data: [DONE]\n\n');
@@ -133,8 +145,10 @@ const results = [];
 const textFile = async (path) => readFile(path, 'utf8');
 const writeFixture = async (project, path, content) => { const target = join(project, path); await mkdir(dirname(target), { recursive: true }); await writeFile(target, content); };
 try {
-  for (let run = 1; run <= repeat; run++) for (const workflow of workflows) for (const task of selectedTasks) {
+  for (const { task, workflow, run, position } of schedule) {
     activeTask = task;
+    activeWorkflow = workflow;
+    challengeReviewCalls = 0;
     const started = performance.now(), beforeRequests = requests;
     const project = join(root, `${task.id}-${workflow}-r${run}`);
     await mkdir(project); await execute('git', ['init'], { cwd: project, windowsHide: true });
@@ -147,17 +161,27 @@ try {
     const protectedFiles = task.protectedFiles ?? ['notes.txt', 'verify.mjs'];
     await writeFixture(project, 'pforge.json', JSON.stringify({ verify: [{ name: 'visible-tests', command: 'node verify.mjs', timeoutMs: 30000 }], verifyRetries: 1, protect: [...protectedFiles, 'pforge.json'] }));
     const protectedBefore = new Map(await Promise.all(protectedFiles.map(async (path) => [path, await textFile(join(project, path))])));
-    const gateway = await startWebConsole({ cwd: project, port: 0, evaluation: { allowReviewAblation: true } });
+    let syntheticFault;
+    const fault = reviewChallenge && workflow !== 'direct' ? task.reviewFault : undefined;
+    const gateway = await startWebConsole({ cwd: project, port: 0, evaluation: {
+      allowReviewAblation: true,
+      ...(fault ? { beforeVerification: async ({ project: target }) => {
+        await writeFixture(target, fault.path, fault.content);
+        syntheticFault = { path: fault.path, label: fault.label };
+      } } : {})
+    } });
     const origin = new URL(gateway.url).origin;
     const api = async (path, input) => { const response = await fetch(origin + '/api/' + path, { headers: { 'content-type': 'application/json', 'x-pforge-token': gateway.token }, ...(input ? { method: 'POST', body: JSON.stringify(input) } : {}) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || String(response.status)); return data; };
-    let snapshot, session, error, evidence;
+    let snapshot, session, error, evidence, executionStarted, executionMs;
     let heldOutPass = false, verificationGate = false, workspaceIntegrity = false, taskCompletion = false;
     try {
       await api('projects/trust', { path: project, trusted: true });
       session = await api('session', { project, mode: 'agent', model, ...(thinking ? { thinkingLevel: thinking } : {}), title: 'Evaluation ' + task.id + ' · ' + workflow + ' · r' + run });
+      executionStarted = performance.now();
       await api('sessions/' + session.id + '/prompt', { message: task.prompt, workflow: workflow === 'planned-no-review' ? 'planned' : workflow, ...(workflow === 'planned-no-review' ? { review: false } : {}) });
-      const deadline = Date.now() + 180000;
-      do { await new Promise((done) => setTimeout(done, 100)); snapshot = await api('sessions/' + session.id); if (Date.now() > deadline) { await api('sessions/' + session.id + '/abort', {}); throw new Error('Evaluation timed out after 180000ms'); } } while (snapshot.running);
+      const deadline = Date.now() + limits.maxDurationMs + 30_000;
+      do { await new Promise((done) => setTimeout(done, 100)); snapshot = await api('sessions/' + session.id); if (Date.now() > deadline) { await api('sessions/' + session.id + '/abort', {}); throw new Error('Evaluation exceeded the fixed execution deadline'); } } while (snapshot.running);
+      executionMs = Math.round(performance.now() - executionStarted);
       const evaluator = join(root, `${task.id}-${workflow}-r${run}-held-out.mjs`);
       const heldOutImport = JSON.stringify(pathToFileURL(join(project, entry)).href);
       await writeFile(evaluator, 'import assert from "node:assert/strict"; import * as mod from ' + heldOutImport + ';\n' + task.heldOut + '\nconsole.log("held-out assertions passed");');
@@ -183,9 +207,9 @@ try {
     const qualityPass = !error && heldOutPass && verificationGate && workspaceIntegrity && taskCompletion;
     const latencyMs = Math.round(performance.now() - started);
     const result = {
-      id: task.id, run, workflow, thinkingLevel: snapshot?.thinkingLevel ?? session?.thinkingLevel, passed: qualityPass, qualityPass, heldOutPass, verificationGate, workspaceIntegrity, taskCompletion,
+      id: task.id, run, position, workflow, protocol: syntheticFault ? 'synthetic-review-challenge' : 'clean-task', reviewChallenge, syntheticFault, thinkingLevel: snapshot?.thinkingLevel ?? session?.thinkingLevel, passed: qualityPass, qualityPass, heldOutPass, verificationGate, workspaceIntegrity, taskCompletion,
       falseCompletion: Boolean(taskCompletion && (!heldOutPass || !verificationGate || !workspaceIntegrity)), error, evidence,
-      durationMs: latencyMs, latencyMs, modelRequests: executionBudget?.modelTurns ?? (real ? stats?.assistantMessages ?? null : requests - beforeRequests),
+      durationMs: latencyMs, latencyMs, executionMs, modelRequests: executionBudget?.modelTurns ?? (real ? stats?.assistantMessages ?? null : requests - beforeRequests),
       tokenUsage: executionBudget ? { total: executionBudget.totalTokens } : stats?.tokens ?? null,
       costUsd: real && !modelMetadata?.pricingKnown ? null : executionBudget?.costUsd ?? (typeof stats?.cost === 'number' ? stats.cost : null),
       taskStatus: snapshot?.task?.status ?? snapshot?.outcome, verification: snapshot?.verification?.status,
@@ -193,6 +217,7 @@ try {
       reviewRepairs: snapshot?.task?.phases?.filter((phase, index, phases) => phase.phase === 'implement' && phases[index - 1]?.phase === 'review').length ?? 0,
       reviewFormatRetries: snapshot?.subagents?.filter((child) => child.purpose === 'review_gate').reduce((sum, child) => sum + (child.formatRetries ?? 0), 0) ?? 0,
       repairs: snapshot?.task?.repairs ?? snapshot?.verification?.attempts, toolCalls: executionBudget?.toolCalls ?? stats?.toolCalls ?? snapshot?.messages?.filter((message) => message.role === 'toolResult').length ?? 0,
+      reviewHandoff: snapshot?.task?.reviewer?.handoff,
       executionBudget,
       stats, workspace: project, sessionFile: snapshot?.sessionFile
     };
@@ -205,11 +230,13 @@ try {
 const sortedLatencies = results.map((result) => result.latencyMs).sort((a, b) => a - b);
 const percentile = (value) => sortedLatencies.length ? sortedLatencies[Math.min(sortedLatencies.length - 1, Math.floor((value / 100) * sortedLatencies.length))] : 0;
 const report = {
-  schemaVersion: 4, timestamp: new Date().toISOString(), kind: real ? 'real-model' : 'scripted-smoke', suiteVersion, suiteFingerprint, harnessFingerprint,
-  model, modelMetadata, requestedThinkingLevel: thinking, workflows, repeat, environment: { node: process.version, platform: process.platform, arch: process.arch, piVersion: VERSION, gitRevision },
+  schemaVersion: 5, timestamp: new Date().toISOString(), kind: real ? 'real-model' : 'scripted-smoke', suiteVersion, suiteFingerprint, harnessFingerprint,
+  model, modelMetadata, requestedThinkingLevel: thinking, workflows, repeat, limits, order: 'counterbalanced-cyclic-v1', schedule: schedule.map(({ task, ...run }) => ({ id: task.id, ...run })), environment: { node: process.version, platform: process.platform, arch: process.arch, piVersion: VERSION, gitRevision },
   byWorkflow: summarizeWorkflows(results, workflows, !real || Boolean(modelMetadata?.pricingKnown)),
   isolation: { home: evalHome, workspaceRoot: root, explicitHome: args.includes('--home') },
-  note: real ? 'Small public repository task suite; this is an engineering harness, not a frontier benchmark. Compare repeated runs with fixed model/provider settings.' : 'Known solutions are scripted by an isolated local fixture. These results validate tool execution, evidence, completion and evaluation plumbing, not model coding ability.',
+  note: reviewChallenge
+    ? 'Synthetic reviewer challenge: the evaluator injects a known hidden defect after implementation and before verification in planned arms. Compare planned against planned-no-review as a reviewer-repair diagnostic, not as natural-task coding quality.'
+    : real ? 'Small public repository task suite; this is an engineering harness, not a frontier benchmark. Compare repeated runs with fixed model/provider settings.' : 'Known solutions are scripted by an isolated local fixture. These results validate tool execution, evidence, completion and evaluation plumbing, not model coding ability.',
   metrics: {
     falseCompletions: results.filter((result) => result.falseCompletion).length,
     qualityPassRate: results.length ? results.filter((result) => result.qualityPass).length / results.length : 0,

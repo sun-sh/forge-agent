@@ -279,3 +279,16 @@ button:disabled,select:disabled{cursor:default;opacity:.5}
 .memory-candidate-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
 .budget-presets{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+
+/* Keep the composer controls on one stable row while the model selector gives
+   up width before the send controls do. */
+.composer-bottom{flex-wrap:nowrap;min-width:0}
+.composer-selectors{flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;flex-wrap:nowrap}
+.composer-selectors .selector-chip{min-width:0;flex:0 1 auto}
+.composer-selectors .model-picker-button{flex:1 1 170px;min-width:92px}
+.composer-actions{flex:0 0 auto;flex-wrap:nowrap;white-space:nowrap}
+.composer-actions .composer-control-status{flex:none}
+.delivery-card{width:min(950px,calc(100% - 64px));margin:0 auto 10px;padding:13px 15px;border:1px solid #d8e3da;border-radius:10px;background:#f7fbf7;color:var(--text)}
+.delivery-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.delivery-heading>div:first-child{display:grid;gap:3px}.delivery-actions{display:flex;align-items:center;gap:7px}.delivery-heading strong{font-size:13px;font-weight:650}.delivery-artifacts{display:grid;gap:5px}.delivery-artifact{display:flex;align-items:center;gap:9px;width:100%;min-width:0;padding:8px 9px;border:1px solid #e0e8e1;border-radius:7px;background:var(--surface);color:var(--text);text-align:left;cursor:pointer}.delivery-artifact:hover{border-color:#b8cfbd;background:#fbfffb}.delivery-artifact .ui-icon{width:16px;height:16px;flex:none;color:var(--accent)}.delivery-artifact>span:nth-child(2){display:grid;gap:2px;min-width:0;flex:1}.delivery-artifact strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.45 Consolas,monospace}.delivery-artifact small{color:var(--faint);font-size:10px}.delivery-artifact-open{flex:none;color:var(--accent);font-size:10px}.delivery-empty,.delivery-validation{margin:7px 0 0;color:var(--muted);font-size:10.5px;line-height:1.6}.delivery-validation{padding-top:9px;border-top:1px solid #e2ebe3}.delivery-card .button{flex:none}
+@media(max-width:860px){.composer-actions .key-hint{display:none}.delivery-card{width:calc(100% - 40px)}}
+@media(max-width:660px){.composer-selectors{gap:4px}.composer-selectors .selector-chip{padding-left:6px;padding-right:6px}.composer-selectors .model-picker-button{min-width:76px}.delivery-card{width:calc(100% - 24px);padding:11px 12px}}

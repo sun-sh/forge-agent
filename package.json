@@ -24,7 +24,8 @@
     "prepack": "npm run build",
     "check": "node scripts/check.mjs",
     "start": "node dist/pi-cli.js web",
-    "check:agent": "node dist/pi-cli.js --version"
+    "check:agent": "node dist/pi-cli.js --version",
+    "eval:review": "npm run build && node scripts/evaluate-reviewer.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.4.0",

@@ -148,6 +148,30 @@ describe('safe agent output', () => {
     expect(verificationLabel({ status: 'passed' })).toContain('当前版本未确认');
     expect(verificationLabel({ ...verification, report: { passed: true, results: [{ passed: true, exitCode: 0, failure: 'timeout' }] } })).not.toBe('验证通过');
   });
+  it('shows written artifacts and removes continuation for an implementation with no verify commands', async () => {
+    const { window, app } = await client(), find = (id) => window.document.getElementById(id);
+    app.state.sessionId = 'delivery'; app.state.project = { path: 'C:\\repo', name: 'repo' };
+    const verification = { status: 'skipped', reason: 'No verification commands configured.' };
+    app.applySnapshot({ id: 'delivery', running: false, outcome: 'completed', task: { id: 'task-1', kind: 'change', workflow: 'planned', status: 'completed', phase: 'complete', validation: 'unconfigured', artifacts: [{ path: 'index.html', operation: 'write' }], repairs: 0, phases: [], verification }, verification, messages: [] });
+    expect(find('delivery-card').classList.contains('hidden')).toBe(false);
+    expect(find('delivery-artifacts').textContent).toContain('index.html');
+    expect(find('delivery-validation').textContent).toContain('未配置');
+    expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
+    find('delivery-artifacts').querySelector('[data-open-artifact]').click();
+    expect(app.state.changes.open).toBe(true);
+    expect(app.state.changes.reviewView).toBe('files');
+  });
+  it('does not hide a blocked review or finalization failure behind missing verification', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'blocked';
+    const verification = { status: 'skipped', reason: 'No verification commands configured.' };
+    for (const status of ['needs_attention', 'failed', 'budget_exceeded']) {
+      const task = { id: 'task', kind: 'change', workflow: 'planned', phase: 'review', status, validation: 'unconfigured', verification, repairs: 0, phases: [], artifacts: [{ path: 'main.js', operation: 'write' }], review: { verdict: 'changes_requested', issues: ['Missing requirement'] } };
+      app.applySnapshot({ id: 'blocked', running: false, outcome: 'failed', task, messages: [] });
+      expect(sessionOutcome({ task }).kind).toBe('failed');
+      expect(window.document.getElementById('resume-task-button').classList.contains('hidden')).toBe(false);
+      expect(window.document.getElementById('delivery-title').textContent).not.toBe('实现已完成');
+    }
+  });
   it.each(['ask', 'plan'])('uses the executed %s permission mode for unknown or implementation intent labels', (mode) => {
     for (const kind of ['undetermined', 'change']) {
       const task = { kind, workflow: 'direct', status: 'completed', mode };

@@ -33,6 +33,13 @@ const state = {
   changes: { open: false, sessionId: null, reviewView: 'changes', files: [], selectedPath: null, fingerprint: null, diffStatus: 'idle', listRequest: 0, diffRequest: 0, projectFiles: [], selectedProjectFile: null, projectFilesRequest: 0, projectFileRequest: 0, terminalBusy: false },
   subagents: [], subagentSession: null, subagentSelected: null, subagentRequest: 0, subagentTimer: null
 };
+function verificationUnconfigured(verification) {
+  return verificationLabel(verification) === '未配置自动验证';
+}
+function implementationWithoutChecks(task) {
+  return task?.status === 'completed' && task.phase === 'complete' && !task.error && task.finalization !== 'failed' && !task.reviewFollowup
+    && verificationUnconfigured(task.verification) && (!task.review || task.review.verdict === 'ready' && !task.review.issues?.length && !task.review.acceptance?.some((item) => item.status !== 'met'));
+}
 const changesMedia = window.matchMedia?.('(max-width: 1180px)');
 let projectsRequest = 0;
 
@@ -204,9 +211,11 @@ function renderTasks() {
   $('tasks-note').textContent = tasks.length ? '共 ' + tasks.length + ' 个' + (state.taskScope === 'project' ? '当前项目' : '跨项目') + '任务，状态独立于当前浏览器标签页保存。' : (state.taskScope === 'project' ? '当前项目还没有持久化任务。' : '还没有持久化任务。') + '执行过修改或验证后会显示在这里。';
   list.innerHTML = tasks.map((task) => {
     const running = task.status === 'running';
-    const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(task.status);
+    const validationUnconfigured = implementationWithoutChecks(task);
+    const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(task.status) && !validationUnconfigured;
     const action = task.status === 'failed' || task.status === 'needs_attention' || task.status === 'budget_exceeded' ? 'recheck' : 'resume';
-    return '<article class="task-card"><button type="button" class="task-card-main" data-open-task="' + esc(task.id) + '"><strong>' + esc(task.prompt || '未命名任务').slice(0, 180) + '</strong><small>' + esc(shortPath(task.project)) + ' · ' + esc(TASK_STATUS_LABELS[task.status] || task.status) + ' · ' + esc(formatTime(task.updatedAt)) + '</small><span>' + esc(task.error || (task.phase ? '当前阶段：' + (TASK_LABELS[task.phase] || task.phase) : '')) + '</span></button><div class="task-card-actions">' + (running ? '<button type="button" class="button quiet small" data-task-action="stop" data-task-id="' + esc(task.id) + '">停止</button>' : retryable ? '<button type="button" class="button quiet small" data-task-action="' + action + '" data-task-id="' + esc(task.id) + '">' + (action === 'recheck' ? '重新检查' : '继续') + '</button>' : '') + '</div></article>';
+    const statusLabel = validationUnconfigured ? '实现完成 · 未配置自动验证' : TASK_STATUS_LABELS[task.status] || task.status;
+    return '<article class="task-card"><button type="button" class="task-card-main" data-open-task="' + esc(task.id) + '"><strong>' + esc(task.prompt || '未命名任务').slice(0, 180) + '</strong><small>' + esc(shortPath(task.project)) + ' · ' + esc(statusLabel) + ' · ' + esc(formatTime(task.updatedAt)) + '</small><span>' + esc(validationUnconfigured ? '文件已写入项目，可打开会话查看交付。' : task.error || (task.phase ? '当前阶段：' + (TASK_LABELS[task.phase] || task.phase) : '')) + '</span></button><div class="task-card-actions">' + (running ? '<button type="button" class="button quiet small" data-task-action="stop" data-task-id="' + esc(task.id) + '">停止</button>' : retryable ? '<button type="button" class="button quiet small" data-task-action="' + action + '" data-task-id="' + esc(task.id) + '">' + (action === 'recheck' ? '重新检查' : '继续') + '</button>' : '') + '</div></article>';
   }).join('') || '<p class="settings-note">暂无任务。</p>';
 }
 async function loadTasks() {
@@ -306,7 +315,9 @@ function showStart() { closeSubagent(); renderSubagents([]); toggleChanges(false
 function showChat() { $('toggle-changes').classList.remove('hidden'); $('start-state').classList.add('hidden'); $('conversation-view').classList.remove('hidden'); resizeComposerInputs(); }
 function continuationKind() {
   if (!state.sessionId || state.running || state.readOnly || historyReadOnly()) return null;
-  if (state.task) return ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status) && state.mode === 'agent' ? 'task' : null;
+  if (state.task) {
+    return ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status) && state.mode === 'agent' ? 'task' : null;
+  }
   return state.outcome === 'aborted' ? 'conversation' : null;
 }
 function renderComposerControl() {
@@ -330,7 +341,7 @@ function renderComposerControl() {
   const status = $('composer-control-status');
   status.textContent = stopping ? '正在停止…' : '';
   status.classList.toggle('hidden', !stopping);
-  const interrupted = !showStop && !resuming && state.task && ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(state.task.status);
+  const interrupted = !showStop && !resuming && state.task && continuationKind() === 'task';
   $('composer-run-note').classList.toggle('hidden', !interrupted);
   if (interrupted) {
     const task = state.task;
@@ -1258,12 +1269,13 @@ function showUiRequest(event) {
 function renderVerification(verification) {
   state.verification = verification || null;
   const panel = $('verification-report');
-  panel.classList.toggle('hidden', !verification?.report && !verification?.error);
+  const protectionIssue = verification?.protection?.status && verification.protection.status !== 'unchanged';
+  panel.classList.toggle('hidden', !verification?.report && !verification?.error && !verificationUnconfigured(verification) && !verification?.evidence?.reason && !protectionIssue);
   if (!verification) return;
   panel.classList.toggle('failed', verification.status === 'failed' || verification.evidence?.freshness === 'stale');
   $('verification-summary').textContent = verificationLabel(verification) + (verification.attempts ? ' · 修复重试 ' + verification.attempts + ' 次' : '') + (verification.checkedAt ? ' · ' + formatTime(verification.checkedAt) : '') + ' · 命令与输出';
   const failures = { timeout: '超时', aborted: '已停止', spawn_error: '启动失败' };
-  $('verification-output').textContent = (verification.evidence?.reason ? verification.evidence.reason + '\n\n' : '') + ((verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '');
+  $('verification-output').textContent = [verification.reason, verification.evidence?.reason].filter(Boolean).join('\n\n') + (verification.reason || verification.evidence?.reason ? '\n\n' : '') + ((verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '');
 }
 const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '完成' };
 function setWorkflow(value) {
@@ -1286,6 +1298,29 @@ async function changeWorkflow(value) {
     setWorkflow(previous); toast(error.message, 'error'); return false;
   } finally { state.changingConfig = false; setRunning(state.running); }
 }
+function renderDelivery(task) {
+  const card = $('delivery-card');
+  if (!card) return;
+  const artifacts = Array.isArray(task?.artifacts) ? task.artifacts : [];
+  const unconfigured = implementationWithoutChecks(task);
+  const implementation = task && !['answer', 'explore', 'verify'].includes(task.kind || '');
+  const visible = Boolean(implementation && (artifacts.length || unconfigured || task.status === 'completed' && task.phase === 'complete'));
+  card.classList.toggle('hidden', !visible);
+  if (!visible) return;
+  $('delivery-title').textContent = task.status === 'running' ? '正在生成文件' : task.status === 'completed' && !task.error ? '实现已完成' : '本次文件 · 任务尚未完成';
+  $('delivery-artifacts').innerHTML = artifacts.length ? artifacts.map((artifact) => '<button type="button" class="delivery-artifact" data-open-artifact="' + esc(artifact.path) + '" title="打开 ' + esc(artifact.path) + '">' + icon('file') + '<span><strong>' + esc(artifact.path) + '</strong><small>' + (artifact.operation === 'write' ? '写入文件' : '修改文件') + '</small></span><span class="delivery-artifact-open">打开</span></button>').join('') : '<p class="delivery-empty">本次没有捕获到文件路径。可打开右侧“文件”面板浏览项目。</p>';
+  $('delivery-validation').textContent = unconfigured ? '自动验证：未配置。文件已经写入当前项目，可在项目根目录添加 forge-agent.json 的 verify 命令后重新检查。' : task.validation === 'verified' ? '自动验证：已通过。' : task.status === 'running' ? '正在等待执行完成。' : '自动验证：请查看任务状态与执行记录。';
+  $('delivery-open-files').disabled = !state.project;
+  $('delivery-recheck').classList.toggle('hidden', !unconfigured || !task.id);
+  $('delivery-recheck').disabled = !unconfigured || !task.id || state.running || state.loadingSession || state.sending || Boolean(state.runControl);
+}
+function openArtifactFile(path) {
+  if (!state.project) { toast('当前会话没有绑定项目', 'warning'); return; }
+  state.changes.selectedProjectFile = path;
+  state.changes.reviewView = 'files';
+  toggleChanges(true);
+  void loadProjectFiles(path);
+}
 function renderTask(task) {
   const identity = state.sessionId + ':' + (task?.id || ''), changedTask = timelineIdentity !== identity;
   timelineIdentity = identity;
@@ -1294,10 +1329,10 @@ function renderTask(task) {
   if (task?.budget) state.budget = task.budget;
   const showTaskPanel = Boolean(task && (!['answer', 'explore'].includes(task.kind) || task.progress?.status === 'warned' || task.progress?.status === 'stalled'));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
-  if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; $('task-summary-phase').textContent = '任务进度'; $('task-summary-note').textContent = ''; renderBudget(null); renderComposerControl(); return; }
+  if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; $('task-summary-phase').textContent = '任务进度'; $('task-summary-note').textContent = ''; renderDelivery(null); renderBudget(null); renderComposerControl(); return; }
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : TASK_STATUS_LABELS[task.status] || '需要检查';
+  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : implementationWithoutChecks(task) ? '实现已完成 · 未配置自动验证' : TASK_STATUS_LABELS[task.status] || '需要检查';
   $('task-summary-phase').textContent = TASK_LABELS[task.phase] || '任务进度';
   $('task-summary-note').textContent = compactStatus + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '');
   $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;
@@ -1309,6 +1344,7 @@ function renderTask(task) {
     const finding = task.review?.acceptance?.find((entry) => entry.id === item.id), label = task.review?.freshness !== 'current' && finding ? '当前未确认' : ({ met: '已确认', unmet: '未满足', unconfirmed: '未确认' }[finding?.status] || '待审阅');
     return '<li><strong>' + esc(item.id) + ' · ' + esc(label) + '</strong><p>' + esc(item.criterion) + '</p><small>' + esc(finding?.evidence || item.evidence) + '</small></li>';
   }).join('') + '</ol></details>' : '';
+  renderDelivery(task);
   scheduleTimeline();
   renderBudget(task.budget || state.budget);
   setRunning(state.running);
@@ -1471,7 +1507,7 @@ async function loadProjectFile(path) {
     if (current()) $('review-file-content').textContent = data.text || '(空文件)';
   } catch (error) { if (current()) $('review-file-content').textContent = '无法读取文件：' + error.message; }
 }
-async function loadProjectFiles() {
+async function loadProjectFiles(preferredPath = state.changes.selectedProjectFile) {
   const project = state.project?.path;
   if (!project) { $('review-file-list').innerHTML = '<p class="changes-empty">请先选择项目。</p>'; $('review-file-content').textContent = '选择文件查看内容。'; return; }
   const request = ++state.changes.projectFilesRequest;
@@ -1482,7 +1518,7 @@ async function loadProjectFiles() {
     const data = await api('/api/files?project=' + encodeURIComponent(project) + '&q=' + encodeURIComponent(query));
     if (!current()) return;
     state.changes.projectFiles = data.files || [];
-    const selected = state.changes.projectFiles.find((file) => file.path === state.changes.selectedProjectFile) || state.changes.projectFiles[0];
+    const selected = state.changes.projectFiles.find((file) => file.path === preferredPath) || state.changes.projectFiles.find((file) => file.path === state.changes.selectedProjectFile) || state.changes.projectFiles[0];
     state.changes.selectedProjectFile = selected?.path || null; renderProjectFiles();
     if (selected) await loadProjectFile(selected.path);
     else $('review-file-content').textContent = '没有匹配的安全文本文件。';
@@ -2397,6 +2433,9 @@ $('allow-button').addEventListener('click', () => submitUi(false));
 $('deny-button').addEventListener('click', () => submitUi(true));
 $('approval-options').addEventListener('click', (event) => { const option = event.target.closest('[data-ui-option]'); if (!option || !state.uiRequest) return; state.uiRequest.selectedValue = option.dataset.uiOption; $('allow-button').disabled = false; [...$('approval-options').children].forEach((item) => item.classList.toggle('selected', item === option)); });
 $('tasks-button').addEventListener('click', openTasks);
+$('delivery-recheck').addEventListener('click', () => { if (state.task?.id) void taskAction(state.task.id, 'recheck'); });
+$('delivery-open-files').addEventListener('click', () => { state.changes.reviewView = 'files'; toggleChanges(true); });
+$('delivery-card').addEventListener('click', (event) => { const button = event.target.closest('[data-open-artifact]'); if (button) openArtifactFile(button.dataset.openArtifact); });
 $('open-execution').addEventListener('click', () => { state.changes.reviewView = 'execution'; toggleChanges(true); });
 $('task-evidence').addEventListener('toggle', () => { if ($('task-evidence').open && state.changes.open && state.changes.reviewView === 'execution') void loadExecutionTimeline(); });
 $('tasks-close').addEventListener('click', closeTasks);

@@ -40,8 +40,9 @@ The editor supports OpenAI Chat Completions, Responses and Anthropic Messages in
 | Need | Forge behavior |
 | --- | --- |
 | **Check delivery** | Verification binds to workspace and configuration fingerprints. Changed protected files fail delivery even when tests pass. Historical passes remain distinct from current evidence. |
-| **Opt into planning** | Inspect → Plan → Implement → Verify → independent read-only Review; structured constraints and acceptance survive phases, with bounded shared repairs. |
+| **Opt into planning** | Inspection returns a concise plan in the same handoff; a separate planning call is a fallback. Implementation, verification and independent review preserve requirements; repair reviews focus on prior findings. |
 | **Continue interrupted work** | Reuse the Pi conversation and files at a valid saved phase, without appending the original request or replaying tools. Interrupted verify/review begins with fresh verification. |
+| **Make delivery files visible** | Each task lists files the model wrote or edited, including in non-Git folders; click a file to open it in the right-side viewer instead of searching the project directory manually. |
 | **Keep the UI focused** | Project-based conversations and forks, right-aligned user messages and folded process output. Changes, files, terminal and execution records live on the right; pause reasons appear beside the composer. |
 | **Bound parallel work** | Queue up to three different projects. Subagents explore/review with readers; workers propose changes in isolated worktrees for user-reviewed application and main-project verification. |
 
@@ -64,7 +65,7 @@ Create `forge-agent.json` in the target project root; YAML is also supported:
 
 Only `verify`, `verifyRetries` and `protect` are accepted; unknown fields fail. Commands require project trust. Exact failure output returns to the model and cannot produce a successful exit. `protect` accepts literal project-relative files/directories; pre-existing dirty content becomes the baseline, and changes or incomplete observations block delivery. See the [schema](forge-agent.schema.json) and [user guide](docs/usage.en.md).
 
-Missing checks never imply verified success. Planned implementation still requires current verification evidence; adaptive execution explicitly reports whether checks ran.
+Missing checks never imply verified success. A completed implementation with no configured checks is shown as “implementation complete · verification not configured,” with its written files listed and no meaningless continuation action. Planned implementation still requires current evidence when verification commands are configured; read-only Plan skips stay quiet.
 
 The Web host detects a single-response output-limit stop, including reasoning-only output with no text or tool calls. It requests at most two continuations through Pi settlement under the same task budget; repeated failure stops implementation with its actual cause. Continuing a legacy record returns to incomplete implementation instead of verifying an empty result.
 
@@ -80,7 +81,7 @@ Data defaults to `~/.forge-agent`, with `FORGE_AGENT_HOME` and legacy `PFORGE_HO
 
 **Pi owns** model/tool loops, authentication, built-in tools, session trees, compaction, MCP protocols, Skills, extensions and discovery. **Forge owns** task state and handoffs, delivery/protection gates, budgets and execution ownership, recovery, child lifecycle and the Web product layer. The archived prototype is outside the active build.
 
-[Architecture Deep Dive](docs/architecture-deep-dive.md) explains tradeoffs and limits. [Evaluation methods and real failures](docs/evaluation.md) separate regressions, fixture services and real-model runs. The evaluator supports pinned baseline/reference validation and `direct / planned / planned-no-review` ablation. Review disabling is confined to isolated evaluation; production requests cannot bypass the gate. Current samples do not establish general planning, review or memory gains.
+[Architecture Deep Dive](docs/architecture-deep-dive.md) explains tradeoffs and limits. [Evaluation methods and real failures](docs/evaluation.md) separate regressions, fixture services and real-model runs. The evaluator supports pinned baseline/reference validation and `direct / planned / planned-no-review` ablation. [Natural-task workflow comparisons and paired correct/defective review diagnostics](docs/evaluations/focused-review-2026-11-10.md) report separate outcomes, including misses, false positives and abstentions; the [earlier fault-injection diagnostic](docs/evaluations/review-challenge-2026-11-09.md) is retained separately. Review disabling is confined to isolated evaluation; production requests cannot bypass the gate. Current samples do not establish general planning, review or memory gains.
 
 ```bash
 npm run check

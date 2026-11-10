@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Combine bounded inspection and planning in one handoff, with a separate planning fallback for older replies. Focus independent review on one complete requirement ledger and full hunks; pass previous blocking findings to fresh repair reviewers. Missing verification no longer hides failed review, budget or finalization states.
+- Add counterbalanced small-task evaluation with explicit frozen budgets and execution-only timing, plus paired correct/defective candidate reviewer diagnostics with independently validated oracles, false positives, missed defects and abstentions. Preserve earlier synthetic and natural-task evidence separately.
+
+- Add an evaluator-only reviewer fault-injection challenge. A known hidden defect is inserted after implementation in an isolated fixture; planned review must detect and repair it while planned-no-review exposes the held-out false completion. Record the real DeepSeek diagnostic separately from the clean-task ablation.
+
+- Show files written or edited by a task in a delivery card, including non-Git projects, with one-click opening in the right-side file viewer. Treat a project with no configured verification commands as completed implementation with an explicit unverified state; hide continuation controls and keep read-only Plan skips quiet.
+
 - Recover Web model length/empty stops through two bounded Pi settlement continuations without changing model effort or resetting parent usage. Do not advance incomplete output to verification; repair legacy continuation records that hid a truncated implementation behind a missing-checks error. Add actual-file Pi integration regressions.
 
 - Resume planned tasks at a validated saved phase with their goal, acceptance, plan, original protection baseline and consumed repair count; revalidate before review and preserve same-session context without duplicating user messages. Reconsider ordinary defaults once during inspection, retain blocking ambiguities, and expose stop reasons beside a compact, collapsible task summary. Add explicit standard/long-task budget form presets.

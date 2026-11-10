@@ -26,6 +26,28 @@ function fixture(verification: PforgeVerificationOutcome = { status: 'passed', a
 }
 
 describe('task workflow controller', () => {
+  it('uses a combined inspection and plan without an extra planning model turn', async () => {
+    const f = fixture(), execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => args[0] === 'inspect' ? JSON.stringify({ ...handoff.brief, steps: ['Apply the scoped change and preserve unrelated work'] }) : execute(...args);
+    const task = await f.controller.run('Fix the task', 0, f.adapter);
+    expect(task.status).toBe('completed');
+    expect(task.plan?.acceptance).toEqual(task.requirements?.acceptance);
+    expect(task.plan?.constraints).toEqual(task.requirements?.constraints);
+    expect(f.phases).toEqual(['implement', 'review']);
+    expect(task.phases.map((phase) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: task }])?.plan).toEqual(task.plan);
+  });
+  it('sends prior blocking findings to a fresh reviewer on repair without dropping original acceptance', async () => {
+    const f = fixture(); let reviews = 0; const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => args[0] === 'review' && reviews++ === 0
+      ? JSON.stringify({ verdict: 'changes_requested', summary: 'Missing boundary', issues: ['src/main.ts: negative retry input must use the default'], acceptance: [{ id: 'A1', status: 'unmet', evidence: 'negative input' }] }) : execute(...args);
+    const task = await f.controller.run('Fix the task', 1, f.adapter);
+    expect(task.status).toBe('completed');
+    expect(f.messages.at(-1)).toContain('REPAIR RECHECK');
+    expect(f.messages.at(-1)).toContain('negative retry input');
+    expect(f.messages.at(-1)).toContain('"id":"A1"');
+    expect(task.reviewer?.handoff).toMatchObject({ version: 2, scope: 'repair' });
+  });
   it('continues from a real-provider-shaped inspection handoff with evidence prose and a single final JSON object', async () => {
     const f = fixture(), execute = f.adapter.execute;
     f.adapter.execute = async (...args) => args[0] === 'inspect' ? 'Inspection complete. Findings:\n- Relevant implementation and tests located.\n\n' + JSON.stringify(handoff.brief) : execute(...args);
@@ -282,6 +304,56 @@ describe('task workflow controller', () => {
     const failed = withTaskEvidence(result, { ...result.verification!, evidence: { ...evidence, freshness: 'stale' } });
     expect(failed.status).toBe('needs_attention');
   });
+  it('finishes implementation when verification is unconfigured and keeps written artifacts visible', async () => {
+    const f = fixture({ status: 'skipped', attempts: 0, reason: 'No verification commands configured.' });
+    const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => {
+      if (args[0] === 'implement') f.controller.recordArtifacts([{ path: 'index.html', operation: 'write' }]);
+      return execute(...args);
+    };
+    const result = await f.controller.run('Create the requested page.', 0, f.adapter);
+    expect(result).toMatchObject({ status: 'completed', validation: 'unconfigured', artifacts: [{ path: 'index.html', operation: 'write' }], verification: { status: 'skipped' } });
+    expect(result.phase).toBe('complete');
+    expect(withTaskEvidence(result, result.verification!).status).toBe('completed');
+  });
+  it('does not erase failed review findings when automatic verification is absent', async () => {
+    const f = fixture(); const task = await f.controller.run('Fix task', 0, f.adapter);
+    task.review = { verdict: 'changes_requested', summary: 'Defect', issues: ['Missing negative input handling'] };
+    const result = withTaskEvidence(task, { status: 'skipped', attempts: 0, reason: 'No verification commands configured.' });
+    expect(result.status).toBe('needs_attention'); expect(result.review?.issues).toContain('Missing negative input handling');
+  });
+  it('completes unverified implementation without a Git-only review detour', async () => {
+    const f = fixture({ status: 'skipped', attempts: 0, reason: 'No verification commands configured.' });
+    f.adapter.reviewPatch = async () => { throw new Error('No repository'); };
+    f.adapter.review = async () => { throw new Error('Must not claim a review'); };
+    const task = await f.controller.run('Create index.html', 0, f.adapter);
+    expect(task).toMatchObject({ status: 'completed', validation: 'unconfigured' }); expect(task.review).toBeUndefined();
+  });
+  it('does not clear an interrupted review finding by removing verification commands', async () => {
+    const f = fixture(); const previous = await f.controller.run('Fix task', 0, f.adapter);
+    previous.status = 'needs_attention'; previous.phase = 'review';
+    previous.review = { verdict: 'changes_requested', summary: 'Blocking defect', issues: ['Required input behavior is still wrong'] };
+    f.adapter.verify = f.adapter.refreshVerification = async () => ({ status: 'skipped', attempts: 0, reason: 'No verification commands configured.' });
+    const resumed = await f.controller.run(previous.prompt, 0, f.adapter, previous.id, undefined, { workflow: 'planned', resumeState: previous });
+    expect(resumed.status).toBe('needs_attention'); expect(resumed.review?.issues).toEqual(previous.review.issues);
+    expect(resumed.error).toContain('删除验证配置');
+  });
+  it('persists blocking findings through an interrupted repair and never clears them without a new review', async () => {
+    const f = fixture(), execute = f.adapter.execute; let implementations = 0;
+    f.adapter.execute = async (...args) => {
+      if (args[0] === 'review') return JSON.stringify({ verdict: 'changes_requested', summary: 'Defect', issues: ['src/main.ts: missing boundary case'], acceptance: handoff.acceptance });
+      if (args[0] === 'implement' && implementations++ > 0) { f.controller.cancel('User stopped repair'); throw new Error('interrupted'); }
+      return execute(...args);
+    };
+    const interrupted = await f.controller.run('Fix task', 1, f.adapter);
+    expect(interrupted.status).toBe('aborted'); expect(interrupted.reviewFollowup?.issues).toHaveLength(1);
+    const restored = restoreTask([{ type: 'custom', customType: 'pforge.task', data: interrupted }])!;
+    expect(restored.reviewFollowup).toEqual(interrupted.reviewFollowup);
+    f.adapter.execute = execute;
+    f.adapter.verify = f.adapter.refreshVerification = async () => ({ status: 'skipped', attempts: 0, reason: 'No verification commands configured.' });
+    const resumed = await f.controller.run(restored.prompt, 1, f.adapter, restored.id, undefined, { workflow: 'planned', resumeState: restored });
+    expect(resumed.status).toBe('needs_attention'); expect(resumed.reviewFollowup?.issues).toHaveLength(1);
+  });
   it('refuses to certify a planned change when the independent reviewer is unavailable', async () => {
     const f = fixture(); f.adapter.review = undefined;
     const result = await f.controller.run('Fix the task', 0, f.adapter);
@@ -296,7 +368,7 @@ describe('task workflow controller', () => {
     const result = await f.controller.run(prompt, 0, f.adapter);
     expect(result.status).toBe('completed');
     expect(reviewPrompt).toContain('TAIL_ACCEPTANCE');
-    expect(reviewPrompt).toContain('"understanding"');
+    expect(reviewPrompt).toContain('"requirements"');
     expect(reviewPrompt).toContain('"sha256"');
   });
   it('persists optional review notes without treating them as unresolved defects', async () => {

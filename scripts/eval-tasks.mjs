@@ -37,7 +37,8 @@ export const tasks = [
       'src/index.mjs': 'export { normalizeConfig } from "./config.mjs";\n'
     },
     visible: 'assert.deepEqual(mod.normalizeConfig({ retries: 2, tags: ["a"] }), { retries: 2, tags: ["a"] });',
-    heldOut: 'const input = { retries: -1, tags: ["x", 3] }; const output = mod.normalizeConfig(input); assert.deepEqual(output, { retries: 3, tags: ["x"] }); assert.notStrictEqual(output, input); assert.deepEqual(input, { retries: -1, tags: ["x", 3] }); assert.deepEqual(mod.normalizeConfig({ retries: 0, tags: [] }), { retries: 0, tags: [] }); assert.deepEqual(mod.normalizeConfig({ retries: 11 }), { retries: 3, tags: [] });'
+    heldOut: 'const input = { retries: -1, tags: ["x", 3] }; const output = mod.normalizeConfig(input); assert.deepEqual(output, { retries: 3, tags: ["x"] }); assert.notStrictEqual(output, input); assert.deepEqual(input, { retries: -1, tags: ["x", 3] }); assert.deepEqual(mod.normalizeConfig({ retries: 0, tags: [] }), { retries: 0, tags: [] }); assert.deepEqual(mod.normalizeConfig({ retries: 11 }), { retries: 3, tags: [] });',
+    reviewFault: { path: 'src/config.mjs', content: 'export function normalizeConfig(input) { return { retries: input.retries || 3, tags: input.tags || [] }; }\n', label: 'visible checks pass while negative retries and mixed tags remain wrong' }
   },
   {
     id: 'root-safe-path-cross-file',

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createAgentSession, DefaultResourceLoader, hasTrustRequiringProjectResources, ModelRuntime, ProjectTrustStore, SessionManager, SettingsManager, VERSION, type AgentSession, type ExtensionUIContext } from '@earendil-works/pi-coding-agent';
 import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent, type ModelThinkingLevel } from '@earendil-works/pi-ai';
 import { MODEL_THINKING_LEVELS } from '@earendil-works/pi-ai/providers/model-schema';
-import { createPforgeVerification, isVerified, refreshVerificationEvidence, verificationOutcomeSchema } from '../verification/pi-extension.js';
+import { createPforgeVerification, isVerificationUnconfigured, isVerified, refreshVerificationEvidence, verificationOutcomeSchema } from '../verification/pi-extension.js';
 import { captureWorkspace, invalidateEvidence, verificationConfigHash } from '../verification/evidence.js';
 import { loadConfig } from '../config.js';
 import { pforgeHome } from '../pforge-home.js';
@@ -16,7 +16,7 @@ import { loadWebToken, matchesToken, readCookie } from './auth.js';
 import { CustomProviders, ProviderError } from './providers.js';
 import { createWebModePolicy, isWebMode, isWebWorkflow, restoredRunMode, restoredWebMode, restoredWebWorkflow, saveWebMode, saveWebWorkflow, type WebMode, type WebWorkflow } from './modes.js';
 import { webBuiltinExtensions } from './pi-extensions.js';
-import { createExecutionState, restoreTask, taskPhaseContract, TaskController, withTaskEvidence, type TaskState } from '../task/controller.js';
+import { createExecutionState, restoreTask, taskPhaseContract, TaskController, withTaskEvidence, type TaskArtifact, type TaskState } from '../task/controller.js';
 import { executionTimeline } from '../task/timeline.js';
 import { finalizeExecution, pendingExecutionState } from '../task/lifecycle.js';
 import { TaskRegistry, type TaskRecord } from '../task/registry.js';
@@ -40,7 +40,18 @@ import { TaskQueue, QueueError, QueueDeferredError } from '../task/queue.js';
 import { TaskProgress } from '../task/progress.js';
 import { createModelOutputGuard, incompleteModelOutput } from '../task/output-guard.js';
 
-export interface WebConsoleOptions { cwd: string; host?: string; port?: number; serviceInstance?: string; onServiceStop?(): void; evaluation?: { allowReviewAblation: true }; }
+export interface WebConsoleOptions {
+  cwd: string;
+  host?: string;
+  port?: number;
+  serviceInstance?: string;
+  onServiceStop?(): void;
+  /** Programmatic-only evaluator hooks; never exposed through the Web API. */
+  evaluation?: {
+    allowReviewAblation: true;
+    beforeVerification?(context: { project: string; task: TaskState }): Promise<void> | void;
+  };
+}
 interface UiRequest { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout>; event: Record<string, unknown>; cleanup(): void; }
 interface SessionEventRecord { id: number; event: unknown; bytes: number; }
 interface SessionState {
@@ -90,6 +101,16 @@ const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_SESSION_EVENTS = 500;
 const MAX_EVENT_BYTES = 2_000_000;
 const MAX_LIVE_SESSIONS = 12;
+function artifactFromTool(project: string, record: any): TaskArtifact | undefined {
+  if (!record || !['write', 'edit'].includes(record.toolName)) return undefined;
+  const candidate = record.args?.path;
+  if (typeof candidate !== 'string' || !candidate.trim() || candidate.includes('\0')) return undefined;
+  const root = resolve(project), target = resolve(root, candidate), rest = relative(root, target).replaceAll('\\', '/');
+  if (!rest || rest === '..' || rest.startsWith('../') || isAbsolute(rest)) return undefined;
+  if (rest.split('/').some((part) => ['.git', '.pforge', '.forge-agent', '.forge-agent-runtime', 'node_modules'].includes(part.toLowerCase()))) return undefined;
+  if (/(^|\/)(?:\.env(?:\.[^/]+)?|\.npmrc|\.netrc|auth\.json|credentials?\.json|secrets?\.json|id_(?:rsa|ed25519)|[^/]+\.(?:pem|key|p12|pfx))$/i.test(rest)) return undefined;
+  return { path: rest, operation: record.toolName === 'write' ? 'write' : 'edit' };
+}
 class HttpError extends Error { constructor(public readonly status: number, message: string) { super(message); this.name = 'HttpError'; } }
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }
 function attachment(res: ServerResponse, status: number, value: { body: string; contentType: string; filename: string }) {
@@ -680,6 +701,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         else if (record.message?.role === 'assistant') session.lastError = undefined;
       }
       if (record.type === 'tool_execution_start') session.activeTools.set(record.toolCallId, record);
+      if (record.type === 'tool_execution_end' && !record.isError && session.running && session.controller.state?.status === 'running') {
+        const artifact = artifactFromTool(session.project, session.activeTools.get(record.toolCallId) ?? record);
+        if (artifact) session.controller.recordArtifacts([artifact]);
+      }
       if (record.type === 'tool_execution_end') session.activeTools.delete(record.toolCallId);
       if (record.type === 'agent_settled') {
         if (record.aborted && session.controller.active && session.progress?.snapshot().status !== 'stalled') session.controller.cancel();
@@ -822,6 +847,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
   async function prepareDirectTask(session: SessionState, task: TaskState, budget: BudgetRuntime) {
     const verification = await session.verification.refreshEvidence();
     task.verification = structuredClone(verification);
+    task.validation = isVerified(verification) ? 'verified' : isVerificationUnconfigured(verification) ? 'unconfigured' : verification.status === 'failed' ? 'failed' : 'unconfirmed';
     task.budget = budget.snapshot();
     task.progress = session.progress?.snapshot();
   }
@@ -834,6 +860,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
     const previousTask = resumeOf && session.controller.state?.id === resumeOf ? structuredClone(session.controller.state) : undefined;
     if (resumeOf && !previousTask) throw new HttpError(409, '中断任务与当前会话不一致，请重新打开原会话');
     const continuedVerification = previousTask ? structuredClone(session.verification.outcome) : undefined;
+    let evaluatorFaultInjected = false;
     const lastAssistant = [...session.manager.buildSessionContext().messages].reverse().find((item) => item.role === 'assistant');
     if (previousTask?.kind === 'change' && previousTask.plan && incompleteModelOutput(lastAssistant)) previousTask.phase = 'implement';
     // Reserve the project before changing session state or returning 202. This
@@ -914,6 +941,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         },
         async verify(signal) {
           signal.throwIfAborted();
+          if (!evaluatorFaultInjected && workflow === 'planned' && session.controller.state?.kind === 'change' && options.evaluation?.beforeVerification) {
+            await options.evaluation.beforeVerification({ project: session.project, task: structuredClone(session.controller.state) });
+            evaluatorFaultInjected = true;
+          }
           startVerification();
           if (session.progress) session.controller.recordProgress(session.progress.snapshot());
           if (session.controller.state!.kind === 'verify' && !session.controller.state!.phases.some((phase) => phase.phase === 'inspect')) {
@@ -951,14 +982,14 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       }).finally(async () => {
         try {
           const final = await finalizeExecution({
-          current: () => directTask ?? session.controller.state,
+          current: () => directTask ? session.controller.state ?? directTask : session.controller.state,
           signals: () => ({ outcome: session.outcome, error: session.lastError }),
           prepare: async () => {
           stopBudgetUpdates();
           const budgetStatus = runBudget.snapshot().status;
           if (budgetStatus === 'running') runBudget.finish(session.outcome === 'completed' ? 'completed' : 'aborted');
           if (directTask) {
-            const task = directTask;
+            const task = session.controller.state ?? directTask;
             const phase = task.phases.at(-1);
             if (phase && !phase.endedAt) phase.endedAt = new Date().toISOString();
             if (task.baseline) {
@@ -971,7 +1002,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           }
           },
           pendingProposals: async () => {
-          const task = directTask ?? session.controller.state;
+          const task = session.controller.state ?? directTask;
           if (task && !['answer', 'explore', 'verify'].includes(task.kind ?? '') && session.outcome === 'completed' && session.subagents) {
             for (const child of session.subagents.snapshot().filter((child) => child.proposal && !child.changesApplied && !child.worktreeRemoved)) {
               const proposal = await session.subagents.proposal(child.id);
@@ -1058,9 +1089,10 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       if (!session.session || session.readOnly || session.mode !== 'agent') throw new HttpError(409, '请先配置可用模型并切换 Agent 模式');
       const previous = session.controller.state;
       if (!previous || previous.id !== record.id) throw new HttpError(409, '任务记录与会话历史不一致，请从会话中重新检查');
+      const validationUnconfigured = previous.validation === 'unconfigured' || isVerificationUnconfigured(previous.verification);
       const allowed = action === 'resume'
         ? ['interrupted', 'aborted', 'budget_exceeded']
-        : ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'];
+        : ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded', ...(validationUnconfigured ? ['completed'] : [])];
       if (!allowed.includes(previous.status)) throw new HttpError(409, action === 'resume' ? '当前任务不需要继续' : '当前任务没有可重新检查的失败状态');
       session.busy = true;
       const workflow: WebWorkflow = previous.workflow === 'direct' ? 'direct' : 'planned';

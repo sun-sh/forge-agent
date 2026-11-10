@@ -1,5 +1,17 @@
 # Evaluation and evidence
 
+## Focused review and clean-task comparison — 2026-11-10
+
+The [focused-review report](evaluations/focused-review-2026-11-10.md) separates
+paired candidate review from a clean natural task. Both prompt policies accepted
+3/3 correct candidates and blocked 3/3 defective ones; focused review consumed
+32.6% fewer request tokens on these six candidates. The separate natural-task
+batch ran three repetitions per workflow under a frozen budget and rotated order:
+direct, planned and planned-no-review each passed 3/3, with no observed quality
+benefit from review. The adaptive default remains appropriate for that task.
+Aggregates retain individual results, effective limits and code/suite fingerprints;
+these small samples do not establish general reviewer accuracy or coding gains.
+
 ## Structured handoff and Chinese intent regression
 
 The [structured-handoff experiment](evaluations/structured-handoff-2026-11-08.md)
@@ -31,6 +43,14 @@ retain the initial 3/9 batch and a separately fingerprinted 3/3 regression.
 One small task and differing repetition counts/budgets do not establish a
 planning or independent-review benefit. A separate empty-directory real-model
 run created index.html and stopped honestly at missing verification.
+
+The [reviewer fault-injection challenge](evaluations/review-challenge-2026-11-09.md)
+adds a separate diagnostic for the missing signal. It injects one known hidden
+defect after implementation and before verification in an isolated fixture.
+In the real DeepSeek run, planned review detected and repaired it (1/1), while
+planned-no-review completed the host flow and was rejected by the held-out oracle
+(0/1, one false completion). This supports the reviewer repair path for that
+synthetic defect only; it is not a natural-task quality estimate.
 
 ## Reviewed real-model regression
 
@@ -78,6 +98,7 @@ distinction between model outcome and infrastructure failure.
 | `npm run eval:agent -- --model provider/model --workflow planned` | Runs the same tasks through the explicit staged workflow for comparison. |
 | `npm run eval:agent -- --model provider/model --workflow both --repeat 3` | Repeats both workflows with the same task set and records run number, variance-relevant metadata, and aggregate metrics. |
 | `npm run eval:agent -- --model provider/model --workflow ablation --repeat 3` | Runs evaluator-only `direct`, `planned` and `planned-no-review` arms. Production requests cannot disable planned review. |
+| `npm run eval:agent -- --model provider/model --workflow ablation --review-challenge --task config-normalize-cross-file` | Runs the isolated reviewer fault-injection diagnostic; planned arms receive a known hidden defect, and the report labels synthetic results separately. |
 
 Before a real run starts, the harness performs one model-availability check. By
 default it reads the current Forge home; use `--config-home <path>` to choose a
@@ -149,6 +170,36 @@ real-model benchmark result on a complex repository is currently claimed by
 this implementation, and five small public tasks cannot support an industry
 ranking.
 
+### Frozen-budget comparisons and paired reviewer diagnosis
+
+The small-task evaluator accepts an explicit `--budget path/to/limits.json`.
+It copies only model/auth configuration into its evaluation home and writes the
+same validated budget for every arm. Its schema-5 report records effective limits,
+execution-only timing separately from setup/total latency, and the exact schedule.
+Arm order rotates by task and repetition (`counterbalanced-cyclic-v1`); three
+repetitions balance each arm's position within a task. This reduces fixed-order
+bias but does not eliminate provider-load or cache effects.
+
+`npm run eval:review -- --validate-only` first checks paired correct/defective
+candidates with external assertions, without calling a model. Correct candidates
+must pass, defective candidates must fail, and both must pass the deliberately
+limited visible check. Validation failure prevents all model requests.
+
+`npm run eval:review -- --real --model provider/model --thinking medium --repeat 3 --budget path/to/limits.json`
+compares `baseline-v1` and `focused-v2` prompts on the same fixed candidates.
+The former reconstructs the prior verbose handoff on the current child runtime;
+it is a prompt comparison, not execution of an old product release. Both use
+fresh independent Pi reader sessions, the same model/effort and identical budgets.
+Candidate directory names are random; correctness labels and held-out oracles do
+not enter the prompt. Reports preserve every verdict, exact acceptance coverage,
+workspace integrity, usage, delay and code/suite fingerprints. Invalid or
+unconfirmed decisions are abstentions, not successful negatives. Recall includes
+all defective candidates in its denominator; false-positive rate includes all
+correct candidates. Blocking a labelled defective candidate does not establish
+that every textual finding is accurate, so retained findings still need review.
+These small diagnostics measure review decisions; natural-task workflow results
+remain separate.
+
 ### Three-arm review ablation
 
 `--workflow ablation` runs `direct`, `planned`, and `planned-no-review` on the
@@ -164,6 +215,14 @@ and format retries. Parent budgets include reviewer usage. `falseCompletionRate`
 uses completed runs as its denominator; a workflow that never completes has a
 `null` rate. Scripted smoke only checks that the three arms and measurements
 work; real-model repetitions are required for conclusions.
+
+`--review-challenge` is intentionally different from a normal ablation. The
+evaluator writes a task-defined faulty implementation after the model's
+implementation phase and before host verification. The normal `planned` arm
+can use the independent reviewer and bounded repair; `planned-no-review` cannot.
+Use the resulting report to test the reviewer mechanism, then keep its result
+separate from clean-task completion rates. The hook is programmatic-only and is
+not reachable through production Web requests.
 
 ### Protected content in the product
 
