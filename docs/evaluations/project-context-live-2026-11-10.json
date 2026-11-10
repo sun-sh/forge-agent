@@ -1,0 +1,28 @@
+{
+  "protocol": "seeded-same-project-reference-live-model-v1",
+  "date": "2026-11-10",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "thinking": "medium",
+  "gates": {
+    "completed": true,
+    "readOnlyMode": true,
+    "searched": true,
+    "readSource": true,
+    "correctColor": true,
+    "correctRadius": true,
+    "sourceCited": true,
+    "noForeignContext": true,
+    "independentUserBranch": true,
+    "noWriter": true
+  },
+  "passed": true,
+  "durationMs": 6512,
+  "turns": 3,
+  "tools": [
+    "search_project_conversations",
+    "search_project_conversations",
+    "read_project_conversation"
+  ],
+  "codeFingerprint": "0c70a42cee087b45c58469c41ed9e0bfe331bfce80b062ad4b987a5a603bcd4c",
+  "limitations": "Seeded reference conversations, one real-model retrieval task; not a coding-quality or retrieval-recall benchmark."
+}

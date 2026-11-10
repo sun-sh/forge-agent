@@ -32,7 +32,7 @@ make arbitrary repository content safe.
   resources when trust is revoked. Configured verification commands are refused
   when the project is not trusted.
 - Plan and Ask restrict model-driven tool calls to Pi's built-in read/search
-  tools. Shell, editing, MCP/custom tools, slash-command dispatch, and automatic
+  tools and the host-owned public web readers, identified by extension provenance. Shell, editing, MCP/custom tools, slash-command dispatch, and automatic
   project verification are unavailable in these modes. This does not restrict
   arbitrary code inside an already trusted extension.
 - History opening checks that session files resolve inside forge-agent's session
@@ -44,7 +44,7 @@ make arbitrary repository content safe.
   trees. Configured verification failure is not a successful CLI completion.
 - Markdown output is sanitized; raw HTML is shown as source rather than
   interpreted as application UI.
-- Planned tasks restrict research, planning and review to built-in readers,
+- Planned tasks restrict research/planning to built-in readers and host-owned public web readers; independent review remains file-read-only,
   and the host controls phase transitions and final completion. Restarted work
   requires an explicit user action; prior side effects are not replayed.
 - Each `FORGE_AGENT_HOME` has one Web owner lease. A second gateway is refused,
@@ -66,6 +66,23 @@ make arbitrary repository content safe.
   resolved path for known sensitive locations. An in-project directory alias
   cannot bypass filtering for `.git` or Forge data directories. These checks
   do not isolate agent tools or prevent every concurrent filesystem mutation.
+
+## Public web tools
+
+Forge's bundled Pi extension supplies public web search and URL text reading.
+Requests send user queries or chosen URLs to public services. Web tools use no
+browser cookies or provider credentials, do not execute remote scripts, and mark
+results as untrusted data. HTML extraction reuses Mozilla Readability/LinkeDOM.
+Each request chain is bounded to 20 seconds, four redirects and 2 MB; output has
+an explicit character/truncation bound. Only HTTP(S) on ports 80/443 is admitted.
+All DNS results and redirects must be public, with the chosen IP pinned for the
+connection to prevent a second lookup from changing the target. Local/private/
+reserved addresses and URLs with embedded credentials are refused.
+
+The network setting hides and blocks these tools and reloads idle sessions;
+it does not restrict shell, MCP, trusted extensions or the launching account.
+Sites may still block, challenge or change their output; a failed search is not
+a successful result. Interactive/JavaScript/authenticated pages need browser MCP.
 
 ## Limits
 
@@ -92,3 +109,7 @@ content in public reports. Provide a minimal reproduction, the forge-agent and P
 versions, and relevant output with secrets removed. No private security-reporting
 channel has been configured for this repository yet; establish one before
 inviting vulnerability reports through a public issue tracker.
+
+### Same-project conversation references
+
+The Web history tools accept session UUIDs rather than caller-selected paths. Reads validate the Forge history root and canonical project, use only the selected Pi branch, and exclude trash, private child directories, thinking, tool results and hidden host messages. They return bounded, revision-tagged untrusted references; historical instructions never grant permissions or verification status. Accepted project/global memory remains a separate scoped reference layer. Pi shell/file tools still run with the launching user's permissions: these retrieval boundaries are not filesystem isolation.

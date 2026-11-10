@@ -46,7 +46,7 @@ proof of correctness.
 | Tools, skills, context files, extensions, prompt templates | Pi's tools and `DefaultResourceLoader`, with the Web limitations below. |
 | Web interface and streaming transport | forge-agent `src/web/` and `src/web/ui/`. |
 | Workspace inspection and user attachments | forge-agent `src/web/files.ts`, the right-side workspace, and the shared bounded command executor: trusted project-file search/preview, bounded image/file attachments, and an explicit user-controlled terminal. |
-| Agent / Plan / Ask | forge-agent policy registered as a Pi extension; Plan and Ask allow only built-in read/search tools. |
+| Agent / Plan / Ask | forge-agent policy registered as a Pi extension; Plan and Ask allow built-in file readers and the host-owned public web readers. |
 | Project verification and bounded repair attempts | forge-agent `src/config.ts`, `src/verification/pi-extension.ts`, `src/verification/verify.ts`, and `src/tools/command.ts`. |
 | Local gateway authorization | forge-agent `src/web/auth.ts` and gateway checks; separate from Pi's provider credentials. |
 | Web MCP management | forge-agent `src/web/mcp.ts`, `src/web/mcp-runtime.ts` and `src/web/ui/mcp.js`: scoped editing, probes, browser authorization, per-tool controls and session connection views. Pi owns validation, protocol, OAuth and execution. |
@@ -93,7 +93,7 @@ prose alone: configured verification must pass and the review response must be
 structured and issue-free. Each concrete blocking review repair returns to implementation,
 verification, and review, without resetting retries. Inspection and planning have host
 handoff contracts in system context, separate from the visible user message.
-Missing or stale verification produces `needs_attention`.
+Missing or stale evidence for configured checks produces `needs_attention`. With no checks configured, implementation may complete as explicitly unverified/unreviewed; a model-triggered empty check cannot leave a false empty report behind.
 
 `src/verification/evidence.ts` records bounded workspace content fingerprints and
 command-configuration hashes separately from display-only Git diffs. Reports keep
@@ -127,6 +127,8 @@ are protective host guards rather than exact billing cutoffs. Changing the
 configured limits affects the next execution; it does not rewrite an existing
 snapshot. Usage separates input, output, cache reads and cache writes. In-flight
 responses arriving after a stop are still counted, and missing prices remain unknown.
+
+Public web search/read are bundled Pi extension tools in Web and CLI; settings expose the opt-out and an actual document-read diagnostic. Mozilla Readability/LinkeDOM extract text, and bounded HTTP requests validate/pin public addresses on each redirect. Interactive/authenticated pages still use browser MCP. See [network usage](usage.en.md#network-and-basic-tools). Native Pi shells receive a 120-second default only when the model omits a timeout; Pi retains execution and cancellation.
 
 ## Web integration limits
 
@@ -249,3 +251,9 @@ unpacked CLI. CI tests Windows/Ubuntu and Node 22/24. A separate release workflo
 checks clean tarball installs on both platforms and creates a GitHub Release only
 for a tag matching the package version. See [operations and upgrades](operations.md)
 for storage schemas, migration, cleanup and downgrade limits.
+
+## Conversation boundaries
+
+Pi owns each conversation branch. `web/conversations.ts` adds on-demand, read-only references over top-level Pi history files with canonical project checks, UUID lookup, bounded scans/reads and revision-aware pagination. It never merges histories or promotes text into memory/verification. Private child directories and trash are excluded; current live managers provide up-to-date saved messages without changing their branch.
+
+The Web client distinguishes navigation locks from execution locks. SSE subscriptions belong to the selected session; aborting a subscription does not cancel server execution. Late frames are rejected by both subscription abort state and session ID. Draft attachments and next-message model/effort/mode/workflow choices are cached per conversation; selecting a future mode never calls the running session's permission endpoint. Configuration is applied while idle before admitting the next user prompt. Canonical project execution ownership remains exclusive.

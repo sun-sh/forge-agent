@@ -1,5 +1,21 @@
 # Evaluation and evidence
 
+## Conversation qualification and five-task repetition — 2026-11-10
+
+The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.
+
+The [five-task, three-workflow report](evaluations/five-task-ablation-2026-11-10.md) retains 45 real DeepSeek V4.1 Flash executions: three repetitions for each of five miniature repository tasks in each arm. Direct, planned and planned-no-review all passed 15/15 with zero observed false completions. Median execution times were 36.6, 79.3 and 54.2 seconds respectively; no quality gain was demonstrated on these easy tasks. Each protocol records its own code/suite identity. These results do not replace complex upstream issue or hours-long recovery/compaction evaluation, and earlier failures remain below.
+
+## Public web and empty-verification recovery — 2026-11-10
+
+The [targeted real-model regression](evaluations/network-empty-verification-2026-11-10.md) retains an initial ten-minute shell hang and a separately fingerprinted revised run that passed all eight gates for public search, official-document reading, HTML delivery, empty verification and final host/index agreement. The revised run took 191.4 seconds. It validates this specific execution path; it is not a visual-quality benchmark, a controlled timeout ablation or a general reliability rate.
+
+Local regression qualification for this change: typecheck, build, browser smoke and clean tarball installation passed. A full 47-file / 653-test run retained one 15-second resumed-settlement timeout (652 passed). Only that multi-stage recovery wait was calibrated to 30 seconds under a 60-second lifecycle budget, and the entire 42-test working-mode file then passed. The other 46 files passed in the preceding full run; this is grouped revalidation, not a claim that a later single full check or new remote CI run was green.
+
+## Configured-check planning regression — 2026-11-10
+
+The [planning regression](evaluations/deepseek-planned-delivery-2026-11-10.md) ran DeepSeek V4.1 Flash once on config-normalize-cross-file during the initial diagnosis. This task has configured checks and does not exercise the empty-verification failure. Held-out assertions, host verification, workspace integrity and Forge task completion all passed (1/1); false completions were 0. The run used 11 model requests, 15 tool calls and 79,781 request tokens over 87.1 seconds, with one independent review and no repair. The report base revision was 3032f71 with then-uncommitted diagnostic edits, represented by the recorded harness fingerprint. It predates the empty-verification and network-tool fixes and does not validate them. It does not establish a general planned-versus-direct quality gain.
+
 ## Focused review and clean-task comparison — 2026-11-10
 
 The [focused-review report](evaluations/focused-review-2026-11-10.md) separates

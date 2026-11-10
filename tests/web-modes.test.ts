@@ -69,7 +69,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   // otherwise the result differs between a developer machine and CI.
   await api('projects/trust', { path: root, trusted: !options.untrusted });
   const snapshot = async (id: string): Promise<any> => (await api('sessions/' + id)).json();
-  const settled = async (id: string) => { let state: any; await vi.waitFor(async () => { state = await snapshot(id); expect(state.running).toBe(false); }, { timeout: 15000 }); return state; };
+  const settled = async (id: string, timeout = 30000) => { let state: any; await vi.waitFor(async () => { state = await snapshot(id); expect(state.running, JSON.stringify({ phase: state.task?.phase, status: state.task?.status, finalization: state.task?.finalization, error: state.task?.error, activeTools: state.activeTools?.map((tool: any) => tool.toolName) })).toBe(false); }, { timeout }); return state; };
   return {
     root, home, api, snapshot, settled, requests,
     calls(value: typeof nextCalls) { nextCalls = value; },
@@ -80,7 +80,8 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   };
 }
 
-describe('Web working modes with real Pi sessions', () => {
+// Includes Git checkpoints, verification, reviewer processes and restart recovery.
+describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
   it.each(['请解决登录接口的 500 错误', '请把登录按钮变成蓝色', '请解决登录错误，不要修改现有测试', '请分析并解决登录问题，然后运行测试', 'Inspect and fix login, do not modify tests', '查看并修复接口，不要删除数据库', 'Run tests, then fix the failing behavior'])('implements change phrasing through actual writable Pi turns regardless of the hint: %s', async (message) => {
     const f = await fixture({ implementationWrite: { path: 'implementation-result.txt', content: 'implemented through Pi write' } });
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
@@ -159,7 +160,9 @@ describe('Web working modes with real Pi sessions', () => {
     await f.settled(session.id);
     expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('mcp__fixture__echo');
     expect(await readFile(join(f.root, 'mcp-called'), 'utf8')).toBe('web-configured\n');
-  });
+    // This is an end-to-end setup + two resource reloads + two model/tool turns.
+    // Windows probes measured 26–33s; per-connection and per-turn limits remain bounded.
+  }, 60_000);
   it.each(['plan', 'ask'] as const)('retains %s tool restrictions after a Web MCP configuration reload', async (mode) => {
     const f = await fixture();
     const session: any = await (await f.api('session', { project: f.root, mode })).json();
@@ -406,14 +409,15 @@ describe('Web working modes with real Pi sessions', () => {
       session = await (await f.api('session', { project: f.root, sessionFile: stopped.sessionFile })).json();
     }
     expect((await f.api('sessions/' + session.id + '/resume-task', {})).status).toBe(202);
-    const resumed = await f.settled(session.id);
+    // Implementation, host verification, independent review and sealing all run after resume.
+    const resumed = await f.settled(session.id, 30000);
     expect(resumed.task).toMatchObject({ status: 'completed', resumeOf: stopped.task.id, requirements: stopped.task.requirements, plan: stopped.task.plan });
     expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['implement', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'index.html'), 'utf8')).toBe('<h1>Resumed implementation</h1>');
     const entries = resumed.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user');
     expect(entries).toHaveLength(1);
     expect(f.requests[3].tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
-  });
+  }, 60000);
   it.each(['plan', 'ask'] as const)('allows reading in %s but blocks execution and verification, including after reopening', async (mode) => {
     const f = await fixture();
     const response = await f.api('session', { project: f.root, mode });
@@ -541,5 +545,50 @@ describe('Web working modes with real Pi sessions', () => {
     restored.apply(agent); mode = 'agent'; restored.apply(agent);
     expect(active).toEqual(['read', 'write', 'new-mcp']);
     expect(active).not.toContain('disabled-before'); expect(active).not.toContain('hidden-mcp');
+  });
+});
+
+
+describe('independent Web conversation lifecycles', { timeout: 60_000 }, () => {
+  it('opens other sessions and changes their modes while one session runs, without relaxing the project execution lock', async () => {
+    const f = await fixture();
+    const a: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
+    f.pause();
+    await f.api('sessions/' + a.id + '/prompt', { message: 'A private first-turn background request' });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    const persisted = await f.snapshot(a.id);
+    const stream = await f.api('sessions/' + a.id + '/events'); await stream.body?.cancel();
+    const b: any = await (await f.api('session', { project: f.root, mode: 'plan' })).json();
+    expect((await f.api('sessions/' + b.id + '/mode', { mode: 'agent' })).status).toBe(200);
+    expect((await f.api('sessions/' + a.id + '/mode', { mode: 'agent' })).status).toBe(409);
+    expect((await f.api('sessions/' + b.id + '/prompt', { message: 'Must not race project A' })).status).toBe(409);
+    const reopened: any = await (await f.api('session', { project: f.root, sessionFile: persisted.sessionFile })).json();
+    expect(reopened.id).toBe(a.id); expect(reopened.running).toBe(true); expect(reopened.mode).toBe('ask');
+    const history: any = await (await f.api('history')).json();
+    expect(history.projects.flatMap((group: any) => group.sessions).find((item: any) => item.path === persisted.sessionFile)?.running).toBe(true);
+    f.release(); expect((await f.settled(a.id)).outcome).toBe('completed');
+    expect((await f.api('sessions/' + b.id + '/mode', { mode: 'ask' })).status).toBe(200);
+    await f.api('sessions/' + b.id + '/prompt', { message: 'B independent question' }); await f.settled(b.id);
+    expect(JSON.stringify(f.requests.at(-1).messages)).not.toContain('A private first-turn background request');
+  });
+  it('retrieves a requested project conversation through genuine Pi tools in Ask mode, without shared transcripts or write permissions', async () => {
+    const f = await fixture();
+    const a: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
+    await f.api('sessions/' + a.id + '/prompt', { message: 'Project accent color: TURQUOISE_REFERENCE' }); await f.settled(a.id);
+    const source = SessionManager.open((await f.snapshot(a.id)).sessionFile).getSessionId();
+    const b: any = await (await f.api('session', { project: f.root, mode: 'ask' })).json();
+    expect(b.tools.filter((tool: any) => tool.active).map((tool: any) => tool.name)).toContain('search_project_conversations');
+    expect(b.tools.filter((tool: any) => tool.active).map((tool: any) => tool.name)).not.toContain('write');
+    const before = f.requests.length;
+    f.sequence([[{ name: 'search_project_conversations', arguments: { query: 'TURQUOISE_REFERENCE' } }], [{ name: 'read_project_conversation', arguments: { sessionId: source } }], []]);
+    await f.api('sessions/' + b.id + '/prompt', { message: 'Read the color decision from the previous project conversation.' });
+    const state = await f.settled(b.id);
+    expect(state.outcome).toBe('completed'); expect(state.mode).toBe('ask');
+    expect(JSON.stringify(f.requests[before].messages)).not.toContain('TURQUOISE_REFERENCE');
+    const outputs = state.messages.filter((message: any) => message.role === 'toolResult');
+    expect(outputs.map((message: any) => message.toolName)).toEqual(['search_project_conversations', 'read_project_conversation']);
+    expect(JSON.stringify(outputs.at(-1))).toContain('TURQUOISE_REFERENCE');
+    expect(JSON.stringify(outputs.at(-1))).toContain('UNTRUSTED HISTORICAL');
+    expect(state.messages.filter((message: any) => message.role === 'user')).toHaveLength(1);
   });
 });

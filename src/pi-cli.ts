@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { NetworkTools, loadNetworkSettings } from './web/network.js';
+import { shellTimeoutExtension } from './task/shell-timeout.js';
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { main, VERSION as PI_VERSION, ProjectTrustStore, SettingsManager, hasTrustRequiringProjectResources } from "@earendil-works/pi-coding-agent";
@@ -210,8 +212,9 @@ export async function runPforge(args = process.argv.slice(2)): Promise<void> {
     return;
   }
   try {
+    const networkSettings = await loadNetworkSettings(home);
     await main(parsed.args, {
-      extensionFactories: [{ name: "forge-identity", factory: createForgeIdentityExtension('cli') }, { name: "pforge-verification", factory: verification.extension }]
+      extensionFactories: [{ name: "forge-shell-timeout", factory: shellTimeoutExtension }, { name: "forge-network", factory: new NetworkTools(() => networkSettings).extension }, { name: "forge-identity", factory: createForgeIdentityExtension('cli') }, { name: "pforge-verification", factory: verification.extension }]
     });
     if (verification.outcome.status === 'failed' || (verification.outcome.status === 'passed' && !isVerified(verification.outcome))) process.exitCode = 1;
   } catch (error) {

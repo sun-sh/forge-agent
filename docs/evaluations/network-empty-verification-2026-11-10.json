@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-model-targeted-regression",
+  "model": "DeepSeek V4.1 Flash",
+  "thinking": "medium",
+  "environment": {
+    "platform": "win32",
+    "node": "v24.19.0",
+    "pi": "1.4.0"
+  },
+  "note": "Two separately fingerprinted diagnostic runs. Initial run timed out in a native shell command; revised build passed eight target gates. Not a coding quality benchmark or a controlled timeout ablation.",
+  "runs": [
+    {
+      "protocol": "network-empty-verification-v1",
+      "startedAt": "2026-11-10T08:08:03.993Z",
+      "finishedAt": "2026-11-10T08:18:08.317Z",
+      "codeFingerprint": "2cf1f672bb65a18c18ae9f147efb1e8b1584e40e4e1b75c9999195416746a9d3",
+      "fingerprintFiles": [
+        "src/web/network.ts",
+        "src/web/server.ts",
+        "src/web/modes.ts",
+        "src/identity.ts",
+        "src/task/controller.ts",
+        "src/task/lifecycle.ts",
+        "src/verification/pi-extension.ts",
+        "src/web/ui/app.js",
+        "src/web/ui/render.js",
+        "package.json"
+      ],
+      "passed": false,
+      "taskStatus": "running",
+      "modelTurns": null,
+      "toolCalls": null,
+      "requestTokens": null,
+      "costUsd": null,
+      "error": "Fixed 10-minute acceptance deadline exceeded"
+    },
+    {
+      "protocol": "network-empty-verification-v1",
+      "startedAt": "2026-11-10T08:19:36.818Z",
+      "finishedAt": "2026-11-10T08:22:48.229Z",
+      "codeFingerprint": "7db72d96725b54eb56c11729acbe77155dfdc84f1ad1808ae1219d2fc3c81a72",
+      "fingerprintFiles": [
+        "src/web/network.ts",
+        "src/web/server.ts",
+        "src/web/modes.ts",
+        "src/identity.ts",
+        "src/task/controller.ts",
+        "src/task/lifecycle.ts",
+        "src/task/shell-timeout.ts",
+        "src/verification/pi-extension.ts",
+        "src/web/ui/app.js",
+        "src/web/ui/render.js",
+        "package.json"
+      ],
+      "passed": true,
+      "gates": {
+        "completed": true,
+        "unconfigured": true,
+        "search": true,
+        "fetch": true,
+        "verificationTool": true,
+        "svgArtifact": true,
+        "preservedNotes": true,
+        "indexAgrees": true
+      },
+      "taskStatus": "completed",
+      "validation": "unconfigured",
+      "phases": [
+        "inspect",
+        "plan",
+        "implement",
+        "verify",
+        "complete"
+      ],
+      "modelTurns": 16,
+      "toolCalls": 16,
+      "requestTokens": 294580,
+      "costUsd": null,
+      "error": null
+    }
+  ]
+}

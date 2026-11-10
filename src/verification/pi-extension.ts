@@ -182,9 +182,17 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     return outcome;
   };
 
+  const skipUnconfigured = async () => {
+    outcome.status = 'skipped'; outcome.reason = 'No verification commands configured.';
+    outcome.report = undefined; outcome.evidence = undefined; outcome.error = undefined;
+    outcome.evidenceId = undefined; outcome.checkedAt = undefined;
+    await persist();
+    return { passed: false, results: [], summary: outcome.reason } satisfies VerificationReport;
+  };
   let inFlight: Promise<VerificationReport> | undefined;
   const run = (signal: AbortSignal): Promise<VerificationReport> => {
     if (inFlight) return inFlight;
+    if (!commands.length && !protect.length && !outcome.protection) return skipUnconfigured();
     outcome.runId ??= randomUUID();
     outcome.evidenceId = randomUUID();
     outcome.status = "running";
@@ -247,9 +255,9 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
         }
         const report = await run(signal ?? new AbortController().signal);
         return {
-          content: [{ type: "text", text: verificationOutcomeMessage(outcome) + (report.passed && !isVerified(outcome) && outcome.status !== 'failed' ? '\n\nWorkspace freshness is unconfirmed. These commands passed, but this is not current-version completion evidence. Recheck before claiming verified completion.' : '') }],
+          content: [{ type: "text", text: verificationOutcomeMessage(outcome) + (report.passed && !isVerified(outcome) && outcome.status !== 'failed' && outcome.status !== 'skipped' ? '\n\nWorkspace freshness is unconfirmed. These commands passed, but this is not current-version completion evidence. Recheck before claiming verified completion.' : '') }],
           details: { passed: isVerified(outcome), summary: report.summary, freshness: outcome.evidence?.freshness, protection: outcome.protection?.status },
-          isError: outcome.status === 'failed' || !report.passed
+          isError: outcome.status !== 'skipped' && (outcome.status === 'failed' || !report.passed)
         };
       }
     }));
@@ -324,7 +332,7 @@ export function createPforgeVerification(cwd = process.cwd(), options: {
     async verifyTrusted(signal) {
       if (blocked()) return outcome;
       if (!trusted()) { outcome.status = 'failed'; outcome.error = 'Project is not trusted; refusing to run project verification commands.'; await persist(); return outcome; }
-      if (!commands.length && !protect.length) { outcome.status = 'skipped'; outcome.reason = 'No verification commands configured.'; await persist(); return outcome; }
+      if (!commands.length && !protect.length && !outcome.protection) { await skipUnconfigured(); return outcome; }
       await run(signal);
       return outcome;
     },

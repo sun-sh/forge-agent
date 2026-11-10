@@ -27,6 +27,25 @@ async function workspace() {
 }
 
 describe("pforge Pi web console", () => {
+  it("exposes network tools in read-only sessions, persists opt-out and rejects unknown settings", async () => {
+    const root=await workspace(), home=process.env['PFORGE_HOME']!;
+    await writeFile(join(home,'models.json'),JSON.stringify({providers:{mock:{baseUrl:'http://127.0.0.1:9/v1',api:'openai-completions',apiKey:'test',models:[{id:'mock'}]}}}));
+    const server=await startWebConsole({cwd:root,port:0});closers.push(server.close);
+    const base=server.url.split('?')[0],headers={'x-pforge-token':server.token,'content-type':'application/json'};
+    const api=(path:string,input?:object)=>fetch(base+'api/'+path,{headers,...(input?{method:'POST',body:JSON.stringify(input)}:{})});
+    const session:any=await(await api('session',{project:root,mode:'ask',model:'mock/mock'})).json();
+    expect(session.tools.filter((tool:any)=>tool.name.startsWith('web_'))).toEqual(expect.arrayContaining([expect.objectContaining({name:'web_fetch',active:true}),expect.objectContaining({name:'web_search',active:true})]));
+    expect((await api('settings/network',{enabled:true,endpoint:'http://127.0.0.1'})).status).toBe(400);
+    expect((await api('settings/network',{enabled:false})).status).toBe(200);
+    const disabled:any=await(await api('sessions/'+session.id)).json();
+    expect(disabled.mode).toBe('ask');expect(disabled.tools.filter((tool:any)=>tool.name.startsWith('web_')).every((tool:any)=>!tool.active&&!tool.available)).toBe(true);
+    expect(JSON.parse(await readFile(join(home,'network.json'),'utf8'))).toEqual({enabled:false});
+    expect((await api('settings/network',{enabled:true})).status).toBe(200);
+    const enabled:any=await(await api('sessions/'+session.id)).json();
+    expect(enabled.tools.find((tool:any)=>tool.name==='web_fetch').active).toBe(true);
+    expect(enabled.messages).toHaveLength(0);
+  });
+
   it("serves the client and requires the access token", async () => {
     const root = await workspace();
     const server = await startWebConsole({ cwd: root, port: 0 });
@@ -40,6 +59,20 @@ describe("pforge Pi web console", () => {
     const config = await fetch(base + "api/config", { headers: { "x-pforge-token": server.token } });
     expect(config.status).toBe(200);
     expect(await config.json()).toMatchObject({ verifyRetries: 1 });
+  });
+
+  it.each([true, false])("keeps an ordinary turn without checks successful without upgrading trust (trusted=%s)", async (trusted) => {
+    const root=await mkdtemp(join(tmpdir(),'forge-direct-unconfigured-')),home=process.env['PFORGE_HOME']!;
+    const provider=createServer(async(request,response)=>{for await(const _chunk of request){};response.writeHead(200,{'content-type':'text/event-stream'});response.write('data: '+JSON.stringify({id:'plain',choices:[{index:0,delta:{role:'assistant',content:'Done.'},finish_reason:'stop'}]})+'\n\n');response.end('data: [DONE]\n\n');});
+    await new Promise<void>(ready=>provider.listen(0,'127.0.0.1',ready));closers.push(()=>new Promise<void>(ready=>{provider.closeAllConnections();provider.close(()=>ready());}));
+    await writeFile(join(home,'models.json'),JSON.stringify({providers:{mock:{api:'openai-completions',apiKey:'test',baseUrl:'http://127.0.0.1:'+(provider.address() as AddressInfo).port+'/v1',models:[{id:'mock'}]}}}));
+    const server=await startWebConsole({cwd:root,port:0});closers.push(server.close);
+    const base=server.url.split('?')[0],headers={'x-pforge-token':server.token};
+    await fetch(base+'api/projects/trust',{method:'POST',headers,body:JSON.stringify({path:root,trusted})});
+    const session:any=await(await fetch(base+'api/session',{method:'POST',headers,body:JSON.stringify({project:root,mode:'agent',model:'mock/mock'})})).json();
+    await fetch(base+'api/sessions/'+session.id+'/prompt',{method:'POST',headers,body:JSON.stringify({message:'Hello',workflow:'direct'})});
+    let done:any;await vi.waitFor(async()=>{done=await(await fetch(base+'api/sessions/'+session.id,{headers})).json();expect(done.running).toBe(false);},{timeout:10000});
+    expect(done).toMatchObject({outcome:'completed',task:{status:'completed',validation:trusted?'unconfigured':'unconfirmed'},verification:{status:trusted?'skipped':'unchecked'}});expect(done.verification.report).toBeUndefined();
   });
 
   it("reports missing model credentials instead of creating a fake session", async () => {
@@ -296,6 +329,68 @@ describe("pforge Pi web console", () => {
       }
       expect(latest.messages).toEqual(expect.arrayContaining([expect.objectContaining({ role: "assistant" })]));
       expect(latest.verification.status, JSON.stringify(latest.verification)).toBe("passed");
+    } finally {
+      if (web) await web.close();
+      if (previousHome === undefined) delete process.env["PFORGE_HOME"];
+      else process.env["PFORGE_HOME"] = previousHome;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+  }, 30000);
+
+  it("completes a planned implementation after the model calls verification with no commands", async () => {
+    let modelVerified = false;
+    const provider = createServer(async (request, response) => {
+      let raw = "";
+      for await (const chunk of request) raw += chunk;
+      const payload = JSON.parse(raw || "{}") as { model?: string; messages?: Array<{ role?: string }> };
+      const transcript = JSON.stringify(payload.messages || []);
+      const phase = [...transcript.matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1] || "implement";
+      const last = payload.messages?.at(-1);
+      let delta: Record<string, unknown>;
+      let finish = "stop";
+      if (phase === "inspect") {
+        delta = { role: "assistant", content: JSON.stringify({ version: 1, intent: "change", goal: "Create index.html", affectedPaths: ["index.html"], constraints: [], acceptance: [{ criterion: "index.html exists", check: "inspection", evidence: "Read the file" }], unresolved: [], steps: ["Create index.html"] }) };
+      } else if (phase === "implement" && last?.role !== "tool") {
+        delta = { role: "assistant", tool_calls: [{ id: "missing-delivery", type: "function", function: { name: "write", arguments: JSON.stringify({ path: "index.html", content: "<svg></svg>" }) } }] };
+        finish = "tool_calls";
+      } else if (!modelVerified) {
+        modelVerified = true;
+        delta = { role: "assistant", tool_calls: [{ id: "check-empty", type: "function", function: { name: "run_verification", arguments: "{}" } }] };
+        finish = "tool_calls";
+      } else {
+        delta = { role: "assistant", content: "Implementation complete." };
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      for (const [part, reason] of [[delta, null], [{}, finish]]) response.write("data: " + JSON.stringify({ id: "planned-missing-delivery", object: "chat.completion.chunk", created: 1, model: payload.model, choices: [{ index: 0, delta: part, finish_reason: reason }], ...(reason === "stop" ? { usage: { prompt_tokens: 4, completion_tokens: 4, total_tokens: 8 } } : {}) }) + "\n\n");
+      response.end("data: [DONE]\n\n");
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const port = (provider.address() as AddressInfo).port;
+    const root = await mkdtemp(join(tmpdir(), "pforge-planned-delivery-project-"));
+    const home = await mkdtemp(join(tmpdir(), "pforge-planned-delivery-home-"));
+    await writeFile(join(home, "models.json"), JSON.stringify({ providers: { mock: { baseUrl: "http://127.0.0.1:" + port + "/v1", api: "openai-completions", apiKey: "test", models: [{ id: "mock" }] } } }));
+    const previousHome = process.env["PFORGE_HOME"];
+    process.env["PFORGE_HOME"] = home;
+    let web: Awaited<ReturnType<typeof startWebConsole>> | undefined;
+    try {
+      web = await startWebConsole({ cwd: root, port: 0 });
+      const base = web.url.split("?")[0];
+      const headers = { "x-pforge-token": web.token };
+      expect((await fetch(base + "api/projects/trust", { method: "POST", headers, body: JSON.stringify({ path: root, trusted: true }) })).status).toBe(200);
+      const session = await (await fetch(base + "api/session", { method: "POST", headers, body: JSON.stringify({ project: root, mode: "agent", workflow: "planned", model: "mock/mock" }) })).json() as { id: string };
+      expect((await fetch(base + "api/sessions/" + session.id + "/prompt", { method: "POST", headers, body: JSON.stringify({ message: "Create index.html", workflow: "planned" }) })).status).toBe(202);
+      let latest: any;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        latest = await (await fetch(base + "api/sessions/" + session.id, { headers })).json();
+        if (!latest.running) break;
+      }
+      expect(latest).toMatchObject({ running: false, outcome: "completed", task: { status: "completed", phase: "complete", validation: "unconfigured" } });
+      expect(latest.task.artifacts).toEqual([{ path: "index.html", operation: "write" }]);
+      expect(latest.verification).toMatchObject({ status: "skipped" });
+      expect(latest.verification.report).toBeUndefined();
+      expect(latest.messages.some((message: any) => message.role === "toolResult" && message.toolName === "run_verification" && !message.isError)).toBe(true);
+      expect((await (await fetch(base + "api/tasks/" + latest.task.id, { headers })).json() as any).status).toBe("completed");
     } finally {
       if (web) await web.close();
       if (previousHome === undefined) delete process.env["PFORGE_HOME"];

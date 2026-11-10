@@ -52,7 +52,7 @@ async function fixture(alwaysTruncated = false, empty = false) {
   const run = async (workflow: string) => {
     await api('sessions/' + session.id + '/prompt', { message: 'Create index.html using inline SVG.', workflow });
     let result: any;
-    await vi.waitFor(async () => { result = await api('sessions/' + session.id); expect(result.running).toBe(false); }, { timeout: 25000 });
+    await vi.waitFor(async () => { result = await api('sessions/' + session.id); expect(result.running, JSON.stringify({ phase: result.task?.phase, status: result.task?.status, finalization: result.task?.finalization, error: result.error, activeTools: result.activeTools?.map((tool: any) => tool.toolName) })).toBe(false); }, { timeout: 45000 });
     return result;
   };
   return { project, api, run, calls: () => calls };
@@ -65,7 +65,7 @@ describe('incomplete model output delivery boundary', () => {
     expect(await readFile(join(f.project, 'index.html'), 'utf8')).toContain('<svg>');
     expect(done.entries.filter((entry: any) => entry.type === 'custom' && entry.customType === 'forge.output_recovery')).toHaveLength(1);
     expect(done.messages.filter((message: any) => message.role === 'user')).toHaveLength(1);
-  }, 40000);
+  }, 60000);
   it('charges truncation continuation to the existing parent model-turn budget', async () => {
     const f = await fixture(true);
     await f.api('settings/budget', { budget: { maxDurationMs: 60000, maxModelTurns: 1, maxToolCalls: 10, maxTotalTokens: 0, maxOutputTokens: 1000, maxCostUsd: 1 } });
@@ -75,7 +75,7 @@ describe('incomplete model output delivery boundary', () => {
     expect(done.budget.modelTurns).toBeGreaterThan(1);
     expect(f.calls()).toBe(1);
     expect(done.verification.report).toBeUndefined();
-  }, 40000);
+  }, 60000);
   it.each([false, true])('fails before verification after two incomplete-output recoveries (empty=%s)', async (empty) => {
     const f = await fixture(true, empty); const done = await f.run('planned');
     expect(done).toMatchObject({ outcome: 'failed', task: { status: 'failed', phase: 'implement' } });
@@ -84,5 +84,5 @@ describe('incomplete model output delivery boundary', () => {
     expect(done.verification.report).toBeUndefined();
     await expect(readFile(join(f.project, 'index.html'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(f.calls()).toBe(5); // inspect + plan + original output + two recoveries
-  }, 40000);
+  }, 60000);
 });

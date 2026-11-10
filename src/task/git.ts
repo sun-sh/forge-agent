@@ -39,8 +39,13 @@ export async function captureGit(root: string, signal?: AbortSignal): Promise<Gi
   try {
     const canonical = await realpath(root), repository = await realpath((await git(root, ['rev-parse', '--show-toplevel'], signal)).trim());
     if (relative(canonical, repository) !== '') return { available: false, reason: '当前文件夹不是 Git 仓库根目录，请打开仓库根目录查看变更。', files: [] };
-    const raw = await git(root, ['-c', 'status.renames=false', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], signal);
-    const indexRaw = await git(root, ['ls-files', '-s', '-z'], signal);
+    // Independent metadata reads share one scheduling window. On Windows,
+    // serial process startup used to consume most of a short task's idle wait.
+    const [raw, indexRaw, head] = await Promise.all([
+      git(root, ['-c', 'status.renames=false', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], signal),
+      git(root, ['ls-files', '-s', '-z'], signal),
+      git(root, ['rev-parse', '--verify', 'HEAD'], signal).then((value) => value.trim(), () => undefined)
+    ]);
     const index = new Map<string, string>();
     for (const line of indexRaw.split('\0')) { const separator = line.indexOf('\t'); if (separator >= 0) { const path = line.slice(separator + 1); index.set(path, (index.get(path) ?? '') + line.slice(0, separator)); } }
     const entries = raw.split('\0'), files: GitFile[] = [];
@@ -55,8 +60,6 @@ export async function captureGit(root: string, signal?: AbortSignal): Promise<Gi
       if (!bytes) { try { const info = await lstat(resolve(canonical, path)); metadata = `${info.size}:${info.mtimeMs}`; } catch { /* Deleted file. */ } }
       files.push({ path, status, fingerprint: createHash('sha256').update(index.get(path) ?? '').update(bytes ?? metadata).digest('hex') });
     }
-    let head: string | undefined;
-    try { head = (await git(root, ['rev-parse', '--verify', 'HEAD'], signal)).trim(); } catch { /* Unborn repositories are supported. */ }
     return { available: true, head, files };
   } catch (error) {
     signal?.throwIfAborted();

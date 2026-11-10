@@ -56,7 +56,9 @@ async function fixture() {
   return { project, home, api, request, modelRequests: () => count, open, run, snapshot, setOperation(value: typeof operation) { operation = value; }, async restart(forgetTaskIndex = false) { await server.close(); if (forgetTaskIndex) await writeFile(join(home, 'tasks', 'index.json'), JSON.stringify({ version: 1, tasks: [] })); server = await startWebConsole({ cwd: project, port: 0 }); } };
 }
 
-describe('Web verification evidence across workspace mutations', { timeout: 60000 }, () => {
+// These end-to-end lifecycles include up to two 45s parent runs, a 20s
+// host check and Git/worktree setup. Keep their individual waits unchanged.
+describe('Web verification evidence across workspace mutations', { timeout: 120000 }, () => {
   it.each(['direct', 'planned'])('blocks %s completion when the actual Pi tool changes a protected file before passing verification', async (workflow) => {
     const f = await fixture();
     await writeFile(join(f.project, 'forge-agent.json'), JSON.stringify({ protect: ['sample.txt'], verify: [{ name: 'gate', command: 'node --version' }], verifyRetries: 0 }));

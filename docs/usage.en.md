@@ -2,7 +2,7 @@
 
 [简体中文](usage.md) · [Project overview](../README.en.md)
 
-See [Quick start](../README.en.md#quick-start) for installation and setup, and [Configure verification](../README.en.md#configure-verification) for project checks. This guide covers interface behavior, commands, integrations, and local data.
+See [Quick start](../README.en.md#start-locally) for installation and setup, and [Configure verification](../README.en.md#configure-verification-and-protected-paths) for project checks. This guide covers interface behavior, commands, integrations, and local data.
 
 ## Working modes and workflows
 
@@ -11,10 +11,10 @@ The working mode controls which tools may run:
 | Mode | Purpose | Available tools |
 | --- | --- | --- |
 | **Agent** | Implement changes, run commands, and verify the project | Tools enabled by Pi configuration and project trust |
-| **Plan** | Read the project and propose an implementation plan | Built-in read/search tools only |
-| **Ask** | Understand code, explain behavior, and answer questions | Built-in read/search tools only |
+| **Plan** | Read the project and propose an implementation plan | Built-in readers, public web readers and same-project history readers |
+| **Ask** | Understand code, explain behavior, and answer questions | Built-in readers, public web readers and same-project history readers |
 
-Plan and Ask enforce restrictions on actual tool calls, blocking shell, writes, MCP/custom tools, extension/skill/template command dispatch, and automatic verification. Local interface commands for viewing context, choosing models, and opening settings remain available. Modes persist with the session and cannot change during a run. These policies restrict model-driven operations; trusted extension code still has the launching user's permissions.
+Plan and Ask enforce restrictions on actual tool calls, blocking shell, writes, MCP/custom tools, extension/skill/template command dispatch, and automatic verification. Local interface commands for viewing context, choosing models, and opening settings remain available. Modes persist with the session. Mode choices made during a run are staged for the next message; current permissions stay unchanged. These policies restrict model-driven operations; trusted extension code still has the launching user's permissions.
 
 Agent mode offers two workflows:
 
@@ -34,7 +34,7 @@ flowchart LR
 
 Inspection preserves structured goals, constraints, relevant files, unresolved questions and host-assigned acceptance IDs. Unknown phrasing requires read-only understanding or clarification; research alone cannot silently satisfy an implementation request. Inspection can include a concise plan in the same structured handoff, avoiding a separate planning request. Legacy handoffs without steps use the planning fallback, which retains those requirements. Invalid handoffs stop before implementation, and model understanding never grants tool permissions or trust.
 
-When checks are not configured, completed implementation is labelled unverified and unreviewed. Existing blocking review findings cannot be cleared by removing verification configuration; protection, budget and finalization failures remain visible.
+When checks are not configured, finished implementation is labelled unverified and unreviewed. A model-initiated `run_verification` returns the same `skipped` state as the host check without leaving an empty `passed=false` report, so it cannot strand a finished implementation in verify. Existing blocking review findings cannot be cleared by removing verification configuration; protection, budget and finalization failures remain visible.
 
 With configured checks, the planned workflow requires passing configured verification, current workspace evidence, unchanged protected paths, and a structured `ready` review with exact evidence-backed coverage of every acceptance ID. Missing, duplicated or unconfirmed findings cannot certify completion. Blocking defects belong in `issues`; optional observations belong in `notes`. Verification failures and concrete review defects share `verifyRetries`. Every repair reruns verification and review. Malformed review JSON gets one correction in the same independent Pi reviewer session and parent budget. A second invalid response needs attention; correction neither replays implementation nor resets the repair allowance.
 
@@ -68,9 +68,11 @@ Git observations cover tracked and non-ignored untracked files, HEAD, and index 
 
 Stopping a task prevents later stages. After a service restart, unfinished work is marked interrupted and requires explicit continuation. Both the composer and task center preserve the original task workflow, regardless of the preference for the next message: adaptive tasks continue through Pi directly; planned tasks retain the goal, constraints and plan and resume the saved phase; interrupted verify/review starts with fresh verification. Legacy checkpoints without a usable handoff return to inspection. Protection baselines and consumed repair counts survive continuation. Continuation uses a hidden host message in the existing Pi conversation and workspace, so it does not append the original user request again or replay previous tool calls. Independent model review can still miss defects.
 
-Model and reasoning changes remain available while a run is active. They are staged locally and applied immediately before the next message, so the current turn keeps its configuration. Project, working mode, workflow, settings, and new-chat actions are locked during execution. Thinking, tool calls, and phase output are grouped under a collapsed **Execution process** section while the final answer remains prominent. Press `Enter` to send and `Shift+Enter` for a newline.
+Model, reasoning, working-mode and workflow choices remain available while a run is active. A small next-message marker identifies staged choices; current model and tool permissions stay unchanged. Switch chats or start a new conversation while the original task continues on the server. Drafts, in-page attachments and staged choices stay with each chat. Global service configuration, the current project binding and mutations of running history still require the affected task to become idle. Navigation does not release the exclusive canonical-project execution lock; other projects can execute independently. Thinking, tool calls, and phase output are grouped under a collapsed **Execution process** section while the final answer remains prominent. Press `Enter` to send and `Shift+Enter` for a newline.
 
 The single-response output limit differs from the whole-task budget. On `length` (including reasoning-only responses) or empty output, the Web host asks Pi for at most two continuations using the same model, effort and budget. Repeated failure stops the current phase with the actual cause before verification. Continuing legacy records wrongly advanced to verify returns to incomplete implementation. Recovery prompts favor a minimal working file and bounded edits.
+
+Native Pi bash/powershell calls use a 120-second command timeout when omitted; explicit model-supplied timeouts remain unchanged for expected long builds/tests. Pi terminates the process tree and returns the failure to the model, which can diagnose and continue within the original task budget.
 
 ### Execution budgets and project ownership
 
@@ -99,6 +101,16 @@ For a complex request, ask Forge to explore modules in parallel, review risks or
 When children exist, a compact people icon appears beside the conversation header. Open its catalog for task titles, state, duration and tokens; select a row to view the child on the right. Task instructions, thinking and tool output start collapsed. **Stop subtask** stops just that child; the main composer Stop action cancels the parent and drains all children. Ask the parent to continue a previous subtask when you need a follow-up; direct messages from the details panel are not yet supported.
 
 Children stay out of ordinary history. Refresh restores records; interruptions do not replay work. Parent and child budgets both apply. Writers use separate worktrees and produce selectively applied proposals; conflicts are not auto-merged. Writable tasks require new delegation rather than continuation in the old worktree.
+
+## Network and basic tools
+
+Forge registers `web_search` and `web_fetch` through Pi extensions in both Web and terminal clients. Search uses public search pages (Yahoo first, DuckDuckGo / Bing fallbacks) without a search API key. It returns titles, snippets and source URLs. Public services can rate-limit, challenge or change their markup; errors are reported instead of inventing results. Known official URLs can still be read, and MCP can supply another search service.
+
+**Settings → Tools** exposes the opt-out and “Test documentation connection,” which actually reads Three.js documentation. A successful document read does not attest every search service. Settings live in Forge's `network.json`, outside strict project configuration. Changes require idle tasks and reload idle sessions. Disabled tools are hidden and reject execution.
+
+Plan / Ask and planned inspection allow only the host-owned web readers alongside built-in file readers; an identically named project tool is not admitted. Reviewers/workers retain their existing restrictions. Shell commands, package installation, browser MCP and URL reading remain distinct capabilities.
+
+Mozilla Readability and LinkeDOM extract text without running scripts or reusing browser cookies/logins. A request chain has a 20-second deadline, at most four redirects and a 2 MB response cap. Output defaults to 24,000 characters, capped at 60,000 with explicit truncation. Only public HTTP(S) on ports 80/443 is accepted. Every redirect revalidates DNS, pins the validated IP and rejects local/private/reserved addresses. Web text stays untrusted data. Browser MCP handles JavaScript and authenticated interaction. This opt-out is not a network sandbox for shell, MCP or extensions.
 
 ## Composer commands and context
 
@@ -204,3 +216,11 @@ The Web gateway binds to `127.0.0.1` by default, uses a local access credential 
 Local operation describes where the client, process, and data live. With a remote model, relevant content is still sent to your configured provider. Agent tools, trusted extensions, and verification commands have the launching user's OS permissions. Project trust is not an OS sandbox; use a container, VM, or restricted account for untrusted projects. Sessions and raw logs can contain sensitive data, so inspect them before sharing. See [security notes](../SECURITY.md).
 
 Task progress starts collapsed as one row. The stop reason stays beside the composer; expand progress for steps and usage or open execution history on the right.
+
+## Conversation context and same-project references
+
+Each chat has its own Pi SessionManager, message branch, compaction summaries and task state. Accepted global/project reference memories may be reused within their scope; full transcripts are not automatically merged when switching chats.
+
+Ask to refer to an earlier conversation in this project. The Web agent can call `search_project_conversations` for titles/keywords, then `read_project_conversation` for bounded excerpts with source session and entry IDs. An empty search returns metadata only. Selected-branch user/assistant text and retained compaction summaries are readable; thinking, tool output, hidden host messages, other projects, trash and private worker/reviewer directories are excluded. Archived chats remain referenceable. Plan/Ask admit these genuine host-owned readers, not arbitrary extensions with matching tool names.
+
+On-demand scans admit up to 2,000 top-level files, 8 MB per file and 64 MB total, reporting incomplete scans explicitly. Reads default to 12,000 characters with a 24,000 maximum. Pagination carries a source revision; changing running transcripts must be read again from the start. Historical text is untrusted reference, not permission or current verification evidence. These are tool-level access bounds, not an OS sandbox for Pi shell or host file access.

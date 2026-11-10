@@ -96,10 +96,13 @@ export class CheckpointStore {
   private async snapshot(project: string, id: string): Promise<Snapshot> {
     const canonical = await realpath(project), repository = await realpath((await checkpointGit(project, ['rev-parse', '--show-toplevel'])).trim());
     if (directoryKey(canonical) !== directoryKey(repository)) throw new CheckpointError(409, '检查点需要打开 Git 仓库根目录');
-    let head = '';
-    try { head = (await checkpointGit(project, ['rev-parse', '--verify', 'HEAD'])).trim(); } catch { /* Unborn repository. */ }
-    const index = hash(await checkpointGit(project, ['ls-files', '--stage', '-z']));
-    const paths = [...new Set((await checkpointGit(project, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean))];
+    const [head, indexRaw, pathRaw] = await Promise.all([
+      checkpointGit(project, ['rev-parse', '--verify', 'HEAD']).then((value) => value.trim(), () => ''),
+      checkpointGit(project, ['ls-files', '--stage', '-z']),
+      checkpointGit(project, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])
+    ]);
+    const index = hash(indexRaw);
+    const paths = [...new Set(pathRaw.split('\0').filter(Boolean))];
     const files: Snapshot['files'] = Object.create(null), skipped: string[] = []; let total = 0;
     const objects = join(this.directory(id), 'objects'); await mkdir(objects, { recursive: true });
     for (const path of paths) {

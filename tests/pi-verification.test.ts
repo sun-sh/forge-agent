@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createPforgeVerification, verificationOutcomeSchema } from "../src/verification/pi-extension.js";
+import { createPforgeVerification, isVerificationUnconfigured, verificationOutcomeSchema } from "../src/verification/pi-extension.js";
 import type { ExtensionAPI, AgentBeforeSettleEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type Handler = (...args: any[]) => any;
@@ -54,6 +54,17 @@ async function emit(fake: ReturnType<typeof fakePi>, name: string, event: any) {
 }
 
 describe("Pi verification extension", () => {
+  it('canonicalizes an empty model-triggered verification before the planned host gate', async () => {
+    const root = await workspace([], 2), home = await mkdtemp(join(tmpdir(), 'forge-no-checks-'));
+    vi.stubEnv('FORGE_AGENT_HOME', home);
+    const runtime = createPforgeVerification(root, { isProjectTrusted: () => true, managed: () => true });
+    const fake = fakePi(); runtime.extension(fake.pi); runtime.beginTurn();
+    const tool = await fake.tools.get('run_verification').execute('empty-check', {}, undefined, undefined, fake.ctx);
+    expect(tool.isError).toBe(false); expect(runtime.outcome.report).toBeUndefined();
+    const verified = await runtime.verifyTrusted(new AbortController().signal);
+    expect(isVerificationUnconfigured(verified)).toBe(true); expect(verified.evidence).toBeUndefined(); expect(verified.attempts).toBe(0);
+  });
+
   it("registers a verification tool and /verify command", async () => {
     const root = await workspace([{ name: "ok", command: "node --version" }], 1);
     const fake = fakePi();

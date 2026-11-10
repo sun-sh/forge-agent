@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Qualify the final conversation changes with the full Windows check, isolated Edge smoke, clean tgz installation and a seeded real-model reference task. Retain the initial integration timeout failures and document calibrated lifecycle waits. Publish all 45 clean coding runs across five miniature tasks, three workflows and three repetitions, with no demonstrated quality gain from extra planning/review on this sample.
+
+- Keep Web history navigation and new conversations available during background execution. Scope drafts, in-page attachments and pending model/effort/mode/workflow choices to each chat, reject late frames from old SSE subscriptions, and stage mode changes for the next message without changing active-run permissions. Preserve exclusive canonical-project execution ownership.
+- Add on-demand same-project conversation search/read over Pi's selected branches, with UUID and canonical-project validation, bounded output/scans, source revisions and untrusted historical provenance. Exclude trash, private subdirectories, thinking, tool output and hidden host messages; admit only the host-owned readers in Plan/Ask.
+
+- Retry transient OS sharing errors when reading service records, preserve malformed-record failures, and publish service state through the existing atomic replacement helper. Terminate Windows verification process trees without blocking the host event loop.
+- Give native Pi bash/powershell calls a 120-second default only when no timeout is supplied. Pi retains execution/cancellation ownership; long commands can supply an explicit timeout and failures return to the model.
+- Run independent Git metadata reads concurrently to reduce Windows phase and checkpoint overhead; retain existing bounds and evidence semantics.
+- Fix planned tasks that remained unfinished after the model called `run_verification` without configured checks: canonicalize the skipped outcome and remove the misleading empty failure report. Add a Pi tool-call → host check → task-index regression.
+- Bundle public `web_search` and `web_fetch` as Pi extension tools for Web and CLI, with source URLs, bounded output, cancellation, address/redirect checks and an opt-out plus actual document-connection diagnostic under Settings → Tools. Read-only modes admit only the host-owned web readers.
+
 - Combine bounded inspection and planning in one handoff, with a separate planning fallback for older replies. Focus independent review on one complete requirement ledger and full hunks; pass previous blocking findings to fresh repair reviewers. Missing verification no longer hides failed review, budget or finalization states.
 - Add counterbalanced small-task evaluation with explicit frozen budgets and execution-only timing, plus paired correct/defective candidate reviewer diagnostics with independently validated oracles, false positives, missed defects and abstentions. Preserve earlier synthetic and natural-task evidence separately.
 

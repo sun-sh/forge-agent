@@ -1,3 +1,4 @@
+import * as serviceFiles from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -10,9 +11,20 @@ import { loadWebToken } from '../src/web/auth.js';
 import { startWebConsole } from '../src/web/server.js';
 import { CheckpointStore, checkpointGit } from '../src/task/checkpoints.js';
 
+vi.mock('node:fs/promises', async (original) => { const actual = await original<typeof import('node:fs/promises')>(); return { ...actual, readFile: vi.fn(actual.readFile) }; });
+
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 describe('independent local service', () => {
+  it('retries transient record sharing errors but rejects malformed records', async () => {
+    const home=await mkdtemp(join(tmpdir(),'forge-service-sharing-'));
+    await saveService(home,'http://127.0.0.1:9',randomUUID());
+    vi.spyOn(serviceFiles,'readFile').mockRejectedValueOnce(Object.assign(new Error('sharing'),{code:'EPERM'})).mockRejectedValueOnce(Object.assign(new Error('sharing'),{code:'EACCES'}));
+    expect((await serviceStatus(home)).running).toBe(false);
+    await writeFile(join(home,'web','service.json'),'{invalid');
+    await expect(serviceStatus(home)).rejects.toThrow('记录不可读');
+  });
+
   it('binds control to a live instance rather than trusting a saved PID', async () => {
     const home = await mkdtemp(join(tmpdir(), 'forge-service-state-')), instance = randomUUID();
     const server = createServer((_request, response) => response.setHeader('content-type', 'application/json').end(JSON.stringify({ ok: true, instance })));

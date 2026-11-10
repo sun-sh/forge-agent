@@ -59,11 +59,21 @@ plan 和 implement 保持在父 Pi 会话中，以便继续使用同一项目上
 
 验收：[控制器](../tests/task-controller.test.ts)、[模式与路由](../tests/web-modes.test.ts)、[CLI 完成与重试](../tests/pi-e2e.test.ts)。
 
+`shell-timeout.ts` 只在原生 bash / powershell 未传 timeout 时填入 120 秒，显式长命令超时不改。执行、流式输出、进程树终止和错误回传仍由 Pi 负责，不引入另一个 shell executor 或任务循环。真实模型验收曾在多行 Python shell 检查上卡住，该失败和修复后重跑须分别保留。
+
 Web 的 `output-guard.ts` 在 Pi `agent_before_settle` 边界识别 `length` 和无正文/无工具的空结果，最多请求两次原会话续接，不另建模型/工具循环。失败保留在原阶段，不将“无文件、只有思考”的截断执行误当实现结束；父用量与取消仍由已有 Pi hooks 统计。旧记录已错误进入 verify 时，宿主依据最后模型 stopReason 恢复 implement。它不会提高用户配置的单次输出上限，也不暗中降低思考档位。
+
+### 公共联网工具
+
+Forge 通过具名 Pi 扩展注册 `web_search` / `web_fetch`，没有额外的模型或工具循环。正文提取复用 Mozilla Readability / LinkeDOM，IP 分类复用 ipaddr.js。网络配置存放在 Forge home 的 `network.json`，改变配置通过已有资源串行重载链路应用；运行任务不被中途改写。Plan / Ask 与 inspect 按具名扩展来源允许只读网页工具，不按工具名字放行项目自定义实现。独立交付 reviewer 与 worktree worker 没有因此增加网络权限。
+
+公开搜索默认走 Yahoo 搜索页，DuckDuckGo / Bing 作为备用；查询内容会发送给所选搜索服务，结果携带来源与获取时间。服务验证码、拒绝或结构变化作为工具失败回传。网址读取不执行脚本、不共享浏览器 Cookie，每次重定向都验证公共目标并将已验证 IP 绑定到连接。详细边界见 [联网工具](usage.md#联网与基本工具)。这些保护只约束新工具，不声称限制 Pi 终端、MCP 或宿主扩展的系统权限。
 
 ## 3. 完成是证据判断，不是模型文本
 
 需要分别回答三个问题：模型执行结束了吗，自动检查通过了吗，模型审阅通过了吗。direct 执行结束不能被界面渲染成“已审阅”；未配置命令不能显示“验证通过”。无检查的实现可以结束为 unconfigured，但已有审阅阻断项、保护异常、预算中止和收尾失败不会因此被覆盖。未配置检查的普通新项目不进入 Git 补丁审阅，界面明确标记未验证、未审阅。
+
+模型主动调用 `run_verification` 与宿主主动检查共用同一个空配置处理：没有命令、也没有保护检查时持久化 `skipped` 并清除空报告与旧版本证据。零条检查不形成 `passed=false` 的报告，因此不会使已完成实现误停在 verify。保护基线存在时仍执行保护校验；配置失败输出、审阅阻断与收尾失败不会被该短路覆盖。
 
 Forge 的 `isVerified()` 要求存在非空、全部成功的检查报告和当前有效的版本证据。证据绑定执行记录、检查命令配置哈希和有界工作区内容指纹。显示用 Git diff 有独立上限，不承担完整版本证明。
 
@@ -198,3 +208,9 @@ Structured inspection preserves goals, constraints and acceptance IDs for all pl
 Context combines Pi compaction, prioritized structured requirements and lexical recall of accepted scoped memory; unstructured legacy/adaptive requests have explicitly partial head/tail references. The right-side execution view projects stable phase/model/tool/check identities from the existing Pi journal. It is read-only history, not a recoverable action scheduler. Semantic retrieval, measured memory gains, universal per-action approvals, independent-review benefits, cost-scored tool routing, arbitrary teams, exactly-once side effects and comparative product benchmarks are not claimed.
 
 The engineering priorities are an evidence-backed execution loop, unified execution records with honest recovery semantics, and measured context/memory improvements. See the linked source and regression tests for each invariant, and [evaluation methods](evaluation.md) for the separation between scripted infrastructure tests and real-model results.
+
+## 会话并发视图与按需上下文引用
+
+会话是否运行与用户能否导航是独立状态。前端只在发送、打开或配置提交等短暂临界区锁导航；运行中的 SSE 连接可以关闭并切换，任务生命周期继续由服务端持有。旧连接的事件先检查 abort 和 session ID，再写当前视图。当前项目实际执行锁仍由 `ProjectExecutions` 按 canonical 目录独占；新模式只暂存在该会话，待下一条用户消息前应用，不会中途放宽活动任务的权限。
+
+`web/conversations.ts` 从 Pi 原生会话树按需读取同项目的其他用户对话，不做第二套会话存储或自动合并。输入使用会话 UUID，读取前验证历史根、真实项目目录和生命周期；不遍历私有子目录。输出只含选中分支的用户/助手文本与保留摘要，明确携带历史来源和分页 revision；隐藏宿主消息、思考和工具输出不参与检索。扫描与输出预算有明确上界，失败或超限返回不完整信息。工具结果按不可信历史资料处理，不提供模式切换、项目信任或验证证据。已接受的项目参考记忆仍由既有分层机制管理。

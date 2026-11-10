@@ -154,12 +154,21 @@ describe('safe agent output', () => {
     const verification = { status: 'skipped', reason: 'No verification commands configured.' };
     app.applySnapshot({ id: 'delivery', running: false, outcome: 'completed', task: { id: 'task-1', kind: 'change', workflow: 'planned', status: 'completed', phase: 'complete', validation: 'unconfigured', artifacts: [{ path: 'index.html', operation: 'write' }], repairs: 0, phases: [], verification }, verification, messages: [] });
     expect(find('delivery-card').classList.contains('hidden')).toBe(false);
+    expect(find('delivery-title').textContent).toBe('交付已生成');
     expect(find('delivery-artifacts').textContent).toContain('index.html');
     expect(find('delivery-validation').textContent).toContain('未配置');
+    expect(find('task-review').textContent).toContain('未启用独立审阅');
+    expect(find('task-review').textContent).not.toContain('尚未完成');
     expect(find('resume-task-button').classList.contains('hidden')).toBe(true);
     find('delivery-artifacts').querySelector('[data-open-artifact]').click();
     expect(app.state.changes.open).toBe(true);
     expect(app.state.changes.reviewView).toBe('files');
+  });
+  it('does not add an empty file delivery card to an ordinary capability answer', async () => {
+    const {window,app}=await client();app.state.sessionId='answer-only';
+    app.applySnapshot({id:'answer-only',running:false,outcome:'completed',task:{id:'answer',kind:'undetermined',workflow:'direct',status:'completed',phase:'complete',repairs:0,phases:[],changes:{available:false,files:[]}},messages:[{role:'user',content:'你可以联网吗'},{role:'assistant',content:[{type:'text',text:'可以读取官方文档。'}]}]});
+    expect(window.document.getElementById('delivery-card').classList.contains('hidden')).toBe(true);
+    expect(window.document.getElementById('timeline').textContent).toContain('可以读取官方文档');
   });
   it('does not hide a blocked review or finalization failure behind missing verification', async () => {
     const { window, app } = await client(); app.state.sessionId = 'blocked';
@@ -257,7 +266,7 @@ async function client(initial = {}) {
     }
   });
   // Exercise the actual browser entry point against an isolated DOM and API, including all event bindings.
-  window.eval(source + '\nwindow.__app = { state, api, loadConfig, loadModels, resumeActiveSession, recoverAuthorization, openSettings, connect, applySnapshot, renderMessages, setModel, changeMode, changeWorkflow, changeModel, changeThinking, toggleModelPicker, closeModelPicker, setRunning, createSession, sendPrompt, sendFollowup, newConversation, loadChanges, loadChangeDiff, stopExecution, resumeExecution, handleEvent, compactContext, updateElapsed };');
+  window.eval(source + '\nwindow.__app = { state, api, loadConfig, loadModels, resumeActiveSession, recoverAuthorization, openSettings, connect, applySnapshot, renderMessages, setModel, changeMode, changeModeSelection, changeWorkflow, openSession, changeModel, changeThinking, toggleModelPicker, closeModelPicker, setRunning, createSession, sendPrompt, sendFollowup, newConversation, loadChanges, loadChangeDiff, stopExecution, resumeExecution, handleEvent, compactContext, updateElapsed };');
   await vi.waitFor(() => expect(window.document.getElementById('connection-label').textContent).toContain('已连接'));
   return { window, app: window.__app, requests, streams, reviewMedia };
 }
@@ -1108,6 +1117,23 @@ describe('Composer run controls', () => {
 });
 
 describe('Web client integration', () => {
+  it('provides visible network settings, a real diagnostic action and explicit failure feedback without sending a model prompt', async () => {
+    const {window,app,requests}=await client({firstRun:true});
+    const fetcher=window.fetch;
+    window.fetch=(url,init)=>url==='/api/network/check'?Promise.resolve({ok:true,json:async()=>({ok:false,message:'HTTP 429: connection rate limited'})}):fetcher(url,init);
+    await app.openSettings('tools');
+    const doc=window.document;
+    expect(doc.querySelector('[data-settings-tab="tools"]').getAttribute('aria-pressed')).toBe('true');
+    expect(doc.getElementById('network-enabled').checked).toBe(true);
+    expect(doc.querySelector('[data-settings-panel="tools"]').textContent).toContain('web_search');
+    doc.getElementById('network-enabled').checked=false;doc.getElementById('save-network').click();
+    await vi.waitFor(()=>expect(doc.getElementById('save-network').disabled).toBe(false));
+    expect(JSON.parse(requests.find(r=>r.url==='/api/settings/network').body)).toEqual({enabled:false});
+    doc.getElementById('check-network').click();
+    await vi.waitFor(()=>expect(doc.getElementById('network-diagnostic').textContent).toContain('HTTP 429'));
+    expect(requests.some(r=>r.url.endsWith('/prompt'))).toBe(false);
+  });
+
   it('keeps committed-deletion diagnostics visible after the settings tree is remounted', async () => {
     const { window, app } = await client(); let deleted = false;
     const fetcher = window.fetch;
@@ -1124,7 +1150,7 @@ describe('Web client integration', () => {
     const { window, app, streams } = await client();
     app.state.sessionId = 'mcp-session'; app.connect('mcp-session');
     await app.openSettings('mcp');
-    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(7);
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(8);
     const root = window.document.getElementById('mcp-settings');
     root.querySelector('[data-action="add"]').click();
     const name = root.querySelector('[name="name"]'); name.value = 'unsaved-service';
@@ -1296,7 +1322,7 @@ describe('Web client integration', () => {
 
     app.state.sessionId = 'live'; app.state.activeModelKey = first.key; app.state.activeThinkingLevel = 'off'; app.state.model = first;
     app.setRunning(true);
-    expect(window.document.getElementById('mode-select').disabled).toBe(true);
+    expect(window.document.getElementById('mode-select').disabled).toBe(false);
     expect(window.document.getElementById('model-picker-button').disabled).toBe(false);
     window.document.getElementById('model-picker-button').click();
     window.document.querySelector('[data-choose-model="mock/b"]').click();
@@ -1761,7 +1787,7 @@ describe('Web client integration', () => {
       return fetcher(url, init);
     };
     await app.openSettings('memory');
-    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(7);
+    expect(window.document.querySelectorAll('[data-settings-tab]')).toHaveLength(8);
     expect(window.document.querySelectorAll('[data-memory-layer]')).toHaveLength(3);
     expect(window.document.querySelector('[data-memory-layer="global"] textarea').value).toBe('Prefer concise answers');
     const project = window.document.querySelector('[data-memory-layer="project"]');
@@ -1788,7 +1814,7 @@ describe('Web client integration', () => {
     expect(requests.some((request) => request.url.endsWith('/prompt'))).toBe(false);
   });
 
-  it('restores an authoritative session mode, preserves a draft, handles rejected switches and locks mode during a run', async () => {
+  it('restores an authoritative session mode, preserves a draft, handles rejected switches and stages mode during a run', async () => {
     const { window, app } = await client();
     app.state.sessionId = 'live';
     app.applySnapshot({ id: 'live', mode: 'plan', runMode: 'plan', messages: [], outcome: 'completed' });
@@ -1805,9 +1831,11 @@ describe('Web client integration', () => {
     expect(window.document.getElementById('followup-prompt').value).toBe('keep this question');
     expect(window.localStorage.getItem('pforge.mode')).toBe('"ask"');
     app.setRunning(true);
-    expect(window.document.getElementById('followup-mode-select').disabled).toBe(true);
+    expect(window.document.getElementById('followup-mode-select').disabled).toBe(false);
     await app.changeMode('agent');
-    expect(app.state.mode).toBe('ask');
+    expect(app.state.mode).toBe('agent');
+    expect(app.state.pendingMode).toBe('agent');
+    expect(app.state.activeMode).toBe('ask');
     app.setRunning(false);
   });
 
@@ -2032,5 +2060,123 @@ describe('MCP settings interactions', () => {
     f.click('cancel'); f.click('delete'); expect(f.requests).toHaveLength(0);
     f.click('confirm-delete');
     await vi.waitFor(() => expect(f.requests.some((request) => request.method === 'DELETE' && request.url.includes('revision=rev'))).toBe(true));
+  });
+});
+
+
+describe('background conversation navigation', () => {
+  it('switches away from a running chat, retains its staged choices and draft, and ignores its late SSE', async () => {
+    const reasoning = model('b', { reasoning: true, thinkingLevels: ['low', 'high'] });
+    const { window, app, requests, streams } = await client({ models: [model('a'), reasoning] });
+    const doc = window.document, paths = { a: 'C:\\sessions\\a.jsonl', b: 'C:\\sessions\\b.jsonl' };
+    const snapshot = (id) => ({ id, sessionFile: paths[id], project: 'C:\\repo', model: model('a'), thinkingLevel: 'off', mode: id === 'a' ? 'agent' : 'plan', workflow: 'direct', running: id === 'a', outcome: id === 'a' ? 'running' : 'completed', messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Answer ' + id }] }] });
+    const fetcher = window.fetch;
+    window.fetch = async (url, init) => {
+      const result = await fetcher(url, init);
+      if (url === '/api/session') return { ok: true, json: async () => snapshot(JSON.parse(init.body).sessionFile === paths.a ? 'a' : 'b') };
+      return result;
+    };
+    app.state.sessionId = 'a'; app.applySnapshot(snapshot('a')); app.connect('a');
+    const oldStream = streams.at(-1);
+    await app.changeModel('mock/b'); await app.changeThinking('high'); await app.changeModeSelection('ask');
+    doc.getElementById('followup-prompt').value = 'A unsent draft';
+    app.state.attachments = [{ type: 'file', path: 'a.txt' }, { type: 'image', data: 'aGVsbG8=', mimeType: 'image/png', name: 'draft.png' }];
+    expect(doc.getElementById('project-list').inert).toBe(false);
+    app.state.uiRequest = { requestId: 'A-pending-approval' };
+    app.state.uiQueue = [{ requestId: 'A-queued-approval', method: 'confirm', title: 'OLD APPROVAL' }];
+    await app.openSession(paths.b, 'C:\\repo');
+    expect(app.state.sessionId).toBe('b'); expect(app.state.running).toBe(false);
+    expect(app.state.uiQueue).toEqual([]); expect(app.state.uiRequest).toBeNull();
+    expect(doc.getElementById('approval-modal').classList.contains('hidden')).toBe(true);
+    expect(app.state.mode).toBe('plan'); expect(app.state.model.key).toBe('mock/a');
+    expect(app.state.attachments).toEqual([]); expect(doc.getElementById('followup-prompt').value).toBe('');
+    expect(doc.getElementById('followup-mode-picker-button').disabled).toBe(false);
+    await app.changeMode('agent');
+    expect(requests.some((item) => item.url === '/api/sessions/b/mode')).toBe(true);
+    doc.getElementById('followup-prompt').value = 'B unsent draft';
+    oldStream.onEvent({ id: '100', data: JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'WRONG CHAT OUTPUT' } }) });
+    expect(doc.getElementById('timeline').textContent).not.toContain('WRONG CHAT OUTPUT');
+    expect(doc.getElementById('followup-prompt').value).toBe('B unsent draft');
+    await app.openSession(paths.a, 'C:\\repo');
+    expect(app.state.running).toBe(true); expect(app.state.activeMode).toBe('agent'); expect(app.state.mode).toBe('ask');
+    expect(app.state.pendingMode).toBe('ask'); expect(app.state.model.key).toBe('mock/b'); expect(app.state.thinkingLevel).toBe('high');
+    expect(app.state.attachments).toHaveLength(2); expect(doc.getElementById('followup-prompt').value).toBe('A unsent draft');
+    expect(requests.some((item) => item.url === '/api/sessions/a/mode' || item.url.endsWith('/abort'))).toBe(false);
+  });
+  it('stages mode and execution strategy through snapshots, applying them only before the next prompt', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', mode: 'ask', workflow: 'direct', runMode: 'ask', running: true, messages: [] });
+    await app.changeModeSelection('agent:planned');
+    expect(app.state.activeMode).toBe('ask'); expect(app.state.mode).toBe('agent');
+    expect(requests.filter((item) => item.method === 'POST')).toHaveLength(0);
+    app.applySnapshot({ id: 'live', mode: 'ask', workflow: 'direct', runMode: 'ask', running: false, messages: [] });
+    expect(app.state.mode).toBe('agent'); expect(app.state.workflow).toBe('planned');
+    expect(window.document.getElementById('followup-mode-picker-button').title).toContain('下一条消息');
+    expect(await app.sendFollowup('Implement the approved change')).toBe(true);
+    const posts = requests.filter((item) => item.method === 'POST');
+    expect(posts.map((item) => item.url)).toEqual(['/api/sessions/live/mode', '/api/sessions/live/workflow', '/api/sessions/live/prompt']);
+    expect(JSON.parse(posts.at(-1).body).workflow).toBe('planned');
+    expect(app.state.pendingMode).toBeNull(); expect(app.state.pendingWorkflow).toBeNull();
+  });
+  it('retains a staged mode and draft when the host rejects its application', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'live';
+    app.applySnapshot({ id: 'live', mode: 'ask', workflow: 'direct', running: true, messages: [] });
+    await app.changeModeSelection('agent:planned'); app.setRunning(false);
+    const fetcher = window.fetch;
+    window.fetch = (url, init) => url.endsWith('/mode') ? Promise.resolve({ ok: false, status: 409, json: async () => ({ error: 'still busy' }) }) : fetcher(url, init);
+    window.document.getElementById('followup-prompt').value = 'Keep my request';
+    expect(await app.sendFollowup('Keep my request')).toBe(false);
+    expect(app.state.pendingMode).toBe('agent'); expect(app.state.workflow).toBe('planned');
+    expect(window.document.getElementById('followup-prompt').value).toBe('Keep my request');
+    expect(requests.some((item) => item.url.endsWith('/prompt'))).toBe(false);
+  });
+  it('opens a fresh conversation while the previous one continues, without leaking its pending configuration', async () => {
+    const { window, app, requests } = await client(); app.state.sessionId = 'a';
+    app.applySnapshot({ id: 'a', sessionFile: 'a.jsonl', mode: 'agent', running: true, messages: [] });
+    await app.changeModel('mock/b'); await app.changeMode('ask');
+    expect(window.document.getElementById('new-chat-button').disabled).toBe(false);
+    await app.newConversation();
+    expect(app.state.sessionId).toBeNull(); expect(app.state.pendingModelKey).toBeNull(); expect(app.state.pendingMode).toBeNull();
+    expect(app.state.sessionChoices.get('a.jsonl')).toMatchObject({ pendingModelKey: 'mock/b', pendingMode: 'ask' });
+    expect(requests.some((item) => item.url.endsWith('/abort'))).toBe(false);
+  });
+});
+
+
+describe('background compaction navigation', () => {
+  it('can leave a compacting conversation and ignores its late compaction response', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'compact-a';
+    app.applySnapshot({ id: 'compact-a', running: false, mode: 'agent', context: { compacting: false }, messages: [] });
+    const fetcher = window.fetch; let release;
+    window.fetch = (url, init) => url.endsWith('/compact') ? new Promise((resolve) => { release = resolve; }) : fetcher(url, init);
+    const pending = app.compactContext();
+    expect(app.state.compactRequest).toBe(true);
+    expect(window.document.getElementById('new-chat-button').disabled).toBe(false);
+    await app.newConversation();
+    window.document.getElementById('prompt').value = 'New draft';
+    release({ ok: true, json: async () => ({ context: { compacting: false, compactions: 99 } }) });
+    expect(await pending).toBe(false);
+    expect(app.state.sessionId).toBeNull(); expect(app.state.context).toBeNull(); expect(app.state.compactRequest).toBe(false);
+    expect(window.document.getElementById('prompt').value).toBe('New draft');
+    expect(window.document.getElementById('run-button').disabled).toBe(false);
+  });
+});
+
+
+describe('late stop acknowledgements', () => {
+  it('does not clear a newer stop operation after navigating away and back to the same conversation', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'a';
+    app.applySnapshot({ id: 'a', running: true, mode: 'agent', messages: [] });
+    const fetcher = window.fetch, acknowledgements = [];
+    window.fetch = (url, init) => url.endsWith('/abort') ? new Promise((resolve) => acknowledgements.push(() => resolve({ ok: true, json: async () => ({ ok: true }) }))) : fetcher(url, init);
+    const first = app.stopExecution();
+    await app.newConversation();
+    app.state.sessionId = 'a'; app.applySnapshot({ id: 'a', running: true, mode: 'agent', messages: [] });
+    const second = app.stopExecution();
+    acknowledgements[0](); await first;
+    expect(window.document.getElementById('stop-button').getAttribute('aria-busy')).toBe('true');
+    expect(app.state.runControl).toBe('stopping');
+    acknowledgements[1](); await second;
+    expect(app.state.runControl).toBeNull();
   });
 });

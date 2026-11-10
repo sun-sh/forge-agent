@@ -1,0 +1,46 @@
+{
+  "protocol": "windows-conversation-lifecycle-qualification-v1",
+  "date": "2026-11-10",
+  "sourceFingerprint": "431bc42dcbc133713e06efb4747c8b7770020e77b081277e2df8daad2e4147c9",
+  "fingerprintProtocol": "Sorted repository-relative paths + NUL + LF-normalized UTF-8 bytes + NUL; src/tests/scripts .ts/.js/.mjs/.css/.html/.json plus package and TypeScript/Vitest configuration; docs and private artifacts excluded.",
+  "fingerprintedFiles": 128,
+  "environment": {
+    "platform": "win32",
+    "node": "v24.19.0",
+    "pi": "1.4.0"
+  },
+  "initialDiagnostic": {
+    "files": 48,
+    "tests": 669,
+    "passed": 665,
+    "failed": 4,
+    "note": "Non-frozen diagnosis during UI refinements. Four bounded integration waits failed; retained local logs and Pi task records show completed continuation artifacts and finalization. This is failure history, not a controlled before/after performance experiment."
+  },
+  "finalCheck": {
+    "files": 48,
+    "tests": 669,
+    "passed": 669,
+    "failed": 0,
+    "durationSeconds": 1314.84
+  },
+  "edgeSmoke": true,
+  "cleanTarballInstall": true,
+  "liveHistoryProtocol": "seeded-same-project-reference-live-model-v1",
+  "liveHistoryGates": {
+    "completed": true,
+    "readOnlyMode": true,
+    "searched": true,
+    "readSource": true,
+    "correctColor": true,
+    "correctRadius": true,
+    "sourceCited": true,
+    "noForeignContext": true,
+    "independentUserBranch": true,
+    "noWriter": true
+  },
+  "limitations": [
+    "One local Windows full qualification, not a new remote CI result.",
+    "Repeated small coding tasks do not measure complex upstream repositories or hours-long interruption/compaction reliability.",
+    "Live conversation retrieval used seeded references and one real-model task, not a retrieval recall or prompt-injection benchmark."
+  ]
+}

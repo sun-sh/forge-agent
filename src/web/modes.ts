@@ -1,4 +1,6 @@
 import type { AgentSession, ExtensionFactory, SessionManager } from '@earendil-works/pi-coding-agent';
+import { isForgeNetworkTool } from './network.js';
+import { isForgeConversationTool } from './conversations.js';
 
 export const WEB_MODES = ['agent', 'plan', 'ask'] as const;
 export type WebMode = typeof WEB_MODES[number];
@@ -59,7 +61,7 @@ export function createWebModePolicy(getMode: () => WebMode, manager: SessionMana
   let directToolsAtRestriction: Set<string> | undefined = Array.isArray(baseline) && baseline.every((name) => typeof name === 'string') ? new Set(baseline) : undefined;
   const extension: ExtensionFactory = (pi) => {
     const readers = () => pi.getAllTools()
-      .filter((tool) => READ_TOOLS.has(tool.name) && tool.sourceInfo.source === 'builtin')
+      .filter((tool) => READ_TOOLS.has(tool.name) && tool.sourceInfo.source === 'builtin' || (isForgeNetworkTool(tool) || isForgeConversationTool(tool)) && tool.exposure !== 'hidden')
       .map((tool) => tool.name);
     pi.on('before_agent_start', (event) => {
       if (getMode() === 'agent') { delete event.systemPromptOptions.sections['pforge_mode']; return; }
@@ -75,7 +77,7 @@ export function createWebModePolicy(getMode: () => WebMode, manager: SessionMana
       if (!readers().includes(event.toolName)) return {
         block: true,
         terminate: true,
-        reason: `${getMode() === 'plan' ? 'Plan' : 'Ask'} 模式仅允许 Pi 内置读取与搜索工具。执行修改或命令前，请由用户切换至 Agent。`
+        reason: `${getMode() === 'plan' ? 'Plan' : 'Ask'} 模式仅允许文件读取、搜索与公共网页读取工具。执行修改或命令前，请由用户切换至 Agent。`
       };
     });
   };
@@ -100,7 +102,7 @@ export function createWebModePolicy(getMode: () => WebMode, manager: SessionMana
           agentTools = session.getActiveToolNames();
           manager.appendCustomEntry('pforge.web.agent-tools', agentTools);
         }
-        const names = session.getAllTools().filter((tool) => READ_TOOLS.has(tool.name) && tool.sourceInfo.source === 'builtin').map((tool) => tool.name);
+        const names = session.getAllTools().filter((tool) => READ_TOOLS.has(tool.name) && tool.sourceInfo.source === 'builtin' || (isForgeNetworkTool(tool) || isForgeConversationTool(tool)) && tool.exposure !== 'hidden').map((tool) => tool.name);
         session.setActiveToolsByName(names);
       }
     }

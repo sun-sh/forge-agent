@@ -256,10 +256,15 @@ try {
   assert.equal(await evaluate(`Object.values(localStorage).join('').includes('local-test-only') || Object.values(sessionStorage).join('').includes('local-test-only')`), false);
   await click('[data-settings-tab="model"]');
   await waitFor(`!!document.querySelector('#model-provider-filter')`);
-  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 7);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-settings-tab]').length`), 8);
   assert.equal(await evaluate(`document.querySelectorAll('.model-card').length`), 2);
   assert.equal(await evaluate(`document.querySelector('#default-model')`), null);
   await screenshot('settings');
+  await click('[data-settings-tab="tools"]');
+  assert.equal(await evaluate("document.getElementById('network-enabled').checked"), true);
+  assert.ok((await evaluate("document.querySelector('[data-settings-panel=tools]').textContent")).includes('web_search'));
+  await screenshot('network-tools');
+  await click('[data-settings-tab="model"]');
   for (const tab of ['provider', 'project', 'system', 'model', 'memory', 'skills', 'mcp']) {
     await click(`[data-settings-tab="${tab}"]`);
     assert.equal(await evaluate(`document.querySelectorAll('[data-settings-panel]:not(.hidden)').length`), 1);
@@ -528,7 +533,7 @@ try {
   assert.equal(await evaluate(`getComputedStyle(document.getElementById('agent-strategies')).display`), 'none');
   await click('#mode-agent-toggle');
   await click('#mode-picker [data-choose-mode="agent:planned"]');
-  await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划')`);
+  await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划') && !document.getElementById('followup-send').disabled`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
   await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 验证通过 · 独立审阅通过'`);
   assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
@@ -610,6 +615,24 @@ try {
   assert.equal(await evaluate(`document.querySelector('.conversation-header #stop-button')`), null);
   await screenshot('composer-running');
   await screenshot('streaming-markdown');
+  // Navigation and next-message settings must remain available during execution.
+  const backgroundRun = await evaluate(`JSON.parse(sessionStorage.getItem('pforge.activeSession'))`);
+  assert.equal(await evaluate(`document.getElementById('project-list').inert`), false);
+  await click('#followup-mode-picker-button'); await click('#mode-picker [data-choose-mode="ask"]');
+  await waitFor(`document.getElementById('followup-mode-picker-button').classList.contains('has-pending-mode')`);
+  const runningMode = await (await fetch(origin + '/api/sessions/' + backgroundRun.id, { headers: { 'x-pforge-token': server.token } })).json();
+  assert.equal(runningMode.mode, 'agent');
+  await evaluate(`Array.from(document.querySelectorAll('[data-session]')).find(node => node.textContent.includes('历史会话验收')).click()`);
+  await waitFor(`document.getElementById('run-title').textContent.includes('历史会话验收') && !document.getElementById('followup-mode-picker-button').disabled`);
+  await screenshot('background-session-navigation');
+  const stillRunning = await (await fetch(origin + '/api/sessions/' + backgroundRun.id, { headers: { 'x-pforge-token': server.token } })).json();
+  assert.equal(stillRunning.running, true);
+  await evaluate(`Array.from(document.querySelectorAll('[data-session]')).find(node => node.dataset.session === ${JSON.stringify(backgroundRun.path)}).click()`);
+  await waitFor(`!document.getElementById('stop-button').classList.contains('hidden') && !document.getElementById('stop-button').disabled`);
+  assert.equal(await evaluate(`document.getElementById('followup-mode-select').value`), 'ask');
+  // Selecting the active mode cancels the pending choice without touching the run.
+  await click('#followup-mode-picker-button'); await click('#mode-picker [data-choose-mode="agent"]');
+  assert.equal(await evaluate(`document.getElementById('followup-mode-picker-button').classList.contains('has-pending-mode')`), false);
   await click('#stop-button');
   await waitFor(`!document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('resume-task-button').disabled`);
   assert.equal(await evaluate(`document.getElementById('run-status-label').textContent`), '任务已停止');
@@ -904,8 +927,8 @@ try {
   const ordinaryHistory = await (await fetch(origin + '/api/history', { headers: { 'x-pforge-token': server.token } })).json();
   assert.ok(snapshot.subagents.every((agent) => !JSON.stringify(ordinaryHistory).includes(agent.id)));
   assert.deepEqual(failures, []);
-  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['composer slash commands and keyboard selection', 'loaded Pi skills and prompt templates in command menu', 'context estimates and compaction beneath composer', 'manual compaction cancellation and unknown post-compaction usage', '390px command and context popovers', 'no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'seven settings tabs including memory and Pi compaction controls', 'skill content preview, Pi-native toggle persistence, local directory import/removal', 'active session skill command reload without a model request', 'centered composer labels and SVG chevrons', '390px skills settings layout', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'composer stop and continuation with real Pi cancellation', 'interrupted state survives page refresh without replay', 'continuation returns to send on completion', 'right-side Git review outside the chat', 'project file preview and controlled terminal', 'diff scroll and selection survive refresh', 'review changes to a modal drawer at narrow widths', '390px review drawer and keyboard focus', 'project collapse', 'history restore', 'history rename pin archive trash restore without model requests', 'Markdown session export from history menu', 'keyboard and pointer session menus within viewport', 'native Pi user-edit and answer-continuation forks', 'fork source navigation and per-session draft isolation', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
-  console.log('Web browser smoke checks passed: slash commands, context usage, manual compaction and cancellation, memory layers and Pi compaction controls, MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, right-side Git review with project file preview and controlled terminal, independent scrolling and retained selection, narrow-screen review drawer and keyboard focus, history menus, recoverable trash, per-message Pi forks, isolated drafts and desktop/mobile layout. Screenshots: ' + output);
+  await writeFile(join(output, 'result.json'), JSON.stringify({ passed: true, checks: ['composer slash commands and keyboard selection', 'loaded Pi skills and prompt templates in command menu', 'context estimates and compaction beneath composer', 'manual compaction cancellation and unknown post-compaction usage', '390px command and context popovers', 'no manual link input', 'automatic tab recovery after browser bootstrap', 'HttpOnly cookie bootstrap', 'plain URL without stored token', 'eight settings tabs including network tools and memory and Pi compaction controls', 'skill content preview, Pi-native toggle persistence, local directory import/removal', 'active session skill command reload without a model request', 'centered composer labels and SVG chevrons', '390px skills settings layout', 'MCP configure/test/edit/disable/project override', 'MCP per-tool exposure persisted', 'MCP OAuth authorization link with blocked popups, PKCE callback, logout and cancellation', 'unsaved MCP editor survives OAuth completion', 'MCP live session connections and idle reconnection', 'MCP credentials not echoed or stored in browser', '390px MCP editor layout', 'add third-party service from empty configuration', 'searchable model dropdown with batch checkbox selection', 'visible provider reasoning capability and supported efforts', 'actual Pi inference test before saving', 'combined composer model and reasoning menu', 'unsupported model explanation', 'only supported reasoning efforts offered', 'high and low effort reach actual Pi upstream requests', 'session effort restored after page refresh', 'no redundant default-model controls in settings', 'no API key in browser storage or editor response', 'Agent Plan Ask mode selectors', 'Plan response without executing project verification', 'mode restored after page refresh', 'folder picker', 'real Pi prompt with local mock model', 'Agent verification output', 'Markdown diff rendering', 'composer stop and continuation with real Pi cancellation', 'interrupted state survives page refresh without replay', 'continuation returns to send on completion', 'right-side Git review outside the chat', 'project file preview and controlled terminal', 'diff scroll and selection survive refresh', 'review changes to a modal drawer at narrow widths', '390px review drawer and keyboard focus', 'project collapse', 'history restore', 'history rename pin archive trash restore without model requests', 'Markdown session export from history menu', 'keyboard and pointer session menus within viewport', 'native Pi user-edit and answer-continuation forks', 'fork source navigation and per-session draft isolation', 'restart restores session and draft without prompt replay', '390px model and effort menu stays within viewport', '390px provider editor and model multiselect layout', 'no uncaught browser errors'], screenshots }, null, 2));
+  console.log('Web browser smoke checks passed: background session navigation, per-chat pending modes without permission changes, slash commands, context usage, manual compaction and cancellation, memory layers and Pi compaction controls, MCP management, per-tool settings, OAuth login/logout/cancel and draft preservation, live session connections/reconnect, model/effort menu, provider capabilities, Agent/Plan/Ask, planned-task review, right-side Git review with project file preview and controlled terminal, independent scrolling and retained selection, narrow-screen review drawer and keyboard focus, history menus, recoverable trash, per-message Pi forks, isolated drafts and desktop/mobile layout. Screenshots: ' + output);
 } catch (error) {
   try { await captureFailure?.(error); } catch { /* Preserve the original assertion failure. */ }
   throw error;

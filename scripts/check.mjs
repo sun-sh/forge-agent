@@ -9,7 +9,7 @@ const vitest = join(process.cwd(), "node_modules", "vitest", "vitest.mjs");
 const checks = [
   ["typecheck", [node, tsc, "-p", "tsconfig.json", "--noEmit"]],
   ["build", [node, join(process.cwd(), "scripts", "build.mjs")]],
-  ["tests", [node, vitest, "run"]],
+  ["tests", [node, vitest, "run", "--reporter=dot"]],
   ["version", [node, join(process.cwd(), "dist", "pi-cli.js"), "--version"]],
   ["help", [node, join(process.cwd(), "dist", "pi-cli.js"), "--help"]]
 ];

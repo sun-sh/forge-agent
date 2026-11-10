@@ -64,7 +64,7 @@ export function sessionOutcome(data) {
       const reviewed = data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
       const reviewLabel = data.task.reviewer?.context === 'independent' ? '独立审阅通过' : '模型审阅通过';
       if (data.task.reviewFollowup || data.task.review && (data.task.review.verdict !== 'ready' || data.task.review.issues?.length || !acceptanceMet)) return { label: '审阅发现待处理问题 · 需要检查', kind: 'failed' };
-      if (unconfigured) return { label: '实现完成 · 未配置自动验证' + (reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };
+      if (unconfigured) return { label: '已完成 · 未配置自动验证' + (reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };
       if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || data.task.reviewRequired !== false && !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
       if (data.task.workflow === 'planned' && data.task.reviewRequired === false) return { label: '执行结束 · ' + verificationLabel(verification) + ' · 评测：未启用审阅', kind: 'done' };
       return { label: (data.task.kind === 'verify' ? '验证结束' : '执行结束') + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };

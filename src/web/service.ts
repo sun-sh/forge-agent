@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
+import { replaceMetadataFile } from '../task/persistence.js';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
@@ -11,13 +12,17 @@ export type ServiceRecord = z.infer<typeof schema>;
 const recordPath = (home: string) => join(home, 'web', 'service.json');
 export async function serviceStatus(home: string) {
   let record: ServiceRecord;
-  try { record = schema.parse(JSON.parse(await readFile(recordPath(home), 'utf8'))); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { running: false as const };
-    // Windows can finish unlinking the service record while readFile is still
-    // resolving. A disappearing record is a stopped service, not corruption.
-    try { await lstat(recordPath(home)); } catch (missing) { if ((missing as NodeJS.ErrnoException).code === 'ENOENT') return { running: false as const }; }
-    throw new Error('后台服务记录不可读，请检查 web/service.json');
+  for (let attempt = 0; ; attempt++) {
+    try { record = schema.parse(JSON.parse(await readFile(recordPath(home), 'utf8'))); break; }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return { running: false as const };
+      // Retry only OS sharing errors. Malformed records never become a live
+      // service, and a stale PID never authorizes terminating another process.
+      if (['EPERM', 'EACCES', 'EBUSY'].includes(code ?? '') && attempt < 5) { await delay(20 * 2 ** attempt); continue; }
+      try { await lstat(recordPath(home)); } catch (missing) { if ((missing as NodeJS.ErrnoException).code === 'ENOENT') return { running: false as const }; }
+      throw new Error('后台服务记录不可读，请检查 web/service.json', { cause: error });
+    }
   }
   const url = new URL(record.origin);
   if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('后台服务地址无效');
@@ -31,7 +36,7 @@ export async function saveService(home: string, origin: string, instance: string
   await mkdir(join(home, 'web'), { recursive: true });
   const record: ServiceRecord = { version: 1, instance, pid: process.pid, origin: new URL(origin).origin, startedAt: new Date().toISOString() };
   const temporary = recordPath(home) + '.' + randomUUID() + '.tmp';
-  await writeFile(temporary, JSON.stringify(record) + '\n', { mode: 0o600 }); await rename(temporary, recordPath(home));
+  await writeFile(temporary, JSON.stringify(record) + '\n', { mode: 0o600 }); await replaceMetadataFile(temporary, recordPath(home));
 }
 export async function clearService(home: string, instance: string) {
   try { const record = schema.parse(JSON.parse(await readFile(recordPath(home), 'utf8'))); if (record.instance === instance) await unlink(recordPath(home)); }

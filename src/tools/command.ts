@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolDefinition, ToolExecutionContext, ToolExecutionResult } from "../protocol.js";
@@ -63,7 +63,13 @@ export interface ExecuteCommandOptions extends CommandInput {
 
 function killTree(child: ReturnType<typeof spawn>): void {
   if (process.platform === "win32" && child.pid) {
-    spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+    // Do not freeze the host event loop while Windows walks a process tree.
+    // Network updates, cancellation and test timeouts must remain responsive.
+    const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+    const fallback = () => { try { child.kill(); } catch { /* already gone */ } };
+    const guard = setTimeout(() => { killer.kill(); fallback(); }, 5000); guard.unref();
+    killer.once("error", () => { clearTimeout(guard); fallback(); });
+    killer.once("close", (code) => { clearTimeout(guard); if (code !== 0) fallback(); });
     return;
   }
   if (child.pid) {
