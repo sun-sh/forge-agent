@@ -217,8 +217,8 @@ async function runSmoke() {
       prompt: 'Integration fixture only: create forge-smoke.txt containing the fixture marker. Do not modify source code or tests. Do not claim the benchmark issue was repaired.',
       model: 'swebench-fixture/fixture', thinking: 'off', workflow: 'direct', visibleCommand: null,
       limits: { maxDurationMs: 120000, maxModelTurns: 8, maxToolCalls: 12, maxTotalTokens: 0, maxOutputTokens: 4000, maxCostUsd: 1 },
-      package: packed.path, packageHash: packed.sha256, agentScript, agentHash: sha256(await readFile(agentScript)), nodeImageId: node.imageId,
-      imageId: validated.imageId, configHome, fixtureModelHostGateway: true, output: executionRoot }, join(executionRoot, 'controller'));
+      package: packed.path, packageHash: packed.sha256, agentScript, agentHash: sha256(await readFile(agentScript)), nodeImageId: node.imageId, nodeImageRef: node.imageRef,
+      imageId: validated.imageId, imageRef: record.image, configHome, fixtureModelHostGateway: true, output: executionRoot }, join(executionRoot, 'controller'));
     summary.agent = agent; summary.scriptedRequests = fixture.calls();
     const prediction = await readFile(join(executionRoot, 'prediction.patch'));
     if (sha256(prediction) !== agent.patchHash) throw new Error('Scripted prediction fingerprint mismatch');
