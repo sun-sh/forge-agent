@@ -10,6 +10,8 @@ Import/prepare and JavaScript/Python fixture checks run on the current Windows h
 
 The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.
 
+The [latest real-model ablation](evaluations/deepseek-current-ablation-2026-11-11.md) reran the five miniature tasks on the current revision with DeepSeek V4.1 Flash: `direct`, `planned` and `planned-no-review` each passed 15/15, with zero false completions and zero infrastructure failures. The median execution times were 31.2, 75.8 and 46.8 seconds respectively. Planning and review produced no quality lift on this easy suite, while adding token and latency overhead; the result supports adaptive execution as the default and does not establish a large-repository or SWE-bench score.
+
 The [five-task, three-workflow report](evaluations/five-task-ablation-2026-11-10.md) retains 45 real DeepSeek V4.1 Flash executions: three repetitions for each of five miniature repository tasks in each arm. Direct, planned and planned-no-review all passed 15/15 with zero observed false completions. Median execution times were 36.6, 79.3 and 54.2 seconds respectively; no quality gain was demonstrated on these easy tasks. Each protocol records its own code/suite identity. These results do not replace complex upstream issue or hours-long recovery/compaction evaluation, and earlier failures remain below.
 
 ## Public web and empty-verification recovery — 2026-11-10

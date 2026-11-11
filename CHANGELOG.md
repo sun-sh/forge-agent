@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Record a fresh 45-run DeepSeek V4.1 Flash ablation on the current revision. Direct, planned and evaluator-only planned-no-review each passed 15/15 on the five-task miniature suite with no false completions or infrastructure failures; planning and review added measurable latency and token overhead without a quality lift in this sample. Publish the protocol, code/harness fingerprints and sanitized aggregate while keeping cost unknown when catalog pricing is unavailable.
+
 - Clarify Windows-hosted evaluation through WSL2/Linux Docker, separate distribution/image storage, and budget-aware Codespaces pilot limits; require checking firmware virtualization and actual Docker API access.
 
 - Add a source-only SWE-bench Lite controller with a fixed 20-task cohort, reproducible dataset export, pinned official harness, separate agent/grading containers, validation before model calls and immutable resume identities. Keep official resolution, Forge completion, test integrity and infrastructure failures separate. Document the evaluation-machine setup; current evidence covers protocol/fixture checks, not Docker integration or SWE-bench model scores.

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-11",
+  "protocol": "clean-five-miniature-repository-tasks-three-arms-v2",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "thinking": "medium",
+  "repeat": 3,
+  "totalRuns": 45,
+  "scope": "Five hand-authored miniature repository tasks, not an upstream issue benchmark or competitor comparison.",
+  "suiteVersion": "forge-eval-small-repo-v6",
+  "suiteFingerprint": "038cbefa1a6e76c2",
+  "harnessFingerprint": "c2bbf58ad5a52c6fe8aa034f192db065b01f382aa3b22b03caf2b131f9115e56",
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "arch": "x64",
+    "piVersion": "1.4.0",
+    "gitRevision": "96e586a8cf5cfb428c745dc7bded4e0dc37972ec"
+  },
+  "limits": {
+    "maxDurationMs": 600000,
+    "maxModelTurns": 80,
+    "maxToolCalls": 160,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 40000,
+    "maxCostUsd": 30
+  },
+  "completionGates": [
+    "held-out external assertions",
+    "current host verification",
+    "protected-file integrity",
+    "completed host task state"
+  ],
+  "results": {
+    "direct": {
+      "runs": 15,
+      "passed": 15,
+      "falseCompletions": 0,
+      "infrastructureFailures": 0,
+      "p50ExecutionMs": 31201,
+      "p95ExecutionMs": 63084,
+      "totalTokens": 620603,
+      "outputTokens": 23318,
+      "modelRequests": 100,
+      "toolCalls": 120,
+      "reviewCalls": 0,
+      "reviewRepairs": 0,
+      "reviewFormatRetries": 0
+    },
+    "planned": {
+      "runs": 15,
+      "passed": 15,
+      "falseCompletions": 0,
+      "infrastructureFailures": 0,
+      "p50ExecutionMs": 75811,
+      "p95ExecutionMs": 129707,
+      "totalTokens": 1392879,
+      "outputTokens": 84273,
+      "modelRequests": 184,
+      "toolCalls": 252,
+      "reviewCalls": 15,
+      "reviewRepairs": 0,
+      "reviewFormatRetries": 0
+    },
+    "planned-no-review": {
+      "runs": 15,
+      "passed": 15,
+      "falseCompletions": 0,
+      "infrastructureFailures": 0,
+      "p50ExecutionMs": 46756,
+      "p95ExecutionMs": 81932,
+      "totalTokens": 1087091,
+      "outputTokens": 52233,
+      "modelRequests": 136,
+      "toolCalls": 170,
+      "reviewCalls": 0,
+      "reviewRepairs": 0,
+      "reviewFormatRetries": 0
+    }
+  },
+  "pricingKnown": false,
+  "conclusion": "All three arms passed every task in this easy miniature suite. No coding-quality or false-completion improvement was observed from planning or review; direct was fastest and used the fewest tokens. This does not establish behavior on large repositories or difficult issue-resolution benchmarks."
+}
