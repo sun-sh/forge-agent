@@ -223,8 +223,9 @@ def agent_run(request, client):
     try:
         container.start()
         check = container.exec_run(['git', 'rev-parse', 'HEAD'], workdir='/testbed')
-        if check.exit_code or check.output.decode().strip() != request['baseCommit']:
-            raise RuntimeError('Task image checkout does not match base_commit')
+        expected_head = request.get('environmentSetupCommit') or request['baseCommit']
+        if check.exit_code or check.output.decode().strip() != expected_head:
+            raise RuntimeError('Task image checkout does not match environment_setup_commit')
         clean = container.exec_run(['git', 'diff', '--exit-code', 'HEAD'], workdir='/testbed')
         if clean.exit_code:
             raise RuntimeError('Task image has pre-existing tracked modifications')
