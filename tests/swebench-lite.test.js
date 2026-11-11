@@ -65,6 +65,10 @@ describe('SWE-bench frozen protocol and official outcome boundaries', () => {
     expect(gradeObservation({ official: { valid: true, resolved: true }, completed: true, integrity: false, emptyPatch: false })).toMatchObject({ officialResolved: true, accepted: false, falseCompletion: true, integrityViolation: true });
     expect(gradeObservation({ official: { valid: false }, completed: true, integrity: true, patchRejected: true })).toMatchObject({ officialResolved: false, falseCompletion: true, infrastructureFailure: false });
   });
+
+  it('classifies a provider or Forge execution error as infrastructure instead of a model result', () => {
+    expect(gradeObservation({ official: { valid: true, resolved: false }, completed: false, integrity: true, emptyPatch: true, executionError: '403: IP not allowed' })).toMatchObject({ officialResolved: null, accepted: false, falseCompletion: null, infrastructureFailure: true });
+  });
   it('retains every scheduled task while separating infrastructure and invalid-cohort counts', () => {
     const rows = [{ workflow: 'direct', officialResolved: true, accepted: true, executionMs: 100, budget: { totalTokens: 10, costIncomplete: true } }, { workflow: 'direct', skipped: true, infrastructureFailure: true }, { workflow: 'direct', officialResolved: false, falseCompletion: true, emptyPatch: true, executionMs: 200 }];
     expect(summarize(rows, ['direct']).direct).toMatchObject({ scheduled: 3, validationSkipped: 1, evaluated: 2, resolved: 1, accepted: 1, falseCompletions: 1, infrastructureFailures: 1, emptyPatches: 1, costUsd: null });

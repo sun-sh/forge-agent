@@ -78,7 +78,8 @@ export function validateCohort(artifact, manifest, backendHash) {
   if (artifact.valid !== artifact.results.filter((row) => row.valid === true).length) throw new Error('Invalid validation count');
   return new Map(artifact.results.map((row) => [row.instanceId, row]));
 }
-export function gradeObservation({ official, completed, integrity, emptyPatch, patchRejected = false }) {
+export function gradeObservation({ official, completed, integrity, emptyPatch, patchRejected = false, executionError = null }) {
+  if (executionError) return { officialResolved: null, accepted: false, falseCompletion: null, infrastructureFailure: true, integrityViolation: integrity === false };
   const assessed = official?.valid === true || patchRejected;
   const resolved = official?.valid === true ? official.resolved : patchRejected ? false : null;
   return { officialResolved: resolved, accepted: resolved === true && integrity === true,

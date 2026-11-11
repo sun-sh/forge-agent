@@ -169,6 +169,12 @@ async function runEvaluation() {
           package: packed.path, packageHash: packed.sha256, agentScript, agentHash, nodeImageId: node.imageId, nodeImageRef: node.imageRef, imageId: previous.imageId, imageRef: record.image, configHome: credentialHome, output: executionRoot }, join(executionRoot, 'controller'));
         Object.assign(result, agent);
         if (!report.pricingKnown && result.budget) result.budget.costIncomplete = true;
+        if (agent.error) {
+          Object.assign(result, { infrastructureFailure: true, officialResolved: null, accepted: false, falseCompletion: null, reason: agent.error });
+          report.results.push(result); await save(join(executionRoot, 'execution.json'), result); await persist();
+          console.log('INFRA ' + runKey + ' · ' + agent.error);
+          continue;
+        }
         const bytes = await readFile(join(executionRoot, 'prediction.patch'));
         if (sha256(bytes) !== agent.patchHash) throw new Error('Collected prediction fingerprint mismatch');
         await save(join(executionRoot, 'prediction.json'), { instance_id: key, model_name_or_path: 'forge-' + entry.workflow, model_patch: bytes.toString('utf8') });

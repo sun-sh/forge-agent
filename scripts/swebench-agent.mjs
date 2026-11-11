@@ -46,6 +46,9 @@ try {
     snapshot = await api('sessions/' + session.id);
     if (Date.now() > deadline) { await api('sessions/' + session.id + '/abort', {}); throw new Error('Fixed execution deadline exceeded'); }
   } while (snapshot.running);
+  if (snapshot?.task?.status === 'failed' || snapshot?.outcome === 'failed') {
+    failure ||= snapshot?.task?.error || snapshot?.error || 'Forge execution failed before delivery';
+  }
 } catch (error) { failure = error.message; }
 finally { await gateway?.close(); }
 const protection = compareProtectedPaths(before, await captureProtectedPaths(project, protectedPaths));

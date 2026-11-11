@@ -6,6 +6,8 @@ The [portable SWE-bench protocol](evaluations/swebench-lite-2026-11-10.md) and [
 
 Import/prepare and JavaScript/Python fixture checks run on the current Windows host. The repository also provides a manual GitHub Actions workflow for a small real-model Linux/Docker run; it requires explicitly configured `FORGE_BENCHMARK_API_KEY` and `FORGE_BENCHMARK_BASE_URL` secrets, validates baseline/gold first, and uploads official resolution beside Forge completion and infrastructure status. The existing GitHub smoke remains a no-key plumbing check. The prepared cohort is not a benchmark result until the real workflow is dispatched and its artifact is reviewed. The guide includes immutable image/package identity, required validation, and resuming assessed successes and failures under identical conditions.
 
+The [first GitHub real-model attempt](evaluations/swebench-real-github-2026-11-11.md) validated all three baseline/reference pairs but was blocked by the configured Provider's `403: Your IP address is not allowed` response before any model token or tool call. It is retained as an infrastructure failure, not a 0/3 model result. The evaluator now propagates that failure and excludes the empty patch from official model scoring.
+
 ## Conversation qualification and five-task repetition — 2026-11-10
 
 The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.
