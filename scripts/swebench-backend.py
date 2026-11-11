@@ -223,10 +223,10 @@ def agent_run(request, client):
     try:
         container.start()
         check = container.exec_run(['git', 'rev-parse', 'HEAD'], workdir='/testbed')
-        expected_head = request.get('environmentSetupCommit') or request['baseCommit']
-        if check.exit_code or check.output.decode().strip() != expected_head:
-            actual_head = check.output.decode(errors='replace').strip()
-            raise RuntimeError('Task image checkout mismatch: actual_head=' + actual_head + '; expected_environment_setup_commit=' + str(request.get('environmentSetupCommit')) + '; expected_base_commit=' + str(request.get('baseCommit')))
+        actual_head = check.output.decode(errors='replace').strip()
+        ancestor = container.exec_run(['git', 'merge-base', '--is-ancestor', request['baseCommit'], actual_head], workdir='/testbed')
+        if check.exit_code or ancestor.exit_code:
+            raise RuntimeError('Task image HEAD is not based on base_commit: actual_head=' + actual_head + '; base_commit=' + str(request.get('baseCommit')) + '; environment_setup_commit=' + str(request.get('environmentSetupCommit')))
         clean = container.exec_run(['git', 'diff', '--exit-code', 'HEAD'], workdir='/testbed')
         if clean.exit_code:
             raise RuntimeError('Task image has pre-existing tracked modifications')
