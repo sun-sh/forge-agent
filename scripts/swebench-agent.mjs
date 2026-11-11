@@ -12,7 +12,8 @@ const git = (args, env = {}) => execute('git', ['--no-pager', '-c', 'core.hooksP
 const testPath = (path) => /(^|\/)(?:tests?|testing)(\/|$)|(^|\/)test_[^/]+\.py$|(^|\/)[^/]+_test\.py$|(^|\/)conftest\.py$/.test(path);
 const internal = ['forge-agent.json', 'pforge.json', 'pforge.yaml', 'pforge.yml', 'forge-agent.yaml', 'forge-agent.yml'];
 const tracked = (await git(['ls-files', '-z'])).stdout.split('\0').filter(Boolean);
-if ((await git(['rev-parse', 'HEAD'])).stdout.trim() !== input.baseCommit) throw new Error('Wrong base commit');
+const expectedHead = input.environmentSetupCommit || input.baseCommit;
+if ((await git(['rev-parse', 'HEAD'])).stdout.trim() !== expectedHead) throw new Error('Task image checkout does not match environment_setup_commit');
 // Reduce directories to avoid thousands of redundant literal protection entries.
 const roots = [...new Set(tracked.filter(testPath).map((path) => {
   const parts = path.split('/'), index = parts.findIndex((part) => /^(tests?|testing)$/.test(part));
@@ -20,7 +21,7 @@ const roots = [...new Set(tracked.filter(testPath).map((path) => {
 }))].sort();
 const protectedPaths = [...roots.filter((path, index) => !roots.some((parent, prior) => prior !== index && path.startsWith(parent + '/'))), ...internal];
 if (protectedPaths.length > 200) throw new Error('Test protection exceeds host bounds; use a reviewed cohort adaptation');
-const syntax = `import py_compile,subprocess,os\npaths=subprocess.check_output(['git','diff','--name-only','-z',${JSON.stringify(input.baseCommit)}]).decode().split('\\0')+subprocess.check_output(['git','ls-files','--others','--exclude-standard','-z']).decode().split('\\0')\nfor p in sorted(set(paths)):\n if p.endswith('.py') and os.path.isfile(p): py_compile.compile(p,doraise=True)\nprint('Changed Python syntax checked; hidden acceptance remains external.')\n`;
+const syntax = `import py_compile,subprocess,os\npaths=subprocess.check_output(['git','diff','--name-only','-z',${JSON.stringify(expectedHead)}]).decode().split('\\0')+subprocess.check_output(['git','ls-files','--others','--exclude-standard','-z']).decode().split('\\0')\nfor p in sorted(set(paths)):\n if p.endswith('.py') and os.path.isfile(p): py_compile.compile(p,doraise=True)\nprint('Changed Python syntax checked; hidden acceptance remains external.')\n`;
 await writeFile('/tmp/forge-visible.py', syntax);
 // Existing Forge-specific config in a benchmark repository is an invalid setup, not an override.
 for (const path of internal) try { await lstat(join(project, path)); throw new Error('Repository contains evaluator configuration: ' + path); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -51,12 +52,12 @@ const indexRoot = await mkdtemp('/tmp/forge-patch-index-');
 let prediction = '', changed = [], patchError;
 try {
   const env = { GIT_INDEX_FILE: join(indexRoot, 'index'), GIT_LITERAL_PATHSPECS: '1' };
-  await git(['read-tree', input.baseCommit], env);
+  await git(['read-tree', expectedHead], env);
   await git(['add', '-A', '--', '.'], env);
   // Internal config belongs to the harness, never to the submitted prediction.
-  await git(['reset', '-q', input.baseCommit, '--', ...internal], env);
-  changed = (await git(['diff', '--cached', '--name-only', '-z', input.baseCommit], env)).stdout.split('\0').filter(Boolean);
-  prediction = (await git(['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', input.baseCommit], env)).stdout;
+  await git(['reset', '-q', expectedHead, '--', ...internal], env);
+  changed = (await git(['diff', '--cached', '--name-only', '-z', expectedHead], env)).stdout.split('\0').filter(Boolean);
+  prediction = (await git(['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', expectedHead], env)).stdout;
   if (Buffer.byteLength(prediction) > 5_000_000) throw new Error('Prediction exceeds 5 MB');
 } catch (error) { patchError = error.message; }
 finally { await rm(indexRoot, { recursive: true, force: true }); }

@@ -164,7 +164,7 @@ async function runEvaluation() {
       console.log('START ' + runKey);
       try {
         const record = bundle.records.find((row) => row.instance_id === key);
-        const agent = await callBackend('agent', { executionId: 'forge-' + randomUUID(), instanceId: key, baseCommit: record.base_commit, prompt: record.problem_statement,
+        const agent = await callBackend('agent', { executionId: 'forge-' + randomUUID(), instanceId: key, baseCommit: record.base_commit, environmentSetupCommit: record.environment_setup_commit, prompt: record.problem_statement,
           model: report.model, thinking, workflow: entry.workflow, limits, visibleCommand: option('--verify-command', null),
           package: packed.path, packageHash: packed.sha256, agentScript, agentHash, nodeImageId: node.imageId, nodeImageRef: node.imageRef, imageId: previous.imageId, imageRef: record.image, configHome: credentialHome, output: executionRoot }, join(executionRoot, 'controller'));
         Object.assign(result, agent);
@@ -213,7 +213,7 @@ async function runSmoke() {
       baseUrl: 'http://host.docker.internal:' + fixture.port + '/v1', models: [{ id: 'fixture', contextWindow: 128000, maxTokens: 2000, reasoning: false }] } } });
     const executionRoot = join(output, 'execution'); await mkdir(executionRoot);
     const agentScript = join(repo, 'scripts/swebench-agent.mjs');
-    const agent = await callBackend('agent', { executionId: 'forge-smoke-' + randomUUID(), instanceId: record.instance_id, baseCommit: record.base_commit,
+    const agent = await callBackend('agent', { executionId: 'forge-smoke-' + randomUUID(), instanceId: record.instance_id, baseCommit: record.base_commit, environmentSetupCommit: record.environment_setup_commit,
       prompt: 'Integration fixture only: create forge-smoke.txt containing the fixture marker. Do not modify source code or tests. Do not claim the benchmark issue was repaired.',
       model: 'swebench-fixture/fixture', thinking: 'off', workflow: 'direct', visibleCommand: null,
       limits: { maxDurationMs: 120000, maxModelTurns: 8, maxToolCalls: 12, maxTotalTokens: 0, maxOutputTokens: 4000, maxCostUsd: 1 },
