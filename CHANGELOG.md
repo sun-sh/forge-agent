@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a manual GitHub Actions real-model SWE-bench Lite workflow. It validates a selected frozen three-task subset, runs one configurable Forge arm in isolated Docker containers, and publishes official resolution beside Forge completion, acceptance, false-completion and infrastructure fields. The workflow consumes only explicitly configured repository secrets and leaves the existing no-key smoke workflow as a plumbing test.
+
 - Record a fresh 45-run DeepSeek V4.1 Flash ablation on the current revision. Direct, planned and evaluator-only planned-no-review each passed 15/15 on the five-task miniature suite with no false completions or infrastructure failures; planning and review added measurable latency and token overhead without a quality lift in this sample. Publish the protocol, code/harness fingerprints and sanitized aggregate while keeping cost unknown when catalog pricing is unavailable.
 
 - Clarify Windows-hosted evaluation through WSL2/Linux Docker, separate distribution/image storage, and budget-aware Codespaces pilot limits; require checking firmware virtualization and actual Docker API access.

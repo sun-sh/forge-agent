@@ -1,0 +1,198 @@
+name: swebench-real
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_ids:
+        description: Three comma-separated instance IDs from the frozen Lite-20 cohort
+        required: true
+        default: scikit-learn__scikit-learn-13584,pallets__flask-4045,matplotlib__matplotlib-23563
+        type: string
+      provider_id:
+        description: Provider ID used inside the isolated benchmark config
+        required: true
+        default: benchmark
+        type: string
+      model_id:
+        description: Model ID inside the provider configuration
+        required: true
+        default: deepseek/deepseek-v4.1-flash
+        type: string
+      api:
+        description: Pi provider protocol
+        required: true
+        default: openai-completions
+        type: choice
+        options:
+          - openai-completions
+          - openai-responses
+          - anthropic-messages
+      workflow:
+        description: One real-model arm for the first benchmark run
+        required: true
+        default: direct
+        type: choice
+        options:
+          - direct
+          - planned
+          - planned-no-review
+      thinking:
+        description: Reasoning effort sent to Forge
+        required: true
+        default: medium
+        type: choice
+        options:
+          - off
+          - minimal
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+      repeat:
+        description: Repetitions per task and arm
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BENCHMARK_API_KEY: ${{ secrets.FORGE_BENCHMARK_API_KEY }}
+      BENCHMARK_BASE_URL: ${{ secrets.FORGE_BENCHMARK_BASE_URL }}
+      BENCHMARK_PROVIDER: ${{ inputs.provider_id }}
+      BENCHMARK_MODEL_ID: ${{ inputs.model_id }}
+      BENCHMARK_API: ${{ inputs.api }}
+      BENCHMARK_THINKING: ${{ inputs.thinking }}
+      BENCHMARK_WORKFLOW: ${{ inputs.workflow }}
+      BENCHMARK_REPEAT: ${{ inputs.repeat }}
+      BENCHMARK_INSTANCE_IDS: ${{ inputs.instance_ids }}
+
+    steps:
+      - name: Check out Forge
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Forge dependencies
+        run: npm ci
+
+      - name: Install pinned SWE-bench harness
+        run: |
+          python -m venv .venv-swebench
+          .venv-swebench/bin/python -m pip install --upgrade pip
+          .venv-swebench/bin/python -m pip install -r evals/swebench-lite/harness-requirements.txt
+
+      - name: Check benchmark credentials without printing them
+        run: |
+          test -n "$BENCHMARK_API_KEY" || { echo 'Missing FORGE_BENCHMARK_API_KEY repository secret'; exit 1; }
+          test -n "$BENCHMARK_BASE_URL" || { echo 'Missing FORGE_BENCHMARK_BASE_URL repository secret'; exit 1; }
+
+      - name: Download and verify frozen dataset export
+        run: .venv-swebench/bin/python scripts/download-swebench-lite.py --output .forge-agent/swebench-data
+
+      - name: Import the selected frozen tasks
+        run: |
+          node scripts/swebench-lite.mjs import \
+            --dataset .forge-agent/swebench-data/test.jsonl \
+            --cohort evals/swebench-lite/lite-20.json \
+            --instance "$BENCHMARK_INSTANCE_IDS" \
+            --output .forge-agent/swebench-real-bundle
+
+      - name: Prepare bundle
+        run: node scripts/swebench-lite.mjs prepare --bundle .forge-agent/swebench-real-bundle
+
+      - name: Validate baseline and gold reference
+        run: |
+          npm run eval:swebench:validate -- \
+            --python "$PWD/.venv-swebench/bin/python" \
+            --bundle .forge-agent/swebench-real-bundle \
+            --trust-suite \
+            --repeat 1 \
+            --timeout 1800 \
+            --output .forge-agent/swebench-real-validation
+
+      - name: Create isolated model configuration
+        run: |
+          mkdir -p .forge-agent/swebench-real-config
+          node --input-type=module <<'NODE'
+          import { mkdir, writeFile } from 'node:fs/promises';
+          const required = ['BENCHMARK_API_KEY', 'BENCHMARK_BASE_URL', 'BENCHMARK_PROVIDER', 'BENCHMARK_MODEL_ID', 'BENCHMARK_API'];
+          for (const name of required) if (!process.env[name]) throw new Error(`Missing ${name}`);
+          if (!/^[A-Za-z0-9._-]+$/.test(process.env.BENCHMARK_PROVIDER)) throw new Error('Invalid provider ID');
+          const config = {
+            providers: {
+              [process.env.BENCHMARK_PROVIDER]: {
+                api: process.env.BENCHMARK_API,
+                baseUrl: process.env.BENCHMARK_BASE_URL,
+                apiKey: process.env.BENCHMARK_API_KEY,
+                models: [{ id: process.env.BENCHMARK_MODEL_ID, reasoning: true, contextWindow: 1000000, maxTokens: 32768 }]
+              }
+            }
+          };
+          await mkdir('.forge-agent/swebench-real-config', { recursive: true });
+          await writeFile('.forge-agent/swebench-real-config/models.json', JSON.stringify(config), { mode: 0o600 });
+          await writeFile('.forge-agent/swebench-real-config/auth.json', '{}\n', { mode: 0o600 });
+          NODE
+
+      - name: Run real-model SWE-bench evaluation
+        run: |
+          npm run eval:swebench -- evaluate \
+            --python "$PWD/.venv-swebench/bin/python" \
+            --bundle .forge-agent/swebench-real-bundle \
+            --validation .forge-agent/swebench-real-validation/cohort-validation.json \
+            --model "$BENCHMARK_PROVIDER/$BENCHMARK_MODEL_ID" \
+            --budget evals/swebench-lite/budget.json \
+            --workflow "$BENCHMARK_WORKFLOW" \
+            --thinking "$BENCHMARK_THINKING" \
+            --repeat "$BENCHMARK_REPEAT" \
+            --config-home .forge-agent/swebench-real-config \
+            --trust-suite \
+            --output .forge-agent/swebench-real-run
+
+      - name: Export resolution and Forge completion table
+        if: always()
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const report = JSON.parse(await readFile('.forge-agent/swebench-real-run/report.json', 'utf8'));
+          const rows = report.results ?? [];
+          const header = ['instance_id', 'workflow', 'run', 'official_resolved', 'forge_completed', 'accepted', 'false_completion', 'infrastructure_failure'];
+          const value = (entry) => entry === null || entry === undefined ? '' : String(entry);
+          const lines = [header.join('\t'), ...rows.map((row) => [row.instanceId, row.workflow, row.run, row.officialResolved, row.completed, row.accepted, row.falseCompletion, row.infrastructureFailure].map(value).join('\t'))];
+          await writeFile('.forge-agent/swebench-real-run/resolution-vs-forge.tsv', lines.join('\n') + '\n');
+          console.log(lines.join('\n'));
+          NODE
+
+      - name: Remove temporary model configuration
+        if: always()
+        run: rm -rf .forge-agent/swebench-real-config
+
+      - name: Upload real-model evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swebench-real-evidence-${{ github.run_id }}
+          path: |
+            .forge-agent/swebench-real-run
+            .forge-agent/swebench-real-validation
+          if-no-files-found: warn
+          retention-days: 14

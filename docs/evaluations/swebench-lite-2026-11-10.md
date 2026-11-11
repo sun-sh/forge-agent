@@ -122,4 +122,6 @@ npm run eval:swebench -- \
 
 当前 Windows 本机已经复现 parquet → LF JSONL → 固定 20 题名单/指纹；前置检查明确记录缺少 Linux、Docker 和 harness，且模型调用数为 0。JavaScript 和 Python 回归使用合成记录/官方 API 夹具，覆盖数据篡改、版本绑定、解析失败、错误完成和恢复策略；这些不是 Docker 集成或模型能力结果。
 
-下一步是在另一台评测机安装依赖后，先验收一个 baseline/gold/container 路径，再运行冻结的完整 20 题 validation，最后才开始 60 次模型执行。不要将“控制器已实现”写成“SWE-bench 已跑通”。
+仓库现在还提供手动的 `.github/workflows/swebench-real.yml`。它在 GitHub 的 Linux Docker runner 上默认选择冻结 Lite-20 中的 3 题和 1 条真实模型执行臂，先跑 baseline/gold validation，再收集官方 `resolved`、Forge `completed`、`accepted`、`falseCompletion` 和基础设施状态。现有 `swebench-smoke` 仍然是无 Key 的合成 Agent plumbing 检查，不能当作模型成绩。
+
+运行真实工作流前，在仓库 Secrets 中配置 `FORGE_BENCHMARK_API_KEY` 和受信任的 `FORGE_BENCHMARK_BASE_URL`。工作流只把这两个值写入短生命周期的隔离 `models.json`，不上传配置文件或本机 Forge 凭据；真实评测结果上传为 artifact。先运行 `repeat=1` 的 `direct` 或 `planned`，审阅 resolution/completion 表后再扩大到其他执行臂或重复次数。
