@@ -2,7 +2,7 @@
 
 ## SWE-bench Lite adapter
 
-The [portable SWE-bench protocol](evaluations/swebench-lite-2026-11-10.md) fixes the official 300-instance snapshot, a seeded 20-task/12-repository cohort, harness commit, and explicit budgets. A dedicated controller runs Forge in task-image containers, then submits complete patches to fresh containers through official execution/parsing/grading. Gold patches, hidden tests and grading records stay outside model workspaces. Official resolution is separate from Forge completion and test-preservation acceptance; missing/invalid test evidence remains infrastructure data.
+The [portable SWE-bench protocol](evaluations/swebench-lite-2026-11-10.md) and [GitHub Docker smoke](evaluations/swebench-lite-github-smoke-2026-11-11.md) fixes the official 300-instance snapshot, a seeded 20-task/12-repository cohort, harness commit, and explicit budgets. A dedicated controller runs Forge in task-image containers, then submits complete patches to fresh containers through official execution/parsing/grading. Gold patches, hidden tests and grading records stay outside model workspaces. Official resolution is separate from Forge completion and test-preservation acceptance; missing/invalid test evidence remains infrastructure data.
 
 Import/prepare and JavaScript/Python fixture checks run on the current Windows host. Docker execution, baseline/gold and real-model scores remain unmeasured until a Linux/Docker evaluation machine is configured. The prepared cohort is not a benchmark result. The guide includes immutable image/package identity, required validation, and resuming assessed successes and failures under identical conditions.
 
