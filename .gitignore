@@ -12,3 +12,8 @@ coverage/
 Thumbs.db
 
 .vscode/
+
+# Optional Python benchmark controller bytecode
+__pycache__/
+
+.venv-swebench/

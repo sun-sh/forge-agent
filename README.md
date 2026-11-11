@@ -82,7 +82,7 @@ Web 对单条模型回复触及最大输出（含只有思考、没有正文或�
 
 **Pi 负责**模型/工具循环、认证、内置工具、会话树、压缩、MCP 协议、Skills、扩展及资源发现。**Forge 负责**任务状态与交接、验证及保护门禁、预算/执行所有权、恢复、子任务生命周期和 Web 产品层；旧原型不属于活动构建。
 
-[Architecture Deep Dive](docs/architecture-deep-dive.md)解释设计、取舍与限制；[评测方法与真实失败记录](docs/evaluation.md)区分回归、模拟服务和真实模型结果。评测器支持固定仓库 baseline/reference 验证，以及 `direct / planned / planned-no-review` 三组消融。[联网与空验证真实回归](docs/evaluations/network-empty-verification-2026-11-10.md)记录特定故障链路；[五任务重复对照](docs/evaluations/five-task-ablation-2026-11-10.md)保留三条路径的逐次实测，[会话稳定性验收](docs/evaluations/conversation-stability-2026-11-10.md)覆盖导航与上下文引用；[工作流与审阅评测](docs/evaluations/focused-review-2026-11-10.md)分别记录自然任务的三组对照和正确/缺陷补丁的审阅漏检、误报与弃权；[旧故障注入诊断](docs/evaluations/review-challenge-2026-11-09.md)单独保留。关闭审阅仅限隔离评测，生产请求不能绕过门禁；当前样本仍不足以证明规划、审阅或记忆的通用收益。
+[Architecture Deep Dive](docs/architecture-deep-dive.md)解释设计、取舍与限制；[评测方法与真实失败记录](docs/evaluation.md)区分回归、模拟服务和真实模型结果。评测器支持固定仓库 baseline/reference 验证、[SWE-bench Lite 评测准备](docs/evaluations/swebench-lite-2026-11-10.md)（固定名单与官方 harness，真实运行需 Linux/Docker 评测机），以及 `direct / planned / planned-no-review` 三组消融。[联网与空验证真实回归](docs/evaluations/network-empty-verification-2026-11-10.md)记录特定故障链路；[五任务重复对照](docs/evaluations/five-task-ablation-2026-11-10.md)保留三条路径的逐次实测，[会话稳定性验收](docs/evaluations/conversation-stability-2026-11-10.md)覆盖导航与上下文引用；[工作流与审阅评测](docs/evaluations/focused-review-2026-11-10.md)分别记录自然任务的三组对照和正确/缺陷补丁的审阅漏检、误报与弃权；[旧故障注入诊断](docs/evaluations/review-challenge-2026-11-09.md)单独保留。关闭审阅仅限隔离评测，生产请求不能绕过门禁；当前样本仍不足以证明规划、审阅或记忆的通用收益。
 
 ```bash
 npm run check

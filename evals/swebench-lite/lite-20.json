@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "dataset": "SWE-bench/SWE-bench_Lite",
+  "datasetRevision": "b0dde1093fe417d83b7184254edf8199c1f0dff5",
+  "parquetSha256": "438e281d80587aa7be470896ce410557002fde02d2ceee3e099331d308f62dd3",
+  "exportSha256": "a7cab520e244f8fd23028324f2710a659870336eba87c7fd6713843636bb49ca",
+  "selection": {
+    "algorithm": "repository-round-robin-seeded-v1",
+    "seed": "forge-lite-20-v1"
+  },
+  "count": 20,
+  "instances": [
+    "scikit-learn__scikit-learn-13584",
+    "pallets__flask-4045",
+    "matplotlib__matplotlib-23563",
+    "astropy__astropy-6938",
+    "sympy__sympy-18189",
+    "pydata__xarray-4094",
+    "pytest-dev__pytest-8906",
+    "sphinx-doc__sphinx-8506",
+    "mwaskom__seaborn-3010",
+    "pylint-dev__pylint-7080",
+    "django__django-17087",
+    "psf__requests-2674",
+    "scikit-learn__scikit-learn-10297",
+    "pallets__flask-5063",
+    "matplotlib__matplotlib-23476",
+    "astropy__astropy-14995",
+    "sympy__sympy-20639",
+    "pydata__xarray-5131",
+    "pytest-dev__pytest-7168",
+    "sphinx-doc__sphinx-7686"
+  ],
+  "note": "Fixed before baseline validation or model execution; repository coverage sample, not a representative/full-Lite result.",
+  "exportProtocol": "jsonl-lf-pyarrow-26.0.1-v1"
+}

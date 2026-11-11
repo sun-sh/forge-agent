@@ -1,0 +1,3 @@
+# Official harness pinned by commit; install inside the Linux evaluation venv.
+swebench @ git+https://github.com/SWE-bench/SWE-bench.git@02e7a74ffd0b707aab73d203fe87bdc7c76afc8e
+pyarrow==26.0.1

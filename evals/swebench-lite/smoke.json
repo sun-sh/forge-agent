@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "dataset": "SWE-bench/SWE-bench_Lite",
+  "datasetRevision": "b0dde1093fe417d83b7184254edf8199c1f0dff5",
+  "exportSha256": "a7cab520e244f8fd23028324f2710a659870336eba87c7fd6713843636bb49ca",
+  "instances": ["scikit-learn__scikit-learn-13584"],
+  "note": "One-task GitHub Actions smoke; no model quality result."
+}

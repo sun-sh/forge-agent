@@ -1,0 +1,8 @@
+{
+  "maxDurationMs": 1800000,
+  "maxModelTurns": 160,
+  "maxToolCalls": 400,
+  "maxTotalTokens": 0,
+  "maxOutputTokens": 200000,
+  "maxCostUsd": 50
+}

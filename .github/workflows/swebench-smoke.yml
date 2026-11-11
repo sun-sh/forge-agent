@@ -1,0 +1,60 @@
+name: swebench-smoke
+on:
+  workflow_dispatch:
+    inputs:
+      instance_id:
+        description: One fixed SWE-bench Lite instance for the Docker/plumbing smoke
+        required: true
+        default: scikit-learn__scikit-learn-13584
+        type: string
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out Forge
+        uses: actions/checkout@v5
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install Forge dependencies
+        run: npm ci
+      - name: Install pinned SWE-bench harness
+        run: |
+          python -m venv .venv-swebench
+          .venv-swebench/bin/python -m pip install --upgrade pip
+          .venv-swebench/bin/python -m pip install -r evals/swebench-lite/harness-requirements.txt
+      - name: Download and verify frozen dataset export
+        run: .venv-swebench/bin/python scripts/download-swebench-lite.py --output .forge-agent/swebench-data
+      - name: Import one frozen task
+        run: |
+          node scripts/swebench-lite.mjs import \
+            --dataset .forge-agent/swebench-data/test.jsonl \
+            --cohort evals/swebench-lite/smoke.json \
+            --instance "${{ inputs.instance_id }}" \
+            --output .forge-agent/swebench-lite-smoke
+      - name: Prepare bundle
+        run: node scripts/swebench-lite.mjs prepare --bundle .forge-agent/swebench-lite-smoke
+      - name: Run official Docker and scripted-Agent smoke
+        run: |
+          npm run eval:swebench:smoke -- \
+            --python "$PWD/.venv-swebench/bin/python" \
+            --bundle .forge-agent/swebench-lite-smoke \
+            --trust-suite \
+            --output .forge-agent/swebench-smoke-run
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swebench-smoke-evidence-${{ github.run_id }}
+          path: .forge-agent/swebench-smoke-run
+          if-no-files-found: warn
+          retention-days: 7

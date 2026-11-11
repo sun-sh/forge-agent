@@ -1,0 +1,32 @@
+name: swebench-protocol
+on:
+  push:
+    paths:
+      - 'scripts/swebench-*'
+      - 'scripts/download-swebench-lite.py'
+      - 'tests/swebench*'
+      - 'evals/swebench-lite/**'
+      - '.github/workflows/swebench-protocol.yml'
+  pull_request:
+    paths:
+      - 'scripts/swebench-*'
+      - 'scripts/download-swebench-lite.py'
+      - 'tests/swebench*'
+      - 'evals/swebench-lite/**'
+      - '.github/workflows/swebench-protocol.yml'
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npx vitest run tests/swebench-lite.test.js
+      - run: python -m unittest discover -s tests -p swebench_backend_test.py -v
+      # No real model credentials, Docker runs or benchmark scores in this fixture job.

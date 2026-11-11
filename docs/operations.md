@@ -81,3 +81,9 @@ Integration test deadlines are separate from runtime limits: the dynamic MCP lif
 ### Updating a running Web service
 
 Check for active user tasks before restarting the service. Navigating away or closing an SSE subscription does not cancel the running server task; same-project execution ownership remains exclusive. After a safe service update, reload the existing page so the client and gateway use the same build. Provider configuration and Pi history remain in the selected Forge data home. The current conversation qualification and its retained failures are documented in [conversation stability](evaluations/conversation-stability-2026-11-10.md), separate from real-model quality results.
+
+### SWE-bench evaluation runtime
+
+Run the [dedicated SWE-bench controller](evaluations/swebench-lite-2026-11-10.md) on Linux x86_64 with Docker, Python and the pinned official harness. WSL alone is insufficient. `npm run eval:swebench:doctor` refuses mismatched environments before model calls. Frozen datasets and raw evidence stay under `.forge-agent/`; only the selected API-key/keyless Provider crosses into a worker, never the evaluator's gold/tests or other credentials. Each experiment needs a new output directory; `--resume-from` binds reused results to code/package/cohort/validation/model/budget identity and retains assessed failures. Docker integration still requires qualification on the evaluation machine.
+
+For local Windows evaluation, use WSL2 Ubuntu with the Docker Desktop WSL2 engine and distro integration; Windows remains the host. Verify firmware virtualization and the initial administrator/reboot steps before installation. Ubuntu storage and Docker image storage are separate locations. Codespaces is a fallback pilot environment: prepare artifacts first, respect the user's remaining core-hour/time budget, retain evidence and explicitly stop the codespace after the bounded pilot; ongoing terminal output can prevent idle shutdown.

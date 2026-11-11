@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Clarify Windows-hosted evaluation through WSL2/Linux Docker, separate distribution/image storage, and budget-aware Codespaces pilot limits; require checking firmware virtualization and actual Docker API access.
+
+- Add a source-only SWE-bench Lite controller with a fixed 20-task cohort, reproducible dataset export, pinned official harness, separate agent/grading containers, validation before model calls and immutable resume identities. Keep official resolution, Forge completion, test integrity and infrastructure failures separate. Document the evaluation-machine setup; current evidence covers protocol/fixture checks, not Docker integration or SWE-bench model scores.
+
 - Qualify the final conversation changes with the full Windows check, isolated Edge smoke, clean tgz installation and a seeded real-model reference task. Retain the initial integration timeout failures and document calibrated lifecycle waits. Publish all 45 clean coding runs across five miniature tasks, three workflows and three repetitions, with no demonstrated quality gain from extra planning/review on this sample.
 
 - Keep Web history navigation and new conversations available during background execution. Scope drafts, in-page attachments and pending model/effort/mode/workflow choices to each chat, reject late frames from old SSE subscriptions, and stage mode changes for the next message without changing active-run permissions. Preserve exclusive canonical-project execution ownership.
