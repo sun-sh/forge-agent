@@ -4,6 +4,8 @@
 
 - Separate structurally evidenced SWE-bench workflow failures from Provider/transport failures. Keep reviewer/parent budgets, unconfirmed gates, invalid review output and configured-check failures eligible for official patch grading. Add a keyless retained-patch regrading command/workflow that preserves the source report and model/package identity, fingerprints the new grader, and reports delivered acceptance plus resolved-but-not-completed without resampling models.
 
+- Qualify Web completion as configured-command evidence, with independent **model** review reported separately and adaptive requirements explicitly unreviewed. Derive delivery-card checks from current verification evidence instead of a retained `validation=verified` flag; stale evidence and protected-path problems cannot appear as successful delivery. Preserve runtime verdicts and benchmark identities; this UI correction does not claim a coding-quality gain.
+
 - Retain the first GitHub real-model SWE-bench attempt as an infrastructure failure after all three baseline/reference pairs passed but the Provider rejected GitHub runner IPs. Propagate Forge session errors into SWE-bench results, stop before grading empty patches on Provider/Forge execution errors, and classify those rows as unresolved infrastructure rather than model outcomes.
 
 - Add a manual GitHub Actions real-model SWE-bench Lite workflow. It validates a selected frozen three-task subset, runs one configurable Forge arm in isolated Docker containers, and publishes official resolution beside Forge completion, acceptance, false-completion and infrastructure fields. The workflow consumes only explicitly configured repository secrets and leaves the existing no-key smoke workflow as a plumbing test.

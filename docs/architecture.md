@@ -93,6 +93,8 @@ prose alone: configured verification must pass and the review response must be
 structured and issue-free. Each concrete blocking review repair returns to implementation,
 verification, and review, without resetting retries. Inspection and planning have host
 handoff contracts in system context, separate from the visible user message.
+The Web status says “configured checks passed” rather than implying issue resolution. It reports independent model review separately and explicitly marks adaptive requirements as unreviewed. Delivery cards derive their labels from current verification evidence; a saved `validation=verified` field cannot override stale evidence or protection problems. This is an evidence-presentation correction, not additional behavioral validation.
+
 Missing or stale evidence for configured checks produces `needs_attention`. With no checks configured, implementation may complete as explicitly unverified/unreviewed; a model-triggered empty check cannot leave a false empty report behind.
 
 `src/verification/evidence.ts` records bounded workspace content fingerprints and

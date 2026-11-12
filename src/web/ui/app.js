@@ -1321,9 +1321,9 @@ function renderDelivery(task) {
   const visible = Boolean(implementation && (artifacts.length || unconfigured || task.status === 'completed' && task.phase === 'complete'));
   card.classList.toggle('hidden', !visible);
   if (!visible) return;
-  $('delivery-title').textContent = task.status === 'running' ? '正在生成文件' : task.status === 'completed' && !task.error ? (unconfigured ? '交付已生成' : '实现已完成') : '本次文件 · 任务尚未完成';
+  $('delivery-title').textContent = task.status === 'running' ? '正在生成文件' : task.status === 'completed' && !task.error && sessionOutcome({ task }).kind === 'done' ? (unconfigured ? '交付已生成' : '修改已生成') : '本次文件 · 任务尚未完成';
   $('delivery-artifacts').innerHTML = artifacts.length ? artifacts.map((artifact) => '<button type="button" class="delivery-artifact" data-open-artifact="' + esc(artifact.path) + '" title="打开 ' + esc(artifact.path) + '">' + icon('file') + '<span><strong>' + esc(artifact.path) + '</strong><small>' + (artifact.operation === 'write' ? '写入文件' : '修改文件') + '</small></span><span class="delivery-artifact-open">打开</span></button>').join('') : '<p class="delivery-empty">本次没有捕获到文件路径。可打开右侧“文件”面板浏览项目。</p>';
-  $('delivery-validation').textContent = unconfigured ? '自动验证：未配置。下方文件来自本次工具操作，可打开查看；配置 verify 后可以重新检查。' : task.validation === 'verified' ? '自动验证：已通过。' : task.status === 'running' ? '正在等待执行完成。' : '自动验证：请查看任务状态与执行记录。';
+  $('delivery-validation').textContent = unconfigured ? '自动验证：未配置。下方文件来自本次工具操作，可打开查看；配置 verify 后可以重新检查。' : task.status === 'running' ? '正在等待执行完成。' : verificationLabel(task.verification) + '。检查范围由配置的命令决定，具体命令与输出见执行记录。';
   $('delivery-open-files').disabled = !state.project;
   $('delivery-recheck').classList.toggle('hidden', !unconfigured || !task.id);
   $('delivery-recheck').disabled = !unconfigured || !task.id || state.running || state.loadingSession || state.sending || Boolean(state.runControl);

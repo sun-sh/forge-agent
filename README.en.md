@@ -66,6 +66,8 @@ Create `forge-agent.json` in the target project root; YAML is also supported:
 
 Only `verify`, `verifyRetries` and `protect` are accepted; unknown fields fail. Commands require project trust. Exact failure output returns to the model and cannot produce a successful exit. `protect` accepts literal project-relative files/directories; pre-existing dirty content becomes the baseline, and changes or incomplete observations block delivery. See the [schema](forge-agent.schema.json) and [user guide](docs/usage.en.md).
 
+“Configured checks passed” only reports the configured commands on the current workspace; it does not certify issue resolution. Adaptive tasks explicitly mark requirements as not independently reviewed. Independent model review is reported separately and remains a model judgment. Delivery cards read current evidence instead of keeping a stale passed flag.
+
 Missing checks never imply verified success. A completed implementation without configured checks is shown as “completed · verification not configured,” with its written files listed. A model-initiated run_verification and the host check share the same skipped state; an empty report cannot leave the task waiting for verification. Planned implementation still requires current evidence when verification commands are configured; read-only Plan skips stay quiet.
 
 The Web host detects a single-response output-limit stop, including reasoning-only output with no text or tool calls. It requests at most two continuations through Pi settlement under the same task budget; repeated failure stops implementation with its actual cause. Continuing a legacy record returns to incomplete implementation instead of verifying an empty result.

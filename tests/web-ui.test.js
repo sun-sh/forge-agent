@@ -138,15 +138,36 @@ describe('safe agent output', () => {
   it('does not invent verification or review for completed adaptive tasks and distinguishes historical evidence', () => {
     const task = { kind: 'change', workflow: 'direct', status: 'completed' };
     expect(sessionOutcome({ task }).label).toContain('未执行自动验证');
-    expect(sessionOutcome({ task }).label).toContain('未进行模型审阅');
+    expect(sessionOutcome({ task }).label).toContain('需求未独立审阅');
     const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ passed: true, exitCode: 0 }] } };
-    expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('执行结束 · 验证通过 · 未进行模型审阅');
+    expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('执行结束 · 配置检查通过 · 需求未独立审阅');
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification } }).kind).toBe('failed');
     const review = { verdict: 'ready', issues: [], freshness: 'current', evidenceId: 'v1' };
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification, review } }).label).toContain('模型审阅通过');
     expect(sessionOutcome({ task: { ...task, verification: { ...verification, evidence: { freshness: 'stale' } }, review } })).toMatchObject({ kind: 'failed', label: expect.stringContaining('证据已过期') });
     expect(verificationLabel({ status: 'passed' })).toContain('当前版本未确认');
-    expect(verificationLabel({ ...verification, report: { passed: true, results: [{ passed: true, exitCode: 0, failure: 'timeout' }] } })).not.toBe('验证通过');
+    expect(verificationLabel({ ...verification, report: { passed: true, results: [{ passed: true, exitCode: 0, failure: 'timeout' }] } })).not.toBe('配置检查通过');
+  });
+  it('does not turn syntax checks or stale delivery flags into acceptance evidence', async () => {
+    const { window, app } = await client(), doc = window.document;
+    app.state.sessionId = 'syntax-only';
+    const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ command: 'python -m py_compile app.py', passed: true, exitCode: 0 }] } };
+    const task = { id: 'syntax', kind: 'change', workflow: 'direct', status: 'completed', phase: 'complete', validation: 'verified', repairs: 0, phases: [], artifacts: [{ path: 'app.py', operation: 'edit' }], verification };
+    app.applySnapshot({ id: 'syntax-only', outcome: 'completed', task, verification, messages: [] });
+    expect(doc.getElementById('run-status-label').textContent).toContain('需求未独立审阅');
+    expect(doc.getElementById('verification-summary').textContent).toContain('配置检查通过');
+    expect(doc.getElementById('verification-output').textContent).toContain('python -m py_compile app.py');
+    expect(doc.getElementById('delivery-validation').textContent).toContain('检查范围由配置的命令决定');
+    expect(doc.getElementById('delivery-title').textContent).toBe('修改已生成');
+    const stale = { ...verification, evidence: { ...verification.evidence, freshness: 'stale' } };
+    app.applySnapshot({ id: 'syntax-only', outcome: 'completed', task: { ...task, verification: stale }, verification: stale, messages: [] });
+    expect(doc.getElementById('delivery-validation').textContent).toContain('证据已过期');
+    expect(doc.getElementById('delivery-validation').textContent).not.toContain('检查通过');
+    expect(doc.getElementById('delivery-title').textContent).toContain('任务尚未完成');
+    for (const status of ['changed', 'unconfirmed']) {
+      const protectedCheck = { ...verification, protection: { status } };
+      expect(sessionOutcome({ task: { ...task, verification: protectedCheck } }).kind).toBe('failed');
+    }
   });
   it('shows written artifacts and removes continuation for an implementation with no verify commands', async () => {
     const { window, app } = await client(), find = (id) => window.document.getElementById(id);
