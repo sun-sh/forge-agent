@@ -12,6 +12,8 @@
 
 - Record the five-task Direct SWE-bench baseline and targeted Astropy post-fix rerun. Retain the pre-fix 6/12 resolved, 6/12 false-completion, 3/15 infrastructure result under its original code identity; the repaired Astropy task resolved 3/3.
 
+- Publish the final repaired Direct baseline: 15/15 officially assessed, 9/15 resolved, 6/15 false completions and 0 infrastructure failures on the five-task cohort. Keep it as the reference arm for later Planned/reviewer comparisons.
+
 - Record a fresh 45-run DeepSeek V4.1 Flash ablation on the current revision. Direct, planned and evaluator-only planned-no-review each passed 15/15 on the five-task miniature suite with no false completions or infrastructure failures; planning and review added measurable latency and token overhead without a quality lift in this sample. Publish the protocol, code/harness fingerprints and sanitized aggregate while keeping cost unknown when catalog pricing is unavailable.
 
 - Clarify Windows-hosted evaluation through WSL2/Linux Docker, separate distribution/image storage, and budget-aware Codespaces pilot limits; require checking firmware virtualization and actual Docker API access.

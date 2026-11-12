@@ -16,6 +16,8 @@ The [latest real-model ablation](evaluations/deepseek-current-ablation-2026-11-1
 
 The [five-task Direct SWE-bench baseline and Astropy repair](evaluations/swebench-direct-baseline-2026-11-12.md) is the first larger-repository pilot on the official workflow. Before the gitlink repair, 12/15 runs reached official grading: 6 resolved, 6 false completions and 3 Astropy infrastructure failures. A targeted Astropy rerun after the repair resolved 3/3 with no infrastructure failures. The full cohort must be rerun at the repaired code revision before treating the baseline as final.
 
+The [final repaired Direct baseline](evaluations/swebench-direct-final-2026-11-12.md) completes that rerun on the repaired revision: 15/15 runs reached official grading, 9 resolved, 6 were false completions, and infrastructure failures were 0. Scikit-learn, Astropy and SymPy resolved in all repetitions; Flask and Matplotlib produced the six false completions. This is the current Direct reference for a later Planned/reviewer comparison.
+
 The [five-task, three-workflow report](evaluations/five-task-ablation-2026-11-10.md) retains 45 real DeepSeek V4.1 Flash executions: three repetitions for each of five miniature repository tasks in each arm. Direct, planned and planned-no-review all passed 15/15 with zero observed false completions. Median execution times were 36.6, 79.3 and 54.2 seconds respectively; no quality gain was demonstrated on these easy tasks. Each protocol records its own code/suite identity. These results do not replace complex upstream issue or hours-long recovery/compaction evaluation, and earlier failures remain below.
 
 ## Public web and empty-verification recovery — 2026-11-10
