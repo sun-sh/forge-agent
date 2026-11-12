@@ -125,3 +125,5 @@ npm run eval:swebench -- \
 仓库现在还提供手动的 `.github/workflows/swebench-real.yml`。它在 GitHub 的 Linux Docker runner 上默认选择冻结 Lite-20 中的 3 题和 1 条真实模型执行臂，先跑 baseline/gold validation，再收集官方 `resolved`、Forge `completed`、`accepted`、`falseCompletion` 和基础设施状态。现有 `swebench-smoke` 仍然是无 Key 的合成 Agent plumbing 检查，不能当作模型成绩。
 
 运行真实工作流前，在仓库 Secrets 中配置 `FORGE_BENCHMARK_API_KEY` 和受信任的 `FORGE_BENCHMARK_BASE_URL`。工作流只把这两个值写入短生命周期的隔离 `models.json`，不上传配置文件或本机 Forge 凭据；真实评测结果上传为 artifact。先运行 `repeat=1` 的 `direct` 或 `planned`，审阅 resolution/completion 表后再扩大到其他执行臂或重复次数。
+
+工作流在创建 Docker 任务前会使用相同的隔离 Provider 配置发送一个最小的 `Reply with exactly OK.` 请求，验证 Base URL、Key、协议和模型 ID。这个 preflight 会产生一次真实模型请求；失败会立即停止，避免先消耗三题容器时间。当前官方 DeepSeek 地址支持的模型 ID 以服务端返回为准，例如 `deepseek-flash`；聚合网关的模型 ID 不能直接套用到官方地址。

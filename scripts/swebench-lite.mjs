@@ -42,7 +42,7 @@ async function callBackend(action, input, output, { allowNotReady = false } = {}
   return result;
 }
 async function recordCode(output) {
-  const sources = ['scripts/swebench-lite.mjs', 'scripts/swebench-protocol.mjs', 'scripts/swebench-backend.py', 'scripts/swebench-agent.mjs', 'scripts/evaluation-protocol.mjs', 'evals/swebench-lite/harness-requirements.txt', 'scripts/download-swebench-lite.py', 'scripts/swebench-smoke-model.mjs'];
+  const sources = ['scripts/swebench-lite.mjs', 'scripts/swebench-protocol.mjs', 'scripts/swebench-backend.py', 'scripts/swebench-agent.mjs', 'scripts/swebench-provider-preflight.mjs', 'scripts/evaluation-protocol.mjs', 'evals/swebench-lite/harness-requirements.txt', 'scripts/download-swebench-lite.py', 'scripts/swebench-smoke-model.mjs'];
   const hash = createHash('sha256'); await mkdir(join(output, 'harness'), { recursive: true });
   for (const path of sources) { const bytes = await readFile(join(repo, path)); hash.update(path).update(bytes); await writeFile(join(output, 'harness', path.replaceAll('/', '__')), bytes); }
   return hash.digest('hex');

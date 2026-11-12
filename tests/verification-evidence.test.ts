@@ -73,6 +73,15 @@ describe('versioned verification evidence', () => {
     expect((await captureWorkspace(f.project)).digest).toBe(staged.digest);
     await writeFile(join(f.project, 'new-file.txt'), 'new'); expect((await captureWorkspace(f.project)).digest).not.toBe(staged.digest);
   });
+  it('records tracked symlinks in Git scope without following their targets', async () => {
+    const f = await fixture(); const run = promisify(execFile);
+    const git = (...args: string[]) => run('git', args, { cwd: f.project, windowsHide: true });
+    await git('init', '-q'); await writeFile(join(f.project, 'target.txt'), 'target');
+    try { await symlink('target.txt', join(f.project, 'link.txt'), process.platform === 'win32' ? 'file' : undefined); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'EPERM') return; throw error; }
+    await git('add', '.'); const stamp = await captureWorkspace(f.project);
+    expect(stamp.scope).toBe('git'); expect(stamp.digest).toBeDefined();
+  });
   it('does not attest a non-Git directory containing a nested repository', async () => {
     const root = await mkdtemp(join(tmpdir(), 'forge-evidence-parent-')), nested = join(root, 'nested');
     await mkdir(nested);

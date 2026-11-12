@@ -16,7 +16,7 @@ on:
       model_id:
         description: Model ID inside the provider configuration
         required: true
-        default: deepseek/deepseek-v4.1-flash
+        default: deepseek-flash
         type: string
       api:
         description: Pi provider protocol
@@ -152,6 +152,13 @@ jobs:
           await writeFile('.forge-agent/swebench-real-config/models.json', JSON.stringify(config), { mode: 0o600 });
           await writeFile('.forge-agent/swebench-real-config/auth.json', '{}\n', { mode: 0o600 });
           NODE
+
+      - name: Preflight the real Provider before Docker tasks
+        run: |
+          node scripts/swebench-provider-preflight.mjs \
+            --config-home .forge-agent/swebench-real-config \
+            --model "$BENCHMARK_PROVIDER/$BENCHMARK_MODEL_ID" \
+            --timeout-ms 45000
 
       - name: Run real-model SWE-bench evaluation
         run: |

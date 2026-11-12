@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, open, readdir, realpath } from 'node:fs/promises';
+import { lstat, open, readlink, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 
@@ -85,7 +85,13 @@ export async function captureWorkspace(root: string, signal?: AbortSignal): Prom
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         files++; return 'deleted';
       }
-      if (!info.isFile() || info.isSymbolicLink() || !within(canonical, await realpath(target))) throw new Error('Workspace observation cannot confirm links or nested repositories.');
+      if (info.isSymbolicLink()) {
+        if (scope !== 'git') throw new Error('Workspace observation cannot confirm links or nested repositories.');
+        const linkTarget = await readlink(target);
+        if (Buffer.byteLength(linkTarget) > 4096) throw new Error('Workspace observation encountered an oversized link.');
+        files++; return JSON.stringify([info.mode, 'symlink', linkTarget]);
+      }
+      if (!info.isFile() || !within(canonical, await realpath(target))) throw new Error('Workspace observation cannot confirm links or nested repositories.');
       if ((bytes += info.size) > MAX_BYTES) throw new Error('Workspace observation exceeded its byte limit.');
       const handle = await open(target, 'r');
       try {
