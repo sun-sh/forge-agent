@@ -8,6 +8,8 @@
 
 - Add a real Provider preflight before SWE-bench Docker execution, using the same isolated model configuration and a bounded minimal request. Record the preflight source in the harness fingerprint so endpoint, authentication, protocol and model-ID failures stop before expensive task execution.
 
+- Treat Git submodule entries as opaque gitlink fingerprints during workspace evidence capture. Preserve fail-closed behavior for non-Git nested repositories while allowing large repositories with untouched submodules to reach independent grading.
+
 - Record a fresh 45-run DeepSeek V4.1 Flash ablation on the current revision. Direct, planned and evaluator-only planned-no-review each passed 15/15 on the five-task miniature suite with no false completions or infrastructure failures; planning and review added measurable latency and token overhead without a quality lift in this sample. Publish the protocol, code/harness fingerprints and sanitized aggregate while keeping cost unknown when catalog pricing is unavailable.
 
 - Clarify Windows-hosted evaluation through WSL2/Linux Docker, separate distribution/image storage, and budget-aware Codespaces pilot limits; require checking firmware virtualization and actual Docker API access.

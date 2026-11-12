@@ -82,6 +82,14 @@ describe('versioned verification evidence', () => {
     await git('add', '.'); const stamp = await captureWorkspace(f.project);
     expect(stamp.scope).toBe('git'); expect(stamp.digest).toBeDefined();
   });
+  it('records Git submodule entries as gitlinks without entering the nested repository', async () => {
+    const f = await fixture(); const run = promisify(execFile);
+    const git = (...args: string[]) => run('git', args, { cwd: f.project, windowsHide: true });
+    await git('init', '-q'); await mkdir(join(f.project, 'nested')); await writeFile(join(f.project, 'nested', 'ignored.txt'), 'nested');
+    await git('update-index', '--add', '--cacheinfo', '160000,' + 'a'.repeat(40) + ',nested');
+    const stamp = await captureWorkspace(f.project);
+    expect(stamp.scope).toBe('git'); expect(stamp.digest).toBeDefined();
+  });
   it('does not attest a non-Git directory containing a nested repository', async () => {
     const root = await mkdtemp(join(tmpdir(), 'forge-evidence-parent-')), nested = join(root, 'nested');
     await mkdir(nested);

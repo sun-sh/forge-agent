@@ -45,6 +45,7 @@ export async function captureWorkspace(root: string, signal?: AbortSignal): Prom
     try { repository = await realpath((await git(canonical, ['rev-parse', '--show-toplevel'], signal)).trim()); }
     catch { signal?.throwIfAborted(); }
     let index = '', head = '';
+    const gitlinks = new Map<string, string>();
     const list = async (): Promise<string[]> => {
       check();
       if (repository) {
@@ -56,6 +57,12 @@ export async function captureWorkspace(root: string, signal?: AbortSignal): Prom
           git(canonical, ['rev-parse', '--verify', 'HEAD'], signal).catch(() => { signal?.throwIfAborted(); return ''; })
         ]);
         index = staged; head = revision.trim();
+        for (const entry of staged.split('\0').filter(Boolean)) {
+          const separator = entry.indexOf('\t');
+          if (separator < 0) continue;
+          const [mode, object] = entry.slice(0, separator).split(' ');
+          if (mode === '160000' && object) gitlinks.set(entry.slice(separator + 1), object);
+        }
         const names = [...new Set(raw.split('\0').filter(Boolean))];
         if (names.length > MAX_FILES) throw new Error('Workspace observation exceeded its file limit.');
         return names.filter((name) => !excluded.test(name)).sort();
@@ -84,6 +91,11 @@ export async function captureWorkspace(root: string, signal?: AbortSignal): Prom
       try { info = await lstat(target); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         files++; return 'deleted';
+      }
+      const gitlink = gitlinks.get(path);
+      if (gitlink) {
+        if (!info.isDirectory()) throw new Error('Workspace observation cannot confirm a Git submodule.');
+        files++; return JSON.stringify([160000, 'gitlink', gitlink]);
       }
       if (info.isSymbolicLink()) {
         if (scope !== 'git') throw new Error('Workspace observation cannot confirm links or nested repositories.');
