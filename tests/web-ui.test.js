@@ -138,13 +138,15 @@ describe('safe agent output', () => {
   it('does not invent verification or review for completed adaptive tasks and distinguishes historical evidence', () => {
     const task = { kind: 'change', workflow: 'direct', status: 'completed' };
     expect(sessionOutcome({ task }).label).toContain('未执行自动验证');
-    expect(sessionOutcome({ task }).label).toContain('需求未独立审阅');
+    expect(sessionOutcome({ task }).label).toContain('需求未验收');
     const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ passed: true, exitCode: 0 }] } };
-    expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('执行结束 · 配置检查通过 · 需求未独立审阅');
+    expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('已实现 · 需求未验收 · 配置检查通过 · 未进行模型审阅');
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification } }).kind).toBe('failed');
+    expect(sessionOutcome({ task: { ...task, verification } }).kind).toBe('unverified');
     const review = { verdict: 'ready', issues: [], freshness: 'current', evidenceId: 'v1' };
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification, review } }).label).toContain('模型审阅通过');
     expect(sessionOutcome({ task: { ...task, verification: { ...verification, evidence: { freshness: 'stale' } }, review } })).toMatchObject({ kind: 'failed', label: expect.stringContaining('证据已过期') });
+    expect(sessionOutcome({ task: { ...task, verification: { status: 'passed' } } }).kind).toBe('failed');
     expect(verificationLabel({ status: 'passed' })).toContain('当前版本未确认');
     expect(verificationLabel({ ...verification, report: { passed: true, results: [{ passed: true, exitCode: 0, failure: 'timeout' }] } })).not.toBe('配置检查通过');
   });
@@ -154,11 +156,12 @@ describe('safe agent output', () => {
     const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ command: 'python -m py_compile app.py', passed: true, exitCode: 0 }] } };
     const task = { id: 'syntax', kind: 'change', workflow: 'direct', status: 'completed', phase: 'complete', validation: 'verified', repairs: 0, phases: [], artifacts: [{ path: 'app.py', operation: 'edit' }], verification };
     app.applySnapshot({ id: 'syntax-only', outcome: 'completed', task, verification, messages: [] });
-    expect(doc.getElementById('run-status-label').textContent).toContain('需求未独立审阅');
+    expect(doc.getElementById('run-status-label').textContent).toContain('需求未验收');
+    expect(doc.getElementById('run-status-dot').classList.contains('done')).toBe(false);
     expect(doc.getElementById('verification-summary').textContent).toContain('配置检查通过');
     expect(doc.getElementById('verification-output').textContent).toContain('python -m py_compile app.py');
     expect(doc.getElementById('delivery-validation').textContent).toContain('检查范围由配置的命令决定');
-    expect(doc.getElementById('delivery-title').textContent).toBe('修改已生成');
+    expect(doc.getElementById('delivery-title').textContent).toBe('文件已生成 · 需求未验收');
     const stale = { ...verification, evidence: { ...verification.evidence, freshness: 'stale' } };
     app.applySnapshot({ id: 'syntax-only', outcome: 'completed', task: { ...task, verification: stale }, verification: stale, messages: [] });
     expect(doc.getElementById('delivery-validation').textContent).toContain('证据已过期');
@@ -175,7 +178,7 @@ describe('safe agent output', () => {
     const verification = { status: 'skipped', reason: 'No verification commands configured.' };
     app.applySnapshot({ id: 'delivery', running: false, outcome: 'completed', task: { id: 'task-1', kind: 'change', workflow: 'planned', status: 'completed', phase: 'complete', validation: 'unconfigured', artifacts: [{ path: 'index.html', operation: 'write' }], repairs: 0, phases: [], verification }, verification, messages: [] });
     expect(find('delivery-card').classList.contains('hidden')).toBe(false);
-    expect(find('delivery-title').textContent).toBe('交付已生成');
+    expect(find('delivery-title').textContent).toBe('文件已生成 · 需求未验收');
     expect(find('delivery-artifacts').textContent).toContain('index.html');
     expect(find('delivery-validation').textContent).toContain('未配置');
     expect(find('task-review').textContent).toContain('未启用独立审阅');

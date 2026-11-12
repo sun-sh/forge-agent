@@ -35,7 +35,7 @@ describe('Web task and project file endpoints', () => {
     const base = new URL(server.url).origin, headers = { 'x-pforge-token': server.token };
     const tasks = await fetch(base + '/api/tasks?project=' + encodeURIComponent(root), { headers });
     expect(tasks.status).toBe(200);
-    expect(await tasks.json()).toMatchObject({ tasks: [expect.objectContaining({ id, status: 'interrupted', project: root })] });
+    expect(await tasks.json()).toMatchObject({ tasks: [expect.objectContaining({ id, status: 'interrupted', project: root, result: expect.objectContaining({ status: 'blocked', resolutionClaimed: false }) })] });
     expect((await fetch(base + '/api/files?project=' + encodeURIComponent(root), { headers })).status).toBe(403);
     const untrustedTerminal = await fetch(base + '/api/terminal', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ project: root, command: 'node --version' }) });
     expect(untrustedTerminal.status).toBe(403);

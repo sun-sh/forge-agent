@@ -206,7 +206,7 @@ async function addLocalAttachments(files) {
     }
   } finally { state.attachmentReading = false; renderAttachments(); setRunning(state.running); }
 }
-const TASK_STATUS_LABELS = { running: '运行中', interrupted: '服务重启后中断', aborted: '已停止', failed: '失败', needs_attention: '需要检查', budget_exceeded: '达到执行预算', completed: '已完成' };
+const TASK_STATUS_LABELS = { running: '运行中', interrupted: '服务重启后中断', aborted: '已停止', failed: '失败', needs_attention: '需要检查', budget_exceeded: '达到执行预算', completed: '执行结束' };
 function renderTasks() {
   const list = $('tasks-list'); if (!list) return;
   const tasks = state.tasks || [];
@@ -216,7 +216,7 @@ function renderTasks() {
     const validationUnconfigured = implementationWithoutChecks(task);
     const retryable = ['interrupted', 'aborted', 'failed', 'needs_attention', 'budget_exceeded'].includes(task.status) && !validationUnconfigured;
     const action = task.status === 'failed' || task.status === 'needs_attention' || task.status === 'budget_exceeded' ? 'recheck' : 'resume';
-    const statusLabel = validationUnconfigured ? '已完成 · 未配置自动验证' : TASK_STATUS_LABELS[task.status] || task.status;
+    const statusLabel = task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || task.status;
     return '<article class="task-card"><button type="button" class="task-card-main" data-open-task="' + esc(task.id) + '"><strong>' + esc(task.prompt || '未命名任务').slice(0, 180) + '</strong><small>' + esc(shortPath(task.project)) + ' · ' + esc(statusLabel) + ' · ' + esc(formatTime(task.updatedAt)) + '</small><span>' + esc(validationUnconfigured ? '文件已写入项目，可打开会话查看交付。' : task.error || (task.phase ? '当前阶段：' + (TASK_LABELS[task.phase] || task.phase) : '')) + '</span></button><div class="task-card-actions">' + (running ? '<button type="button" class="button quiet small" data-task-action="stop" data-task-id="' + esc(task.id) + '">停止</button>' : retryable ? '<button type="button" class="button quiet small" data-task-action="' + action + '" data-task-id="' + esc(task.id) + '">' + (action === 'recheck' ? '重新检查' : '继续') + '</button>' : '') + '</div></article>';
   }).join('') || '<p class="settings-note">暂无任务。</p>';
 }
@@ -230,7 +230,7 @@ async function loadTasks() {
     $('queue-summary').textContent = queue.scheduler ? '运行 ' + queue.scheduler.running + '/' + queue.scheduler.concurrency + ' · 排队 ' + queue.scheduler.queued + ' · 不同项目并行，同一项目按顺序执行。' : '不同项目并行，同一项目按顺序执行。';
     $('queue-task-submit').disabled = queueSubmitting || !state.sessionId || state.readOnly || state.mode !== 'agent';
     $('queue-target').textContent = state.sessionId ? '当前会话 · ' + (state.project?.name || '项目') + ' · ' + (state.pendingModelKey || state.model?.key || '未选择模型') : '先打开一个 Agent 会话';
-    const labels = { queued: '排队中', running: '后台执行中', completed: '已完成', failed: '失败', interrupted: '进程退出后中断', cancelled: '已取消' };
+    const labels = { queued: '排队中', running: '后台执行中', completed: '队列执行结束', failed: '失败', interrupted: '进程退出后中断', cancelled: '已取消' };
     $('queue-list').innerHTML = (queue.jobs || []).slice().reverse().map((job) => '<article class="task-card"><div class="task-card-main"><strong>' + esc(job.title || '排队任务') + '</strong><small>' + esc(shortPath(job.project)) + ' · ' + esc(labels[job.status]) + ' · ' + esc(job.model) + '</small><span>' + esc(job.error || job.waiting || formatTime(job.createdAt)) + '</span></div><div class="task-card-actions">' + (['queued', 'interrupted', 'running'].includes(job.status) ? '<button type="button" class="button quiet small" data-cancel-job="' + esc(job.id) + '">' + (job.status === 'running' ? '停止' : '取消') + '</button>' : '') + '<button type="button" class="button quiet small" data-open-job="' + esc(job.id) + '">打开会话</button></div></article>').join('') || '<p class="settings-note">可在上方添加任务，或使用 /queue 任务内容。同一会话正在执行时也可以排队。</p>';
     state.jobs = queue.jobs || [];
     if (queue.diagnostic) $('queue-list').textContent = queue.diagnostic;
@@ -1289,7 +1289,7 @@ function renderVerification(verification) {
   const failures = { timeout: '超时', aborted: '已停止', spawn_error: '启动失败' };
   $('verification-output').textContent = [verification.reason, verification.evidence?.reason].filter(Boolean).join('\n\n') + (verification.reason || verification.evidence?.reason ? '\n\n' : '') + ((verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '');
 }
-const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '完成' };
+const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '执行结束' };
 function setWorkflow(value) {
   state.workflow = value === 'planned' ? 'planned' : 'direct';
   ['workflow-select', 'followup-workflow-select'].forEach((id) => { if ($(id)) $(id).value = state.workflow; });
@@ -1321,9 +1321,9 @@ function renderDelivery(task) {
   const visible = Boolean(implementation && (artifacts.length || unconfigured || task.status === 'completed' && task.phase === 'complete'));
   card.classList.toggle('hidden', !visible);
   if (!visible) return;
-  $('delivery-title').textContent = task.status === 'running' ? '正在生成文件' : task.status === 'completed' && !task.error && sessionOutcome({ task }).kind === 'done' ? (unconfigured ? '交付已生成' : '修改已生成') : '本次文件 · 任务尚未完成';
+  $('delivery-title').textContent = task.status === 'running' ? '正在生成文件' : task.status === 'completed' && !task.error && ['done', 'unverified'].includes(sessionOutcome({ task }).kind) ? '文件已生成 · 需求未验收' : '本次文件 · 任务尚未完成';
   $('delivery-artifacts').innerHTML = artifacts.length ? artifacts.map((artifact) => '<button type="button" class="delivery-artifact" data-open-artifact="' + esc(artifact.path) + '" title="打开 ' + esc(artifact.path) + '">' + icon('file') + '<span><strong>' + esc(artifact.path) + '</strong><small>' + (artifact.operation === 'write' ? '写入文件' : '修改文件') + '</small></span><span class="delivery-artifact-open">打开</span></button>').join('') : '<p class="delivery-empty">本次没有捕获到文件路径。可打开右侧“文件”面板浏览项目。</p>';
-  $('delivery-validation').textContent = unconfigured ? '自动验证：未配置。下方文件来自本次工具操作，可打开查看；配置 verify 后可以重新检查。' : task.status === 'running' ? '正在等待执行完成。' : verificationLabel(task.verification) + '。检查范围由配置的命令决定，具体命令与输出见执行记录。';
+  $('delivery-validation').textContent = unconfigured ? '自动验证：未配置。下方文件来自本次工具操作，可打开查看；配置 verify 后可以重新检查。需求是否满足尚未确认。' : task.status === 'running' ? '正在等待执行完成。' : verificationLabel(task.verification) + '。检查范围由配置的命令决定，具体命令与输出见执行记录。需求是否满足尚未确认。';
   $('delivery-open-files').disabled = !state.project;
   $('delivery-recheck').classList.toggle('hidden', !unconfigured || !task.id);
   $('delivery-recheck').disabled = !unconfigured || !task.id || state.running || state.loadingSession || state.sending || Boolean(state.runControl);
@@ -1347,7 +1347,7 @@ function renderTask(task) {
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   const visited = new Set((task.phases || []).map((item) => item.phase));
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? 'skipped' : 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? '—' : '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : implementationWithoutChecks(task) ? '已完成 · 未配置自动验证' : TASK_STATUS_LABELS[task.status] || '需要检查';
+  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || '需要检查';
   $('task-summary-phase').textContent = TASK_LABELS[task.phase] || '任务进度';
   $('task-summary-note').textContent = compactStatus + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '');
   $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;

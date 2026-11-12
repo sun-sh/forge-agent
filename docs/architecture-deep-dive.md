@@ -214,3 +214,6 @@ The engineering priorities are an evidence-backed execution loop, unified execut
 会话是否运行与用户能否导航是独立状态。前端只在发送、打开或配置提交等短暂临界区锁导航；运行中的 SSE 连接可以关闭并切换，任务生命周期继续由服务端持有。旧连接的事件先检查 abort 和 session ID，再写当前视图。当前项目实际执行锁仍由 `ProjectExecutions` 按 canonical 目录独占；新模式只暂存在该会话，待下一条用户消息前应用，不会中途放宽活动任务的权限。
 
 `web/conversations.ts` 从 Pi 原生会话树按需读取同项目的其他用户对话，不做第二套会话存储或自动合并。输入使用会话 UUID，读取前验证历史根、真实项目目录和生命周期；不遍历私有子目录。输出只含选中分支的用户/助手文本与保留摘要，明确携带历史来源和分页 revision；隐藏宿主消息、思考和工具输出不参与检索。扫描与输出预算有明确上界，失败或超限返回不完整信息。工具结果按不可信历史资料处理，不提供模式切换、项目信任或验证证据。已接受的项目参考记忆仍由既有分层机制管理。
+
+
+Product acceptance is a derived result (`task/result.ts`), separate from legacy execution `completed`. Implementations remain `implemented_unverified`; generic configured checks and model review do not certify resolution. The [result protocol](task-results.md) covers task APIs/SSE, history recovery and unchanged quality denominators.

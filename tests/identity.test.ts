@@ -20,6 +20,7 @@ describe('Forge identity and interface context', () => {
     const identity = (sections as Record<string, string>)['forge_identity'];
     expect(identity).toContain('You are Forge Agent');
     expect(identity).toContain('Pi Coding Agent runtime');
+    expect(identity).toContain('report implemented with acceptance unverified');
     expect(identity).toContain('Do not insert this architecture overview into ordinary greetings or capability introductions');
     expect(identity).toContain(surface === 'web' ? 'in the user\'s browser' : 'terminal client (interactive TUI or single-shot CLI)');
   });

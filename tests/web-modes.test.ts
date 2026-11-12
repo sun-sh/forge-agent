@@ -88,7 +88,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
     const state = await f.settled(session.id);
-    expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded' });
+    expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded', result: { status: 'implemented_unverified', acceptance: 'unverified', resolutionClaimed: false } });
     expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
     expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');

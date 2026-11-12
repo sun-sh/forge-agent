@@ -93,7 +93,9 @@ prose alone: configured verification must pass and the review response must be
 structured and issue-free. Each concrete blocking review repair returns to implementation,
 verification, and review, without resetting retries. Inspection and planning have host
 handoff contracts in system context, separate from the visible user message.
-The Web status says “configured checks passed” rather than implying issue resolution. It reports independent model review separately and explicitly marks adaptive requirements as unreviewed. Delivery cards derive their labels from current verification evidence; a saved `validation=verified` field cannot override stale evidence or protection problems. This is an evidence-presentation correction, not additional behavioral validation.
+The derived `task/result.ts` projection exposes `implemented_unverified` separately from legacy completed execution. Generic checks and model review cannot attest to complete behavioral acceptance; task lists, snapshots and SSE recompute the projection. This avoids a second persisted source of truth and preserves queue/recovery behavior. [Result semantics](task-results.md) specify API and evaluation compatibility.
+
+The Web status says “configured checks passed” rather than implying issue resolution. It reports independent model review separately and marks implementation acceptance as unverified in both workflows. Delivery cards derive their labels from current verification evidence; a saved `validation=verified` field cannot override stale evidence or protection problems. This is an evidence-presentation correction, not additional behavioral validation.
 
 Missing or stale evidence for configured checks produces `needs_attention`. With no checks configured, implementation may complete as explicitly unverified/unreviewed; a model-triggered empty check cannot leave a false empty report behind.
 

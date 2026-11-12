@@ -424,7 +424,7 @@ try {
   await click('#folder-use');
   await waitFor(`document.getElementById('folder-modal').classList.contains('hidden')`);
   await evaluate(`document.getElementById('prompt').value = 'UI smoke test'; document.getElementById('composer').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 配置检查通过 · 需求未独立审阅'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 需求未验收 · 配置检查通过 · 未进行模型审阅'`);
   assert.equal(await evaluate(`document.querySelectorAll('.turn.user').length`), 1);
   assert.equal(await evaluate(`document.querySelector('.turn.assistant h2')?.textContent`), 'Smoke check passed');
   assert.ok((await evaluate(`document.getElementById('verification-output').textContent`)).includes('PASS node --version'));
@@ -535,7 +535,7 @@ try {
   await click('#mode-picker [data-choose-mode="agent:planned"]');
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划') && !document.getElementById('followup-send').disabled`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 配置检查通过 · 独立模型审阅通过'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '已实现 · 需求未验收 · 配置检查通过 · 独立模型审阅通过'`);
   assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
@@ -643,7 +643,7 @@ try {
   assert.equal(modelRequests, previousRunRequests + 1);
   await screenshot('composer-stopped');
   await click('#resume-task-button');
-  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 配置检查通过 · 需求未独立审阅'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 需求未验收 · 配置检查通过 · 未进行模型审阅'`);
   assert.equal(modelRequests, previousRunRequests + 2);
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden') && !document.getElementById('followup-send').classList.contains('hidden')`), true);
   holdNextModel = true;
@@ -665,7 +665,7 @@ try {
   const drafted = 'unsent planned task follow-up';
   await evaluate(`document.getElementById('followup-prompt').value = ${JSON.stringify(drafted)}; document.getElementById('followup-prompt').dispatchEvent(new Event('input'))`);
   await cdp('Page.reload');
-  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 配置检查通过 · 需求未独立审阅'`);
+  await waitFor(`document.getElementById('run-status-label').textContent === '执行结束 · 需求未验收 · 配置检查通过 · 未进行模型审阅'`);
   assert.equal(await evaluate(`document.getElementById('followup-prompt').value`), drafted);
   assert.equal(await evaluate(`document.getElementById('followup-mode-select').value`), 'agent:planned');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('#followup-mode-picker-button [data-workflow-label]')).display === 'none'`), false);

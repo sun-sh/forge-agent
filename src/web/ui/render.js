@@ -37,9 +37,13 @@ export function verificationLabel(verification) {
   if (verificationUnconfigured(verification)) return '未配置自动验证';
   return '未执行自动验证';
 }
+function implementationResultLabel(task) {
+  const modified = task.kind === 'change' || task.artifacts?.length || task.changes?.files?.some((file) => file.observed);
+  return (modified ? '已实现' : '执行结束') + ' · 需求未验收';
+}
 export function sessionOutcome(data) {
   if (data.task) {
-    const labels = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '完成' };
+    const labels = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '执行结束' };
     if (!data.running && (data.task.finalization === 'failed' || data.task.status === 'completed' && (data.error || data.task.error || data.outcome === 'failed'))) return { label: '任务失败 · 收尾或执行异常', kind: 'failed' };
     if (data.running && data.task.finalization === 'pending') return { label: '正在完成收尾', kind: 'running' };
     const readOnlyMode = ['ask', 'plan'].includes(data.runMode ?? data.task.mode);
@@ -58,17 +62,17 @@ export function sessionOutcome(data) {
     if (data.task.status === 'completed') {
       const verification = data.task.verification;
       if (verification?.protection && verification.protection.status !== 'unchanged') return { label: '需要检查 · ' + verificationLabel(verification), kind: 'failed' };
-      if (verification?.status === 'failed' || verification?.evidence?.freshness === 'stale') return { label: '需要重新检查 · ' + verificationLabel(verification), kind: 'failed' };
+      if (verification?.status === 'failed' || verification?.evidence?.freshness === 'stale' || verification?.status === 'passed' && !currentVerification(verification)) return { label: '需要重新检查 · ' + verificationLabel(verification), kind: 'failed' };
       const acceptance = data.task.plan?.acceptance, findings = data.task.review?.acceptance;
       const acceptanceMet = !acceptance || Array.isArray(findings) && findings.length === acceptance.length && new Set(findings.map((item) => item.id)).size === findings.length && acceptance.every((item) => findings.some((finding) => finding.id === item.id && finding.status === 'met' && finding.evidence?.trim()));
       const unconfigured = verificationUnconfigured(verification);
-      const reviewed = data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
+      const reviewed = Boolean(verification?.evidenceId) && data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
       const reviewLabel = data.task.reviewer?.context === 'independent' ? '独立模型审阅通过' : '模型审阅通过';
       if (data.task.reviewFollowup || data.task.review && (data.task.review.verdict !== 'ready' || data.task.review.issues?.length || !acceptanceMet)) return { label: '审阅发现待处理问题 · 需要检查', kind: 'failed' };
-      if (unconfigured) return { label: '已完成 · 未配置自动验证' + (reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: 'done' };
+      if (unconfigured) return { label: implementationResultLabel(data.task) + ' · 未配置自动验证', kind: 'unverified' };
       if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || data.task.reviewRequired !== false && !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
-      if (data.task.workflow === 'planned' && data.task.reviewRequired === false) return { label: '执行结束 · ' + verificationLabel(verification) + ' · 评测：未启用审阅', kind: 'done' };
-      return { label: (data.task.kind === 'verify' ? '检查结束' : '执行结束') + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · ' + reviewLabel : ' · 需求未独立审阅'), kind: 'done' };
+      if (data.task.workflow === 'planned' && data.task.reviewRequired === false) return { label: implementationResultLabel(data.task) + ' · ' + verificationLabel(verification) + ' · 评测：未启用审阅', kind: 'unverified' };
+      return { label: (data.task.kind === 'verify' ? '检查结束' : implementationResultLabel(data.task)) + ' · ' + verificationLabel(verification) + (data.task.kind === 'verify' ? '' : reviewed ? ' · ' + reviewLabel : ' · 未进行模型审阅'), kind: data.task.kind === 'verify' ? 'done' : 'unverified' };
     }
   }
   if (data.running) return { label: '正在运行', kind: 'running' };
@@ -77,6 +81,6 @@ export function sessionOutcome(data) {
   if (data.readOnly) return { label: '历史记录 · 选择可用模型后继续', kind: '' };
   if (data.outcome === 'completed' && data.runMode === 'plan') return { label: data.mode === 'agent' ? '规划完成 · 可发送执行指令' : '规划完成 · 等待切换 Agent 执行', kind: 'done' };
   if (data.outcome === 'completed' && data.runMode === 'ask') return { label: '问答结束 · 未执行修改', kind: 'done' };
-  if (data.verification?.status === 'passed') return { label: '执行结束 · ' + verificationLabel(data.verification), kind: currentVerification(data.verification) ? 'done' : '' };
+  if (data.verification?.status === 'passed') return { label: '执行结束 · 需求未验收 · ' + verificationLabel(data.verification), kind: 'unverified' };
   return { label: data.outcome === 'completed' ? '回答结束 · 未执行自动验证' : '准备就绪', kind: '' };
 }
