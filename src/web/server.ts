@@ -18,6 +18,7 @@ import { createWebModePolicy, isWebMode, isWebWorkflow, restoredRunMode, restore
 import { webBuiltinExtensions } from './pi-extensions.js';
 import { createExecutionState, restoreTask, taskPhaseContract, TaskController, withTaskEvidence, type TaskArtifact, type TaskState } from '../task/controller.js';
 import { executionTimeline } from '../task/timeline.js';
+import { reviewCommandEvidence } from '../task/review-evidence.js';
 import { finalizeExecution, pendingExecutionState } from '../task/lifecycle.js';
 import { TaskRegistry, type TaskRecord } from '../task/registry.js';
 import { captureGit, captureReviewPatch, compareGit, readGitDiff } from '../task/git.js';
@@ -973,6 +974,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           session.verification.outcome.attempts = session.controller.state!.repairs;
           return session.verification.verifyTrusted(signal);
         },
+        commandEvidence: (task) => reviewCommandEvidence(session.manager.getBranch(), task.id, new Set(agent.getAllTools().filter((tool) => tool.sourceInfo.source === 'builtin').map((tool) => tool.name))),
         review: (text, signal) => session.subagents!.reviewGate('PFORGE TASK PHASE: review\n' + text, signal),
         refreshVerification: (signal) => session.verification.refreshEvidence(signal),
         baseline: (signal) => captureGit(session.project, signal),

@@ -40,7 +40,7 @@ The editor supports OpenAI Chat Completions, Responses and Anthropic Messages in
 | Need | Forge behavior |
 | --- | --- |
 | **Check delivery** | Verification binds to workspace and configuration fingerprints. Changed protected files fail delivery even when tests pass. Historical passes remain distinct from current evidence. |
-| **Opt into planning** | Inspection returns a concise plan in the same handoff; a separate planning call is a fallback. Implementation, verification and independent review preserve requirements; repair reviews focus on prior findings. |
+| **Opt into planning** | Inspection returns a concise plan in the same handoff; a separate planning call is a fallback. Implementation, verification and independent review preserve requirements; bounded historical command receipts inform review, and repair reviews focus on prior findings. Model interpretations do not add user authority. |
 | **Continue interrupted work** | Reuse the Pi conversation and files at a valid saved phase, without appending the original request or replaying tools. Interrupted verify/review begins with fresh verification. |
 | **Make delivery files visible** | Each task lists files the model wrote or edited, including in non-Git folders; click a file to open it in the right-side viewer instead of searching the project directory manually. |
 | **Keep the UI focused** | Project-based conversations and forks, right-aligned user messages and folded process output. Changes, files, terminal and execution records live on the right; pause reasons appear beside the composer. |

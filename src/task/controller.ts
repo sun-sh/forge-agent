@@ -10,6 +10,7 @@ import { progressSnapshotSchema, TaskStalledError, type ProgressSnapshot } from 
 import { acceptanceSatisfied, BRIEF_OUTPUT_CONTRACT, parseTaskBrief, parseTaskPlan, planFromBrief, preserveTaskBrief, PLAN_OUTPUT_CONTRACT, planReference, taskBriefSchema, taskPlanSchema, taskRequirements, taskRequirementsSchema, type TaskBrief, type TaskPlan, type TaskRequirements } from './plan.js';
 import { parseReview, ReviewFormatError, reviewSchema, type TaskReview } from './review.js';
 import { buildReviewHandoff } from './review-handoff.js';
+import type { ReviewCommandEvidence } from './review-evidence.js';
 export { parseReview, type TaskReview } from './review.js';
 
 export const TASK_PHASES = ['inspect', 'plan', 'implement', 'verify', 'review', 'complete'] as const;
@@ -107,6 +108,7 @@ export interface TaskAdapter {
   baseline(signal: AbortSignal): Promise<GitBaseline>;
   changes(baseline: GitBaseline, signal: AbortSignal): Promise<GitChanges>;
   reviewPatch?(changes: GitChanges, signal: AbortSignal): Promise<ReviewPatch>;
+  commandEvidence?(task: TaskState): ReviewCommandEvidence;
 }
 
 export interface TaskExecutionMetadata {
@@ -360,7 +362,7 @@ export class TaskController {
           const patch = adapter.reviewPatch ? await adapter.reviewPatch(task.changes, signal) : task.changes.available && !task.changes.truncated && !task.changes.headChanged && !task.changes.files.length ? { version: 1 as const, files: [], characters: 0, lines: 0 } : undefined;
           check();
           if (!patch) throw new ReviewEvidenceError('独立审阅缺少完整补丁证据，未将路径清单作为完整 diff。');
-          const handoff = buildReviewHandoff(task, patch, previousFindings);
+          const handoff = buildReviewHandoff(task, patch, previousFindings, adapter.commandEvidence?.(task));
           const text = await execute('review', handoff.prompt);
           if (task.reviewer) task.reviewer.handoff = { version: handoff.version, scope: handoff.scope, characters: handoff.characters };
           task.review = parseReview(text);

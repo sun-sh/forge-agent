@@ -18,7 +18,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string } } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
@@ -35,6 +35,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
     if (pause || pausePhase && phase === pausePhase) await new Promise<void>((resolve) => { release = resolve; });
     if (res.destroyed) return;
     let calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
+    if (!calls && phase === 'implement' && options.implementationCommand && !implementationRequested) { const tool = input.tools.find((item: any) => ['powershell', 'bash'].includes(item.function.name))?.function.name; calls = [{ name: tool ?? 'bash', arguments: { command: options.implementationCommand } }]; implementationRequested = true; }
     if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Fixture review passed', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input).includes('End inspection with exactly one JSON object') ? JSON.stringify({ ...handoff.brief, ...(options.briefIntent ? { intent: options.briefIntent } : {}) }) : 'Mode response complete' };
@@ -91,6 +92,25 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
     expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');
+  });
+  it('passes a real Pi shell receipt to a fresh read-only reviewer without sending the parent transcript', async () => {
+    const marker = 'REVIEW_RECEIPT_43_PASSED';
+    const f = await fixture({ implementationCommand: `node -e "console.log('${marker}')"` });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Implement the focused change and run the check.', workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(state.task.status).toBe('completed');
+    const reviewer = f.requests.find((request) => JSON.stringify(request.messages).includes('historicalCommands'));
+    expect(reviewer).toBeDefined();
+    const messages = JSON.stringify(reviewer.messages);
+    expect(messages).toContain(marker); expect(messages).toContain('historical-unattested');
+    const evidenceText = reviewer.messages.map((message: any) => typeof message.content === 'string' ? message.content : message.content?.filter((part: any) => part.type === 'text').map((part: any) => part.text).join('\n')).find((text: string) => text?.includes('EVIDENCE:\n'));
+    const evidence = JSON.parse(evidenceText.split('EVIDENCE:\n')[1].split('\nYour final response MUST')[0]);
+    expect(evidence.historicalCommands.commands).toHaveLength(1);
+    expect(evidence.historicalCommands.commands[0]).toMatchObject({ toolError: false, output: { text: expect.stringContaining(marker), truncated: false } });
+    expect(messages).toContain('model-authored interpretations');
+    expect(reviewer.tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
+    expect(JSON.stringify(state.task)).not.toContain(marker);
   });
   it('admits an unknown request resolved to verification once, without resetting its user turn', async () => {
     const f = await fixture({ briefIntent: 'verify' });

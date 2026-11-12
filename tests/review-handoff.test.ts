@@ -3,6 +3,7 @@ import { createExecutionState } from '../src/task/controller.js';
 import { buildReviewHandoff } from '../src/task/review-handoff.js';
 import { parseTaskBrief, planFromBrief, taskRequirements } from '../src/task/plan.js';
 import handoff from './fixtures/task-handoff.json' with { type: 'json' };
+import { reviewCommandEvidence } from '../src/task/review-evidence.js';
 import { isVerificationUnconfigured } from '../src/verification/pi-extension.js';
 
 describe('focused independent review handoff', () => {
@@ -17,6 +18,16 @@ describe('focused independent review handoff', () => {
     expect(result.prompt).toContain('"id":"A1"'); expect(result.prompt).toContain('"sha256"');
     expect(result.prompt).not.toContain('"understanding"');
     expect(result).toMatchObject({ version: 2, scope: 'initial', characters: result.prompt.length });
+  });
+  it('labels command receipts as historical and the ledger as model-authored without changing acceptance', () => {
+    const task = createExecutionState('Preserve Nx1 input behavior', { workflow: 'planned' });
+    const commands = reviewCommandEvidence([], task.id, new Set(['bash']));
+    const handoff = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 }, undefined, commands);
+    expect(handoff.prompt).toContain('historical-unattested');
+    expect(handoff.prompt).toContain('model-authored interpretations');
+    expect(handoff.prompt).toContain('not the implementation transcript or a current-workspace attestation');
+    expect(handoff.prompt).toContain('Preserve Nx1 input behavior');
+    expect(handoff.prompt).toContain('If evidence is insufficient use unconfirmed');
   });
   it('keeps invalid combined steps out of plans and preserves legacy briefs', () => {
     const brief = parseTaskBrief(JSON.stringify(handoff.brief))!;

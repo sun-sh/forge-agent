@@ -282,6 +282,14 @@ describe('task workflow controller', () => {
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
   });
+  it('includes optional host command evidence in the independent handoff without persisting raw receipts', async () => {
+    const f = fixture();
+    f.adapter.commandEvidence = () => ({ version: 1, source: 'pi-selected-branch', scope: 'latest-implementation', freshness: 'historical-unattested', commands: [{ toolCallId: 'test-call', tool: 'bash', command: { text: 'python bin/test', characters: 15, sha256: 'a'.repeat(64), truncated: false }, output: { text: 'UNIQUE_TEST_RECEIPT 43 passed', characters: 29, sha256: 'b'.repeat(64), truncated: false }, toolError: false }], omitted: 0, scanTruncated: false });
+    const task = await f.controller.run('Fix code', 0, f.adapter);
+    expect(task.status).toBe('completed');
+    expect(f.messages.at(-1)).toContain('UNIQUE_TEST_RECEIPT 43 passed');
+    expect(JSON.stringify(f.saved)).not.toContain('UNIQUE_TEST_RECEIPT');
+  });
   it('passes the full bounded patch into the independent reviewer and never persists it on task snapshots', async () => {
     const f = fixture();
     f.adapter.reviewPatch = async () => ({ version: 1, files: [{ path: 'code.ts', status: ' M', preexisting: false, observed: true, patch: '@@ -1 +1 @@\n-old implementation\n+new implementation' }], characters: 60, lines: 3 });
