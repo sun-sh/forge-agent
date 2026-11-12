@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Publish the complete five-issue, three-repetition SWE-bench ablation with per-run fingerprints. Direct / evaluator-only planned-no-review / Planned resolve 9/15, 11/15 and 9/15, while correct completed deliveries are 9, 11 and 5. Retain the original Planned classification error and zero-model-call official regrading. Keep adaptive default; the independent reviewer shows no delivery benefit here and later fixes have no measured quality gain yet.
+
 - Separate structurally evidenced SWE-bench workflow failures from Provider/transport failures. Keep reviewer/parent budgets, unconfirmed gates, invalid review output and configured-check failures eligible for official patch grading. Add a keyless retained-patch regrading command/workflow that preserves the source report and model/package identity, fingerprints the new grader, and reports delivered acceptance plus resolved-but-not-completed without resampling models.
 
 - Qualify Web completion as configured-command evidence, with independent **model** review reported separately and adaptive requirements explicitly unreviewed. Derive delivery-card checks from current verification evidence instead of a retained `validation=verified` flag; stale evidence and protected-path problems cannot appear as successful delivery. Preserve runtime verdicts and benchmark identities; this UI correction does not claim a coding-quality gain.

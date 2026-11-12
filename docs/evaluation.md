@@ -8,6 +8,12 @@ Import/prepare and JavaScript/Python fixture checks run on the current Windows h
 
 The [first GitHub real-model attempt](evaluations/swebench-real-github-2026-11-11.md) validated all three baseline/reference pairs but was blocked by the configured Provider's `403: Your IP address is not allowed` response before any model token or tool call. It is retained as an infrastructure failure, not a 0/3 model result. The evaluator now propagates that failure and excludes the empty patch from official model scoring.
 
+## Completed SWE-bench workflow comparison — 2026-11-12
+
+The [three-arm report](evaluations/swebench-ablation-2026-11-12.md) and [allowlisted per-run aggregate](evaluations/swebench-ablation-2026-11-12.json) retain 45 executions over five issues: Direct / planned-no-review / Planned resolve 9/15, 11/15 and 9/15. Correct completed deliveries are 9, 11 and 5; false completions are 6, 4 and 4. Planned blocks four patches that pass official grading and consumes 2.74× the Direct request tokens. This does not support default independent review or prove a general planning benefit. Adaptive remains the default.
+
+The original Planned report misclassified six workflow stops as infrastructure; all original rows are preserved. A separate keyless official regrading run uses identical patches and snapshots, produces zero model calls, retains original verdicts and brings official assessment to 15/15 with zero true infrastructure failures. Runtime dist hashes, image content IDs, model/harness identities and limits match across arms; all fingerprints are in the report. The follow-up receipt handoff and UI/classification changes postdate the model measurements and do not inherit their quality scores.
+
 ## Conversation qualification and five-task repetition — 2026-11-10
 
 The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.
