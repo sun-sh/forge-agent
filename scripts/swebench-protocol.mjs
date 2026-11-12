@@ -103,13 +103,18 @@ export function retainedExecutionFailure(snapshot, { transportError, patchError,
   return { infrastructureFailure: false, workflowFailure: false, taskError: null };
 }
 
-export function gradeObservation({ official, completed, integrity, emptyPatch, patchRejected = false, executionError = null }) {
-  if (executionError) return { officialResolved: null, accepted: false, falseCompletion: null, infrastructureFailure: true, integrityViolation: integrity === false };
-  const assessed = official?.valid === true || patchRejected;
-  const resolved = official?.valid === true ? official.resolved : patchRejected ? false : null;
+export function gradeObservation({ official, completed, integrity, emptyPatch, patchRejected = false, executionError = null, resolutionClaimed }) {
+  const assessed = !executionError && (official?.valid === true || patchRejected);
+  const resolved = assessed ? official?.valid === true ? official.resolved : false : null;
+  const unacceptable = resolved !== true || integrity !== true || emptyPatch === true;
   return { officialResolved: resolved, accepted: resolved === true && integrity === true,
-    falseCompletion: completed && assessed ? resolved !== true || integrity !== true || emptyPatch : null,
-    infrastructureFailure: !assessed, integrityViolation: integrity === false };
+    // Compatibility metric: a finished host workflow with an unacceptable patch.
+    // Product wording or abstaining from resolution claims must not erase it.
+    falseCompletion: completed && assessed ? unacceptable : null,
+    infrastructureFailure: !assessed, integrityViolation: integrity === false,
+    ...(typeof resolutionClaimed === 'boolean' ? { resolutionClaimed,
+      falseResolutionClaim: resolutionClaimed && assessed ? unacceptable : null } : {})
+  };
 }
 export function summarize(results, workflows) {
   return Object.fromEntries(workflows.map((workflow) => {
@@ -119,6 +124,13 @@ export function summarize(results, workflows) {
       resolved: evaluated.filter((row) => row.officialResolved === true).length, accepted: evaluated.filter((row) => row.accepted).length,
       forgeCompleted: evaluated.filter((row) => row.completed === true).length, resolvedNotCompleted: evaluated.filter((row) => row.officialResolved === true && row.completed !== true).length,
       deliveredAccepted: evaluated.filter((row) => row.accepted && row.completed === true).length, workflowFailures: rows.filter((row) => row.workflowFailure).length,
+      unresolvedFinishes: evaluated.filter((row) => row.completed && row.officialResolved === false).length,
+      unverifiedFinishes: evaluated.filter((row) => row.completed && row.resolutionClaimed === false).length,
+      resolutionClaims: rows.filter((row) => row.resolutionClaimed === true).length,
+      assessedResolutionClaims: evaluated.filter((row) => row.resolutionClaimed === true && typeof row.officialResolved === 'boolean').length,
+      falseResolutionClaims: evaluated.filter((row) => row.falseResolutionClaim === true).length,
+      falseResolutionClaimRate: evaluated.some((row) => row.resolutionClaimed === true && typeof row.officialResolved === 'boolean')
+        ? evaluated.filter((row) => row.falseResolutionClaim === true).length / evaluated.filter((row) => row.resolutionClaimed === true && typeof row.officialResolved === 'boolean').length : null,
       falseCompletions: evaluated.filter((row) => row.falseCompletion === true).length, infrastructureFailures: rows.filter((row) => row.infrastructureFailure).length,
       integrityViolations: rows.filter((row) => row.integrityViolation).length, emptyPatches: rows.filter((row) => row.emptyPatch).length,
       p50ExecutionMs: times.length ? times[Math.floor(times.length / 2)] : null,

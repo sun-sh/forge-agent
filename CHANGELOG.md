@@ -4,6 +4,8 @@
 
 - Separate product acceptance from execution lifecycle with a derived `implemented_unverified` result in task APIs/SSE and neutral Web delivery labels. Generic configured checks and model review cannot assert resolution; legacy completed execution remains compatible with queues and recovery.
 
+- Keep SWE-bench official resolution and finished-but-unacceptable metrics unchanged while adding explicit resolution-claim counts and a null claim-error rate when no assessed claims exist. Export execution and acceptance separately; never relabel historical failures as a quality gain.
+
 - Qualify the command-evidence repair on two fresh real-model SWE-bench executions: Astropy and SymPy both pass official grading and Forge delivery. Preserve the single Astropy repair and its high cost, exact model/package/harness identities, prior ablation and mixed-source local failure. Treat 2/2 as a purposive regression rather than a general quality claim.
 
 - Publish the complete five-issue, three-repetition SWE-bench ablation with per-run fingerprints. Direct / evaluator-only planned-no-review / Planned resolve 9/15, 11/15 and 9/15, while correct completed deliveries are 9, 11 and 5. Retain the original Planned classification error and zero-model-call official regrading. Keep adaptive default; the independent reviewer shows no delivery benefit here and later fixes have no measured quality gain yet.

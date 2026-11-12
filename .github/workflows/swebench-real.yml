@@ -182,9 +182,9 @@ jobs:
           import { readFile, writeFile } from 'node:fs/promises';
           const report = JSON.parse(await readFile('.forge-agent/swebench-real-run/report.json', 'utf8'));
           const rows = report.results ?? [];
-          const header = ['instance_id', 'workflow', 'run', 'official_resolved', 'forge_completed', 'accepted', 'false_completion', 'infrastructure_failure'];
+          const header = ['instance_id', 'workflow', 'run', 'official_resolved', 'execution_finished', 'result_status', 'acceptance_status', 'resolution_claimed', 'forge_completed', 'accepted', 'false_completion', 'false_resolution_claim', 'infrastructure_failure'];
           const value = (entry) => entry === null || entry === undefined ? '' : String(entry);
-          const lines = [header.join('\t'), ...rows.map((row) => [row.instanceId, row.workflow, row.run, row.officialResolved, row.completed, row.accepted, row.falseCompletion, row.infrastructureFailure].map(value).join('\t'))];
+          const lines = [header.join('\t'), ...rows.map((row) => [row.instanceId, row.workflow, row.run, row.officialResolved, row.executionFinished, row.resultStatus, row.acceptanceStatus, row.resolutionClaimed, row.completed, row.accepted, row.falseCompletion, row.falseResolutionClaim, row.infrastructureFailure].map(value).join('\t'))];
           await writeFile('.forge-agent/swebench-real-run/resolution-vs-forge.tsv', lines.join('\n') + '\n');
           console.log(lines.join('\n'));
           NODE

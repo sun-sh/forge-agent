@@ -66,6 +66,21 @@ describe('SWE-bench frozen protocol and official outcome boundaries', () => {
     expect(gradeObservation({ official: { valid: false }, completed: true, integrity: true, patchRejected: true })).toMatchObject({ officialResolved: false, falseCompletion: true, infrastructureFailure: false });
   });
 
+  it('retains unresolved finished workflows when product wording abstains from a resolution claim', () => {
+    const rows = Array.from({ length: 15 }, (_, index) => ({ workflow: 'direct', completed: true, ...gradeObservation({ official: { valid: true, resolved: index < 9 }, completed: true, integrity: true, emptyPatch: false, resolutionClaimed: false }) }));
+    expect(summarize(rows, ['direct']).direct).toMatchObject({ scheduled: 15, evaluated: 15, resolved: 9, falseCompletions: 6, unresolvedFinishes: 6, unverifiedFinishes: 15, resolutionClaims: 0, assessedResolutionClaims: 0, falseResolutionClaims: 0, falseResolutionClaimRate: null });
+    expect(rows[14]).toMatchObject({ officialResolved: false, falseCompletion: true, resolutionClaimed: false, falseResolutionClaim: null });
+  });
+  it('measures claimed resolutions separately and treats missing historical claim fields as unknown', () => {
+    const rows = [
+      { workflow: 'planned', completed: true, ...gradeObservation({ official: { valid: true, resolved: false }, completed: true, integrity: true, resolutionClaimed: true }) },
+      { workflow: 'planned', completed: true, ...gradeObservation({ official: { valid: true, resolved: true }, completed: true, integrity: true, emptyPatch: false, resolutionClaimed: true }) },
+      { workflow: 'planned', completed: true, ...gradeObservation({ official: { valid: true, resolved: false }, completed: true, integrity: true }) }
+    ];
+    expect(rows[2]).not.toHaveProperty('resolutionClaimed');
+    expect(summarize(rows, ['planned']).planned).toMatchObject({ falseCompletions: 2, unresolvedFinishes: 2, resolutionClaims: 2, assessedResolutionClaims: 2, falseResolutionClaims: 1, falseResolutionClaimRate: 0.5 });
+    expect(gradeObservation({ official: { valid: false }, completed: true, integrity: true, resolutionClaimed: true })).toMatchObject({ officialResolved: null, falseResolutionClaim: null, infrastructureFailure: true });
+  });
   it('classifies a provider or Forge execution error as infrastructure instead of a model result', () => {
     expect(gradeObservation({ official: { valid: true, resolved: false }, completed: false, integrity: true, emptyPatch: true, executionError: '403: IP not allowed' })).toMatchObject({ officialResolved: null, accepted: false, falseCompletion: null, infrastructureFailure: true });
   });

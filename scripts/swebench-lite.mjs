@@ -185,7 +185,7 @@ async function runEvaluation() {
         await save(join(executionRoot, 'prediction.json'), { instance_id: key, model_name_or_path: 'forge-' + entry.workflow, model_patch: bytes.toString('utf8') });
         const official = await callBackend('grade', { record: join(bundle.root, 'records', key + '.json'), patch: join(executionRoot, 'prediction.patch'), imageId: previous.imageId, output: join(executionRoot, 'official'), timeout: integer('--timeout', 1800, 60, 7200) }, join(executionRoot, 'grading-controller'));
         result.official = official;
-        Object.assign(result, gradeObservation({ official, completed: result.completed, integrity: result.integrity, emptyPatch: result.emptyPatch, patchRejected: official.patchRejected === true }));
+        Object.assign(result, gradeObservation({ official, completed: result.completed, integrity: result.integrity, emptyPatch: result.emptyPatch, resolutionClaimed: result.resolutionClaimed, patchRejected: official.patchRejected === true }));
       } catch (error) { result.infrastructureFailure = true; result.error = error.message; result.officialResolved ??= null; result.falseCompletion ??= null; }
       report.results.push(result); await save(join(executionRoot, 'execution.json'), result); await persist();
       console.log((result.accepted ? 'PASS ' : result.infrastructureFailure ? 'INFRA ' : 'FAIL ') + runKey);
@@ -267,7 +267,7 @@ async function regradeRetained() {
           }
           console.log('REGRADE ' + key);
           row.official = await callBackend('grade', { record: join(bundle.root, 'records', row.instanceId + '.json'), patch: join(executionRoot, 'prediction.patch'), imageId: validated.imageId, output: join(executionRoot, 'official'), timeout: integer('--timeout', 1800, 60, 7200) }, join(executionRoot, 'grading-controller'));
-          Object.assign(row, gradeObservation({ official: row.official, completed: row.completed, integrity: row.integrity, emptyPatch: row.emptyPatch, patchRejected: row.official.patchRejected === true }));
+          Object.assign(row, gradeObservation({ official: row.official, completed: row.completed, integrity: row.integrity, emptyPatch: row.emptyPatch, resolutionClaimed: row.resolutionClaimed, patchRejected: row.official.patchRejected === true }));
         }
       } catch (error) { Object.assign(row, { infrastructureFailure: true, reason: error.message, officialResolved: null, accepted: false, falseCompletion: null }); }
       report.results.push(row); await save(join(executionRoot, 'execution.json'), row); await persist();

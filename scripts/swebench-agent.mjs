@@ -63,7 +63,7 @@ try {
 } catch (error) { patchError = error.message; }
 finally { await rm(indexRoot, { recursive: true, force: true }); }
 const testChanges = changed.filter(testPath);
-const result = { instanceId: input.instanceId, workflow: input.workflow, baseCommit: input.baseCommit, environmentSetupCommit: input.environmentSetupCommit, effectiveHead, completed: snapshot?.task?.status === 'completed', taskStatus: snapshot?.task?.status ?? snapshot?.outcome ?? 'failed',
+const result = { resultSemanticsVersion: 1, executionFinished: snapshot?.task?.status === 'completed', resultStatus: snapshot?.task?.result?.status ?? null, acceptanceStatus: snapshot?.task?.result?.acceptance ?? null, resolutionClaimed: snapshot?.task?.result?.resolutionClaimed, instanceId: input.instanceId, workflow: input.workflow, baseCommit: input.baseCommit, environmentSetupCommit: input.environmentSetupCommit, effectiveHead, completed: snapshot?.task?.status === 'completed', taskStatus: snapshot?.task?.status ?? snapshot?.outcome ?? 'failed',
   error: failure || patchError, transportError: failure, patchError, taskError: snapshot?.task?.error || snapshot?.error, executionMs: started ? Math.round(performance.now() - started) : null,
   integrity: protection.status === 'unchanged' && !testChanges.length && !patchError,
   protection: protection.status, testChanges, changed, emptyPatch: !prediction.trim(), patchHash: createHash('sha256').update(prediction).digest('hex'),
