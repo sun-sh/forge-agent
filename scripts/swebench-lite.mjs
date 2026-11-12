@@ -3,12 +3,12 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, mkdtemp, rm, rename } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdir, readFile, writeFile, mkdtemp, rm, rename, cp, copyFile } from 'node:fs/promises';
+import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { tmpdir } from 'node:os';
-import { parseDataset, makeManifest, loadBundle, validateCohort, gradeObservation, summarize, sha256, assertResumeIdentity, canReuseExecution, PROTOCOL, HARNESS_COMMIT } from './swebench-protocol.mjs';
+import { parseDataset, makeManifest, loadBundle, validateCohort, gradeObservation, summarize, sha256, assertResumeIdentity, canReuseExecution, retainedExecutionFailure, PROTOCOL, HARNESS_COMMIT } from './swebench-protocol.mjs';
 import { evaluationSchedule } from './evaluation-protocol.mjs';
 import { startSmokeModel } from './swebench-smoke-model.mjs';
 const execute = promisify(execFile), args = process.argv.slice(2), command = args[0];
@@ -41,8 +41,9 @@ async function callBackend(action, input, output, { allowNotReady = false } = {}
   if (status.code !== 0 && !allowNotReady) throw new Error(result.error || result.errors?.join('; ') || 'SWE-bench backend failed');
   return result;
 }
+const HARNESS_SOURCES = ["scripts/swebench-lite.mjs","scripts/swebench-protocol.mjs","scripts/swebench-backend.py","scripts/swebench-agent.mjs","scripts/swebench-provider-preflight.mjs","scripts/evaluation-protocol.mjs","evals/swebench-lite/harness-requirements.txt","scripts/download-swebench-lite.py","scripts/swebench-smoke-model.mjs"];
 async function recordCode(output) {
-  const sources = ['scripts/swebench-lite.mjs', 'scripts/swebench-protocol.mjs', 'scripts/swebench-backend.py', 'scripts/swebench-agent.mjs', 'scripts/swebench-provider-preflight.mjs', 'scripts/evaluation-protocol.mjs', 'evals/swebench-lite/harness-requirements.txt', 'scripts/download-swebench-lite.py', 'scripts/swebench-smoke-model.mjs'];
+  const sources = HARNESS_SOURCES;
   const hash = createHash('sha256'); await mkdir(join(output, 'harness'), { recursive: true });
   for (const path of sources) { const bytes = await readFile(join(repo, path)); hash.update(path).update(bytes); await writeFile(join(output, 'harness', path.replaceAll('/', '__')), bytes); }
   return hash.digest('hex');
@@ -101,7 +102,7 @@ async function runEvaluation() {
   const previousReport = resumeRoot ? JSON.parse(await readFile(join(resumeRoot, 'report.json'), 'utf8')) : null;
   const output = await createOutput('.forge-agent/swebench-runs/' + stamp());
   const harnessFingerprint = await recordCode(output);
-  const report = { protocol: PROTOCOL, cohortFingerprint: bundle.manifest.fingerprint, harnessCommit: HARNESS_COMMIT, harnessFingerprint, backendHash, model: option('--model'), thinking, limits: rawLimits,
+  const report = { executionClassificationVersion: 1, protocol: PROTOCOL, cohortFingerprint: bundle.manifest.fingerprint, harnessCommit: HARNESS_COMMIT, harnessFingerprint, backendHash, model: option('--model'), thinking, limits: rawLimits,
     validationFingerprint: sha256(JSON.stringify(validation)), startedAt: new Date().toISOString(), expectedExecutions: schedule.length, validation: { valid: validation.valid, total: validation.total, harness: validation.harness }, workflows,
     schedule: schedule.map((item) => ({ instanceId: item.task.instanceId, workflow: item.workflow, run: item.run, position: item.position })),
     results: [], note: 'Subset ablation using official grading on fresh containers, restricted privileges and test preservation. No full-Lite or competitor claim. Visible checks default to changed-Python syntax, not hidden tests. Network access exists for model/package traffic; solution lookup is prohibited by instruction, not an egress filter.' };
@@ -169,10 +170,14 @@ async function runEvaluation() {
           package: packed.path, packageHash: packed.sha256, agentScript, agentHash, nodeImageId: node.imageId, nodeImageRef: node.imageRef, imageId: previous.imageId, imageRef: record.image, configHome: credentialHome, output: executionRoot }, join(executionRoot, 'controller'));
         Object.assign(result, agent);
         if (!report.pricingKnown && result.budget) result.budget.costIncomplete = true;
-        if (agent.error) {
-          Object.assign(result, { infrastructureFailure: true, officialResolved: null, accepted: false, falseCompletion: null, reason: agent.error });
+        const snapshot = JSON.parse(await readFile(join(executionRoot, 'snapshot.json'), 'utf8'));
+        const failure = retainedExecutionFailure(snapshot, { transportError: agent.transportError, patchError: agent.patchError, legacyError: agent.error });
+        Object.assign(result, failure);
+        if (failure.infrastructureFailure) {
+          result.error ??= failure.reason;
+          Object.assign(result, { infrastructureFailure: true, officialResolved: null, accepted: false, falseCompletion: null, reason: result.error });
           report.results.push(result); await save(join(executionRoot, 'execution.json'), result); await persist();
-          console.log('INFRA ' + runKey + ' · ' + agent.error);
+          console.log('INFRA ' + runKey + ' · ' + result.error);
           continue;
         }
         const bytes = await readFile(join(executionRoot, 'prediction.patch'));
@@ -190,6 +195,89 @@ async function runEvaluation() {
   console.log('Report: ' + join(output, 'report.json'));
   if (!report.infrastructureBlocked && report.results.some((row) => !row.accepted)) process.exitCode = 1;
 }
+
+/** Regrade immutable retained patches, never resample the model or overwrite the source run. */
+async function regradeRetained() {
+  trust();
+  const source = resolve(option('--source-run'));
+  const bundle = await loadBundle(resolve(option('--bundle')));
+  const sourceBytes = await readFile(join(source, 'report.json'));
+  const previous = JSON.parse(sourceBytes);
+  if (previous.protocol !== PROTOCOL || previous.cohortFingerprint !== bundle.manifest.fingerprint || previous.backendHash !== backendHash) throw new Error('Retained run/cohort/backend identity mismatch');
+  if (previous.regrade) throw new Error('Regrade the original model run, not an already regraded report');
+  const validation = JSON.parse(await readFile(resolve(option('--validation')), 'utf8'));
+  if (sha256(JSON.stringify(validation)) !== previous.validationFingerprint) throw new Error('Retained validation fingerprint mismatch');
+  const valid = validateCohort(validation, bundle.manifest, backendHash);
+  const seen = new Set(), rowKey = (row) => {
+    if (!bundle.manifest.tasks.some((task) => task.instanceId === row.instanceId) || !['direct', 'planned', 'planned-no-review'].includes(row.workflow) || !Number.isInteger(row.run) || row.run < 1 || row.run > 5) throw new Error('Invalid retained schedule entry');
+    return row.instanceId + '.' + row.workflow + '.r' + row.run;
+  };
+  if (previous.expectedExecutions !== previous.schedule?.length) throw new Error('Invalid retained schedule');
+  for (const entry of previous.schedule) { const key = rowKey(entry); if (seen.has(key)) throw new Error('Duplicate retained schedule entry'); seen.add(key); }
+  const original = new Map();
+  for (const row of previous.results) { const key = rowKey(row); if (!seen.has(key) || original.has(key)) throw new Error('Invalid or duplicated retained execution'); original.set(key, row); }
+  const retainedHash = createHash('sha256');
+  for (const file of HARNESS_SOURCES) retainedHash.update(file).update(await readFile(join(source, 'harness', file.replaceAll('/', '__'))));
+  if (retainedHash.digest('hex') !== previous.harnessFingerprint) throw new Error('Retained model harness fingerprint mismatch');
+  const outputOption = resolve(option('--output', '.forge-agent/swebench-regrades/' + stamp()));
+  const nested = relative(source, outputOption);
+  if (!nested || !isAbsolute(nested) && nested !== '..' && !nested.startsWith('..' + (process.platform === 'win32' ? '\\' : '/'))) throw new Error('Regrade output must be outside the immutable source run');
+  const output = await createOutput(outputOption);
+  await writeFile(join(output, 'source-report.json'), sourceBytes);
+  await cp(join(source, 'harness'), join(output, 'harness'), { recursive: true });
+  const packed = JSON.parse(await readFile(join(source, 'package-identity.json'), 'utf8'));
+  if (!/^[a-zA-Z0-9_.-]+\.tgz$/.test(packed.filename) || sha256(await readFile(join(source, packed.filename))) !== previous.packageHash) throw new Error('Retained package fingerprint mismatch');
+  await copyFile(join(source, packed.filename), join(output, packed.filename));
+  await save(join(output, 'package-identity.json'), packed);
+  const gradingFingerprint = await recordCode(join(output, 'regrade-code'));
+  const report = { ...previous, executionClassificationVersion: 1, results: [], regrade: { version: 1, kind: 'retained-patch-official-regrade', sourceReportHash: sha256(sourceBytes), harnessFingerprint: gradingFingerprint, realModelRequests: 0, startedAt: new Date().toISOString(), note: 'Original model/runtime/package/budget identities remain unchanged. Only stopped-workflow classification and independent grading are recomputed. Source report remains immutable.' } };
+  const persist = async () => save(join(output, 'report.json'), { ...report, byWorkflow: summarize(report.results, report.workflows), regrade: { ...report.regrade, finishedAt: new Date().toISOString() } });
+  await persist();
+  try {
+    const readiness = await callBackend('doctor', {}, join(output, 'preflight'), { allowNotReady: true });
+    if (!readiness.ready || readiness.harness.sourceHash !== validation.harness?.sourceHash) throw new Error('Pinned official grading environment differs from source validation');
+    const loaded = new Set();
+    for (const entry of previous.schedule) {
+      const key = rowKey(entry), old = original.get(key), executionRoot = join(output, 'executions', key);
+      const row = old ? { ...old } : { ...entry, infrastructureFailure: true, skipped: true, reason: 'not_executed_in_source_run', officialResolved: null, falseCompletion: null, accepted: false };
+      if (!old || old.skipped) { report.results.push(row); await persist(); continue; }
+      await mkdir(executionRoot, { recursive: true });
+      try {
+        const patch = await readFile(join(source, 'executions', key, 'prediction.patch'));
+        if (sha256(patch) !== old.patchHash) throw new Error('Retained patch fingerprint mismatch: ' + key);
+        const snapshotBytes = await readFile(join(source, 'executions', key, 'snapshot.json'));
+        const snapshot = JSON.parse(snapshotBytes);
+        if (Boolean(snapshot?.task?.status === 'completed') !== old.completed) throw new Error('Retained completion snapshot mismatch');
+        const failure = retainedExecutionFailure(snapshot, { transportError: old.transportError, patchError: old.patchError, legacyError: old.error });
+        await writeFile(join(executionRoot, 'prediction.patch'), patch);
+        await writeFile(join(executionRoot, 'snapshot.json'), snapshotBytes);
+        row.originalClassification = { officialResolved: old.officialResolved, accepted: old.accepted, falseCompletion: old.falseCompletion, infrastructureFailure: old.infrastructureFailure, error: old.error };
+        delete row.error; delete row.reason; delete row.official;
+        Object.assign(row, failure);
+        if (failure.infrastructureFailure) { Object.assign(row, { officialResolved: null, accepted: false, falseCompletion: null }); }
+        else {
+          const validated = valid.get(row.instanceId);
+          if (!validated?.valid) throw new Error('Source task baseline/reference was invalid');
+          const record = bundle.records.find((item) => item.instance_id === row.instanceId);
+          if (!loaded.has(validated.imageId)) {
+            try { await execute('docker', ['image', 'inspect', validated.imageId], { windowsHide: true, timeout: 30000 }); }
+            catch { await execute('docker', ['pull', '--platform', 'linux/amd64', record.image], { windowsHide: true, timeout: 1800000, maxBuffer: 2000000 }); }
+            // The backend refuses a pulled image whose content ID differs from the retained baseline.
+            loaded.add(validated.imageId);
+          }
+          console.log('REGRADE ' + key);
+          row.official = await callBackend('grade', { record: join(bundle.root, 'records', row.instanceId + '.json'), patch: join(executionRoot, 'prediction.patch'), imageId: validated.imageId, output: join(executionRoot, 'official'), timeout: integer('--timeout', 1800, 60, 7200) }, join(executionRoot, 'grading-controller'));
+          Object.assign(row, gradeObservation({ official: row.official, completed: row.completed, integrity: row.integrity, emptyPatch: row.emptyPatch, patchRejected: row.official.patchRejected === true }));
+        }
+      } catch (error) { Object.assign(row, { infrastructureFailure: true, reason: error.message, officialResolved: null, accepted: false, falseCompletion: null }); }
+      report.results.push(row); await save(join(executionRoot, 'execution.json'), row); await persist();
+    }
+  } catch (error) { report.infrastructureBlocked = true; report.error = error.message; process.exitCode = 2; }
+  finally { await persist(); }
+  console.log('Retained patch report (zero model requests): ' + join(output, 'report.json'));
+  if (!report.infrastructureBlocked && report.results.some((row) => !row.accepted)) process.exitCode = 1;
+}
+
 async function runSmoke() {
   trust();
   const bundle = await loadBundle(resolve(option('--bundle')));
@@ -243,7 +331,7 @@ async function runSmoke() {
   console.log(JSON.stringify({ passed: summary.passed, gates: summary.gates, error: summary.error, summary: join(output, 'summary.json'), realModelRequests: 0 }));
 }
 
-const help = `Forge SWE-bench Lite (Linux x86_64 + Docker; fixed official harness)\n\nCommands:\n  import --dataset file.jsonl [--cohort evals/swebench-lite/lite-20.json] --output NEW_DIR\n  prepare --bundle DIR\n  doctor [--python .venv/bin/python]\n  validate --bundle DIR --trust-suite --output NEW_DIR\n  evaluate --bundle DIR --validation FILE --model provider/model --budget FILE --workflow ablation --trust-suite --output NEW_DIR\n\nUse --resume-from PRIOR_OUTPUT to retain assessed successes and failures under identical code/package/budget/cohort identity, retrying only unfinished or infrastructure-failed executions.\nUse --python to select the Python venv with the pinned harness. Gold/test records stay outside the model's clean task container. Each measurement needs a new output directory. See docs/evaluations/swebench-lite-2026-11-10.md.`;
+const help = `Forge SWE-bench Lite (Linux x86_64 + Docker; fixed official harness)\n\nCommands:\n  import --dataset file.jsonl [--cohort evals/swebench-lite/lite-20.json] --output NEW_DIR\n  prepare --bundle DIR\n  doctor [--python .venv/bin/python]\n  validate --bundle DIR --trust-suite --output NEW_DIR\n  evaluate --bundle DIR --validation FILE --model provider/model --budget FILE --workflow ablation --trust-suite --output NEW_DIR\n\nUse regrade --source-run PRIOR_OUTPUT --bundle DIR --validation FILE --trust-suite --output NEW_DIR to independently grade retained patches with zero model requests. The original report remains unchanged.\nUse --resume-from PRIOR_OUTPUT to retain assessed successes and failures under identical code/package/budget/cohort identity, retrying only unfinished or infrastructure-failed executions.\nUse --python to select the Python venv with the pinned harness. Gold/test records stay outside the model's clean task container. Each measurement needs a new output directory. See docs/evaluations/swebench-lite-2026-11-10.md.`;
 try {
   if (command === 'import') await importCohort();
   else if (command === 'prepare') await prepare();
@@ -253,5 +341,6 @@ try {
   } else if (command === 'smoke') await runSmoke();
   else if (command === 'validate') await runValidation();
   else if (command === 'evaluate') await runEvaluation();
+  else if (command === 'regrade') await regradeRetained();
   else { console.log(help); if (command && command !== '--help') process.exitCode = 1; }
 } catch (error) { console.error('SWE-bench: ' + error.message); process.exitCode = 1; }

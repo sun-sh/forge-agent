@@ -78,6 +78,31 @@ export function validateCohort(artifact, manifest, backendHash) {
   if (artifact.valid !== artifact.results.filter((row) => row.valid === true).length) throw new Error('Invalid validation count');
   return new Map(artifact.results.map((row) => [row.instanceId, row]));
 }
+// Reassess retained v2 executions without treating a workflow gate as unavailable infrastructure.
+// Only structured host/child state is used; error-string keywords never decide quality scoring.
+export function retainedExecutionFailure(snapshot, { transportError, patchError, legacyError } = {}) {
+  const task = snapshot?.task;
+  const diagnostic = task?.error || snapshot?.error || legacyError;
+  const infrastructure = (reason) => ({ infrastructureFailure: true, reason, taskError: diagnostic ?? null });
+  const workflow = (kind) => ({ infrastructureFailure: false, workflowFailure: true, failureKind: kind, taskError: diagnostic ?? null });
+  if (transportError || patchError) return infrastructure(transportError || patchError);
+  if (!task || snapshot.running || !['completed', 'failed', 'needs_attention', 'budget_exceeded', 'aborted', 'interrupted'].includes(task.status)) return infrastructure('missing_terminal_task_snapshot');
+  if (task.finalization === 'failed') return infrastructure('host_finalization_failed');
+  // Provider errors in the latest parent response remain infrastructure failures.
+  const lastAssistant = snapshot.messages?.findLast((message) => message.role === 'assistant');
+  if (lastAssistant?.stopReason === 'error') return infrastructure('provider_request_failed');
+  if (task.status === 'completed' && !diagnostic && !legacyError) return { infrastructureFailure: false, workflowFailure: false, taskError: null };
+  const gates = (snapshot.subagents ?? []).filter((child) => child.purpose === 'review_gate' && typeof task.startedAt === 'string' && child.startedAt >= task.startedAt && child.status === 'failed');
+  if (gates.some((child) => child.budget?.exceededReason)) return workflow('review_budget');
+  if (gates.some((child) => child.errorCode === 'invalid_review')) return workflow('review_format');
+  if (task.status === 'budget_exceeded') return workflow('task_budget');
+  if (['aborted', 'interrupted'].includes(task.status)) return workflow('interrupted');
+  if (task.status === 'needs_attention') return workflow('completion_gate');
+  if (task.status === 'failed' && task.verification?.status === 'failed') return workflow('configured_check');
+  if (task.status !== 'completed' || diagnostic || legacyError) return infrastructure('unclassified_execution_failure');
+  return { infrastructureFailure: false, workflowFailure: false, taskError: null };
+}
+
 export function gradeObservation({ official, completed, integrity, emptyPatch, patchRejected = false, executionError = null }) {
   if (executionError) return { officialResolved: null, accepted: false, falseCompletion: null, infrastructureFailure: true, integrityViolation: integrity === false };
   const assessed = official?.valid === true || patchRejected;
@@ -92,6 +117,8 @@ export function summarize(results, workflows) {
     const times = evaluated.map((row) => row.executionMs).filter(Number.isFinite).sort((a, b) => a - b);
     return [workflow, { scheduled: rows.length, validationSkipped: rows.filter((row) => row.skipped).length, evaluated: evaluated.length,
       resolved: evaluated.filter((row) => row.officialResolved === true).length, accepted: evaluated.filter((row) => row.accepted).length,
+      forgeCompleted: evaluated.filter((row) => row.completed === true).length, resolvedNotCompleted: evaluated.filter((row) => row.officialResolved === true && row.completed !== true).length,
+      deliveredAccepted: evaluated.filter((row) => row.accepted && row.completed === true).length, workflowFailures: rows.filter((row) => row.workflowFailure).length,
       falseCompletions: evaluated.filter((row) => row.falseCompletion === true).length, infrastructureFailures: rows.filter((row) => row.infrastructureFailure).length,
       integrityViolations: rows.filter((row) => row.integrityViolation).length, emptyPatches: rows.filter((row) => row.emptyPatch).length,
       p50ExecutionMs: times.length ? times[Math.floor(times.length / 2)] : null,

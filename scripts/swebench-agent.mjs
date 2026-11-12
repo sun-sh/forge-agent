@@ -46,9 +46,6 @@ try {
     snapshot = await api('sessions/' + session.id);
     if (Date.now() > deadline) { await api('sessions/' + session.id + '/abort', {}); throw new Error('Fixed execution deadline exceeded'); }
   } while (snapshot.running);
-  if (snapshot?.task?.status === 'failed' || snapshot?.outcome === 'failed') {
-    failure ||= snapshot?.task?.error || snapshot?.error || 'Forge execution failed before delivery';
-  }
 } catch (error) { failure = error.message; }
 finally { await gateway?.close(); }
 const protection = compareProtectedPaths(before, await captureProtectedPaths(project, protectedPaths));
@@ -67,7 +64,7 @@ try {
 finally { await rm(indexRoot, { recursive: true, force: true }); }
 const testChanges = changed.filter(testPath);
 const result = { instanceId: input.instanceId, workflow: input.workflow, baseCommit: input.baseCommit, environmentSetupCommit: input.environmentSetupCommit, effectiveHead, completed: snapshot?.task?.status === 'completed', taskStatus: snapshot?.task?.status ?? snapshot?.outcome ?? 'failed',
-  error: failure || patchError, executionMs: started ? Math.round(performance.now() - started) : null,
+  error: failure || patchError, transportError: failure, patchError, taskError: snapshot?.task?.error || snapshot?.error, executionMs: started ? Math.round(performance.now() - started) : null,
   integrity: protection.status === 'unchanged' && !testChanges.length && !patchError,
   protection: protection.status, testChanges, changed, emptyPatch: !prediction.trim(), patchHash: createHash('sha256').update(prediction).digest('hex'),
   budget: snapshot?.budget, thinkingLevel: snapshot?.thinkingLevel, verification: snapshot?.verification?.status,

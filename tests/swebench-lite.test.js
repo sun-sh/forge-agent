@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
-import { parseDataset, makeManifest, selectCohort, loadBundle, sha256, validateCohort, gradeObservation, summarize, assertResumeIdentity, canReuseExecution, PROTOCOL, HARNESS_COMMIT } from '../scripts/swebench-protocol.mjs';
+import { parseDataset, makeManifest, selectCohort, loadBundle, sha256, validateCohort, gradeObservation, summarize, assertResumeIdentity, canReuseExecution, retainedExecutionFailure, PROTOCOL, HARNESS_COMMIT } from '../scripts/swebench-protocol.mjs';
 const execute = promisify(execFile), roots = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const fixture = (n = 1, repo = 'owner/repo') => ({ instance_id: repo.replace('/', '__') + '-' + n, repo, base_commit: 'a'.repeat(40), version: '1.0',
@@ -71,7 +71,7 @@ describe('SWE-bench frozen protocol and official outcome boundaries', () => {
   });
   it('retains every scheduled task while separating infrastructure and invalid-cohort counts', () => {
     const rows = [{ workflow: 'direct', officialResolved: true, accepted: true, executionMs: 100, budget: { totalTokens: 10, costIncomplete: true } }, { workflow: 'direct', skipped: true, infrastructureFailure: true }, { workflow: 'direct', officialResolved: false, falseCompletion: true, emptyPatch: true, executionMs: 200 }];
-    expect(summarize(rows, ['direct']).direct).toMatchObject({ scheduled: 3, validationSkipped: 1, evaluated: 2, resolved: 1, accepted: 1, falseCompletions: 1, infrastructureFailures: 1, emptyPatches: 1, costUsd: null });
+    expect(summarize(rows, ['direct']).direct).toMatchObject({ scheduled: 3, validationSkipped: 1, evaluated: 2, resolved: 1, accepted: 1, falseCompletions: 1, infrastructureFailures: 1, emptyPatches: 1, forgeCompleted: 0, resolvedNotCompleted: 1, deliveredAccepted: 0, costUsd: null });
   });
 });
 describe('SWE-bench portable entry points', () => {
@@ -99,6 +99,34 @@ describe('SWE-bench portable entry points', () => {
 });
 
 
+describe('retained patch regrading admission', () => {
+  it('refuses a changed cohort before launching Docker or mutating the original report', async () => {
+    const f = await bundle(), source = join(f.path, 'original'), output = join(f.path, 'regraded');
+    await mkdir(source);
+    const original = JSON.stringify({ protocol: PROTOCOL, cohortFingerprint: 'different cohort', backendHash: 'irrelevant' });
+    await writeFile(join(source, 'report.json'), original);
+    await expect(execute(process.execPath, ['scripts/swebench-lite.mjs', 'regrade', '--source-run', source, '--bundle', f.path, '--validation', 'not-used', '--trust-suite', '--output', output], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('identity mismatch') });
+    expect(await readFile(join(source, 'report.json'), 'utf8')).toBe(original);
+    await expect(readFile(join(output, 'report.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('rejects output inside a fingerprint-valid source before creating or overwriting artifacts', async () => {
+    const f = await bundle(), source = join(f.path, 'original'); await mkdir(join(source, 'harness'), { recursive: true });
+    const backendHash = sha256(await readFile(new URL('../scripts/swebench-backend.py', import.meta.url)));
+    const validRow = { instanceId: f.manifest.tasks[0].instanceId, valid: true, imageId: 'sha256:' + 'b'.repeat(64), baseline: { valid: true, resolved: false, baselineExpectedFailure: true }, reference: { valid: true, resolved: true } };
+    const validation = { protocol: PROTOCOL, cohortFingerprint: f.manifest.fingerprint, harnessCommit: HARNESS_COMMIT, backendHash, total: 1, valid: 1, results: [validRow] };
+    const validationPath = join(f.path, 'validation.json'); await writeFile(validationPath, JSON.stringify(validation));
+    const sourceFiles = ['scripts/swebench-lite.mjs', 'scripts/swebench-protocol.mjs', 'scripts/swebench-backend.py', 'scripts/swebench-agent.mjs', 'scripts/swebench-provider-preflight.mjs', 'scripts/evaluation-protocol.mjs', 'evals/swebench-lite/harness-requirements.txt', 'scripts/download-swebench-lite.py', 'scripts/swebench-smoke-model.mjs'];
+    let combined = '';
+    for (const file of sourceFiles) { await writeFile(join(source, 'harness', file.replaceAll('/', '__')), 'retained source'); combined += file + 'retained source'; }
+    const report = { protocol: PROTOCOL, cohortFingerprint: f.manifest.fingerprint, backendHash, validationFingerprint: sha256(JSON.stringify(validation)), harnessFingerprint: sha256(combined), expectedExecutions: 1, schedule: [{ instanceId: validRow.instanceId, workflow: 'planned', run: 1 }], results: [] };
+    const original = JSON.stringify(report); await writeFile(join(source, 'report.json'), original);
+    const output = join(source, 'nested');
+    await expect(execute(process.execPath, ['scripts/swebench-lite.mjs', 'regrade', '--source-run', source, '--bundle', f.path, '--validation', validationPath, '--trust-suite', '--output', output], { windowsHide: true })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('outside the immutable source') });
+    expect(await readFile(join(source, 'report.json'), 'utf8')).toBe(original);
+    await expect(readFile(join(output, 'source-report.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
 describe('SWE-bench resumption identity', () => {
   it('requires the same code, cohort, validation, budget, model and schedule', () => {
     const current = { protocol: PROTOCOL, cohortFingerprint: 'cohort', harnessFingerprint: 'code', backendHash: 'backend', model: 'provider/model', thinking: 'medium', limits: { maxDurationMs: 60000 }, validationFingerprint: 'validated', schedule: [{ instanceId: 'a', workflow: 'direct', run: 1 }] };
@@ -111,5 +139,41 @@ describe('SWE-bench resumption identity', () => {
     expect(canReuseExecution({ officialResolved: false, official: { patchRejected: true } })).toBe(true);
     expect(canReuseExecution({ officialResolved: null, infrastructureFailure: true })).toBe(false);
     expect(canReuseExecution({ official: { valid: true } })).toBe(false);
+  });
+});
+
+describe('retained SWE-bench workflow classification', () => {
+  const startedAt = '2026-11-12T08:00:00.000Z';
+  const snapshot = (status, extra = {}) => ({ running: false, task: { status, startedAt, finalization: 'succeeded', ...extra } });
+  it('scores host gate, budget and verification failures as workflow outcomes', () => {
+    for (const [status, kind] of [['needs_attention', 'completion_gate'], ['budget_exceeded', 'task_budget'], ['aborted', 'interrupted'], ['interrupted', 'interrupted']]) {
+      expect(retainedExecutionFailure(snapshot(status, { error: 'Task did not finish' }), { legacyError: 'Task did not finish' })).toMatchObject({ infrastructureFailure: false, workflowFailure: true, failureKind: kind });
+    }
+    expect(retainedExecutionFailure(snapshot('failed', { verification: { status: 'failed' }, error: 'Check failed' }))).toMatchObject({ infrastructureFailure: false, failureKind: 'configured_check' });
+  });
+  it('keeps reviewer-local budget and malformed output in the workflow denominator without error-string guessing', () => {
+    for (const evidence of [{ budget: { exceededReason: 'Any localized budget reason' } }, { errorCode: 'invalid_review' }]) {
+      const data = { ...snapshot('failed', { error: 'Reviewer did not complete' }), subagents: [{ purpose: 'review_gate', status: 'failed', startedAt, ...evidence }] };
+      expect(retainedExecutionFailure(data, { legacyError: data.task.error })).toMatchObject({ infrastructureFailure: false, workflowFailure: true });
+      data.subagents[0].startedAt = '2026-11-11T08:00:00.000Z';
+      expect(retainedExecutionFailure(data).infrastructureFailure).toBe(true);
+    }
+  });
+  it('does not turn an earlier failed reviewer into a failure after the workflow actually recovered', () => {
+    const data = { ...snapshot('completed'), subagents: [{ purpose: 'review_gate', status: 'failed', startedAt, budget: { exceededReason: 'local limit' } }, { purpose: 'review_gate', status: 'completed', startedAt }] };
+    expect(retainedExecutionFailure(data)).toEqual({ infrastructureFailure: false, workflowFailure: false, taskError: null });
+  });
+  it('retains transport, provider, patch and persistence faults as infrastructure even with a terminal host state', () => {
+    for (const signals of [{ transportError: 'HTTP polling failed' }, { patchError: 'Patch collection failed' }]) expect(retainedExecutionFailure(snapshot('completed'), signals).infrastructureFailure).toBe(true);
+    expect(retainedExecutionFailure({ ...snapshot('failed'), messages: [{ role: 'assistant', stopReason: 'error' }] }).infrastructureFailure).toBe(true);
+    expect(retainedExecutionFailure(snapshot('needs_attention', { finalization: 'failed' })).infrastructureFailure).toBe(true);
+    expect(retainedExecutionFailure({ running: false }).infrastructureFailure).toBe(true);
+    expect(retainedExecutionFailure(snapshot('failed', { error: 'unknown runtime fault' })).infrastructureFailure).toBe(true);
+  });
+  it('does not invent a successful delivery when official grading passes a stopped workflow', () => {
+    const host = retainedExecutionFailure(snapshot('needs_attention', { error: 'Unconfirmed criterion' }));
+    const grade = gradeObservation({ official: { valid: true, resolved: true }, completed: false, integrity: true, emptyPatch: false });
+    expect(host).toMatchObject({ infrastructureFailure: false, workflowFailure: true });
+    expect(grade).toMatchObject({ officialResolved: true, accepted: true, falseCompletion: null, infrastructureFailure: false });
   });
 });

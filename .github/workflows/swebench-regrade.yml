@@ -1,0 +1,68 @@
+name: swebench-regrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Original swebench-real run whose immutable patches will be graded (no model calls)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  regrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install controller and pinned official harness
+        run: |
+          npm ci
+          python -m venv .venv-swebench
+          .venv-swebench/bin/python -m pip install -r evals/swebench-lite/harness-requirements.txt
+      - name: Validate source run ID
+        run: |
+          node --input-type=module -e "if (!/^[0-9]+$/.test(process.env.SOURCE_RUN_ID)) throw new Error('Invalid source run ID')"
+      - name: Download original immutable model evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: swebench-real-evidence-${{ inputs.source_run_id }}
+          path: .forge-agent/regrade-source
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Import the original frozen task selection
+        run: |
+          .venv-swebench/bin/python scripts/download-swebench-lite.py --output .forge-agent/swebench-data
+          INSTANCE_IDS=$(node --input-type=module -e "import { readFile } from 'node:fs/promises'; const report = JSON.parse(await readFile('.forge-agent/regrade-source/swebench-real-run/report.json')); console.log([...new Set(report.schedule.map(row => row.instanceId))].join(','));")
+          node scripts/swebench-lite.mjs import --dataset .forge-agent/swebench-data/test.jsonl --cohort evals/swebench-lite/lite-20.json --instance "$INSTANCE_IDS" --output .forge-agent/regrade-bundle
+      - name: Grade retained patches with zero model requests
+        run: |
+          npm run eval:swebench:regrade -- \
+            --python "$PWD/.venv-swebench/bin/python" \
+            --bundle .forge-agent/regrade-bundle \
+            --source-run .forge-agent/regrade-source/swebench-real-run \
+            --validation .forge-agent/regrade-source/swebench-real-validation/cohort-validation.json \
+            --trust-suite \
+            --output .forge-agent/swebench-regraded
+      - name: Upload separate regrading evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swebench-regrade-evidence-${{ github.run_id }}
+          path: |
+            .forge-agent/swebench-regraded
+            .forge-agent/regrade-source/swebench-real-validation
+          if-no-files-found: warn
+          retention-days: 14

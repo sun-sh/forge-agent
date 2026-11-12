@@ -129,3 +129,28 @@ npm run eval:swebench -- \
 工作流在创建 Docker 任务前会使用相同的隔离 Provider 配置发送一个最小的 `Reply with exactly OK.` 请求，验证 Base URL、Key、协议和模型 ID。这个 preflight 会产生一次真实模型请求；失败会立即停止，避免先消耗三题容器时间。当前官方 DeepSeek 地址支持的模型 ID 以服务端返回为准，例如 `deepseek-flash`；聚合网关的模型 ID 不能直接套用到官方地址。
 
 Git workspace evidence treats tracked symlinks and Git submodule entries as opaque metadata. It records the link target or gitlink object without entering the target repository; non-Git nested repositories and unsafe external links remain unconfirmed. This keeps protected-path and freshness checks strict while allowing large repositories with untouched submodules to reach independent grading.
+
+
+## 执行失败分类与保留补丁补判
+
+`executionClassificationVersion: 1` 将有结构化证据的工作流停止保留在质量分母：任务/独立 reviewer 预算耗尽、审阅格式无效、完成门禁未确认、配置检查失败和执行中断，都不再仅因错误文字存在而成为基础设施失败。Provider 请求、HTTP/进程通信、补丁采集、落盘收尾、Docker/官方日志缺失以及无法确定来源的运行错误仍单独计为基础设施问题。分类依据任务、子任务和 Pi 消息字段，不匹配错误文字关键词。
+
+原始 v2 报告把所有 `agent.error` 都视为基础设施故障。该原始测量不覆盖也不改写；可对完全相同的已保存补丁做官方补判：
+
+```bash
+npm run eval:swebench:regrade -- \
+  --python .venv-swebench/bin/python \
+  --bundle .forge-agent/original-bundle \
+  --source-run .forge-agent/original-run \
+  --validation .forge-agent/original-validation/cohort-validation.json \
+  --trust-suite \
+  --output .forge-agent/new-regraded-report
+```
+
+手动工作流 `.github/workflows/swebench-regrade.yml` 只需要原 `swebench-real` 的 run ID，通过同仓库只读 artifact 权限下载保留证据，不读取 Provider Secrets，不调用模型。数据、原运行/校验/包/补丁指纹和官方 harness 必须匹配；镜像必须仍有原 content ID。原报告与原 harness 留存，新判题代码单独指纹，`regrade.sourceReportHash` 和 `realModelRequests: 0` 标明出处。每次输出新目录；未执行的源任务也保留，不重采样。
+
+同时比较 `officialResolved`、`forgeCompleted`、`accepted`（官方通过且文件完整性通过）、`deliveredAccepted`（accepted 且宿主完成）、false completion 和 `resolvedNotCompleted`（补丁通过但流程未交付）。降低错误完成不能单独证明编码提升；可能只是审阅更容易停止，必须结合官方通过率、可交付率、耗时与用量。
+
+### Execution-failure classification and retained-patch regrading
+
+Classification version 1 keeps structurally evidenced workflow stops in the quality denominator: parent/reviewer budgets, malformed review, unconfirmed completion gates, configured-check failure and interruption. Provider, transport, patch collection, finalization storage, Docker, absent official test evidence and unknown runtime faults remain infrastructure. It uses task/child/Pi message fields, not localized error keywords. Historical reports remain immutable. The keyless `swebench-regrade` workflow grades the original patches under matching data/package/patch/validation/image identities, records the new grader fingerprint and source report hash separately, and makes zero model requests. Compare delivered acceptance and resolved-but-not-completed alongside official resolution and false completion so abstention is not presented as a coding-quality gain.

@@ -30,7 +30,8 @@
     "check": "node scripts/check.mjs",
     "start": "node dist/pi-cli.js web",
     "check:agent": "node dist/pi-cli.js --version",
-    "eval:review": "npm run build && node scripts/evaluate-reviewer.mjs"
+    "eval:review": "npm run build && node scripts/evaluate-reviewer.mjs",
+    "eval:swebench:regrade": "node scripts/swebench-lite.mjs regrade"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.4.0",
