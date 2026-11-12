@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-12",
+  "protocol": "forge-swebench-lite-official-v2",
+  "scope": "Purposive two-issue regression, one new model sample per issue; not a paired replay or representative quality benchmark.",
+  "runId": "43204052484",
+  "codeRevision": "b574ddb269c95f05bbfbeb25a52f2bc42c294ce1",
+  "model": "deepseek-flash",
+  "api": "openai-completions",
+  "thinking": "medium",
+  "cohortFingerprint": "6f849fab0a72be3783f518cd07ed75da3c9dae18b084cc3b3529826df4ed84c6",
+  "harnessCommit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+  "harnessFingerprint": "8c8b95443085bab90241e8d4daa4e8716190cc93b205f2e220f2c32167c5ceeb",
+  "backendHash": "06de453652119882dc311f17cd4c1e8aca5e52b09b6fd5a6ba46cfde4c923abc",
+  "packageHash": "b5a6b3906c6b08b5cd1019243dc52df01efd8bdf4d315af88c67f094b223c82d",
+  "validationFingerprint": "0c925e945e267c43cdf6473ba3d290cbb581e010c0f8e1c9b8f5023eb11c3e1a",
+  "limits": {
+    "maxDurationMs": 1800000,
+    "maxModelTurns": 160,
+    "maxToolCalls": 400,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 200000,
+    "maxCostUsd": 50
+  },
+  "pricingKnown": false,
+  "startedAt": "2026-11-12T10:55:40.968Z",
+  "finishedAt": "2026-11-12T11:09:53.061Z",
+  "validation": {
+    "valid": 2,
+    "total": 2,
+    "harness": {
+      "commit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+      "version": "5.0.2",
+      "sourceHash": "96c0f10104f3a401aecaed82dd8e8236c2c6604b9969b5aa6135af302a15b3d9"
+    }
+  },
+  "summary": {
+    "scheduled": 2,
+    "assessed": 2,
+    "officialResolved": 2,
+    "forgeCompleted": 2,
+    "deliveredAccepted": 2,
+    "falseCompletions": 0,
+    "infrastructureFailures": 0,
+    "integrityViolations": 0,
+    "reviewCalls": 3,
+    "repairs": 1,
+    "modelTurns": 140,
+    "toolCalls": 149,
+    "requestTokens": 5240594,
+    "outputTokens": 68208,
+    "cacheReadTokens": 4785792,
+    "costUsd": null
+  },
+  "results": [
+    {
+      "instanceId": "astropy__astropy-6938",
+      "workflow": "planned",
+      "run": 1,
+      "officialResolved": true,
+      "forgeCompleted": true,
+      "taskStatus": "completed",
+      "accepted": true,
+      "falseCompletion": false,
+      "infrastructureFailure": false,
+      "integrity": true,
+      "testChanges": 0,
+      "emptyPatch": false,
+      "patchHash": "f53ef6d687437a9f7102b8d3b63721d3f562087fbb2ac26aa77d126c8cf72f8d",
+      "executionMs": 563729,
+      "modelTurns": 111,
+      "toolCalls": 121,
+      "requestTokens": 4763595,
+      "inputTokens": 326141,
+      "outputTokens": 56654,
+      "cacheReadTokens": 4380800,
+      "cacheWriteTokens": 0,
+      "reviewCalls": 2,
+      "repairs": 1,
+      "reviewVerdict": "ready",
+      "reviewAcceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        }
+      ],
+      "reviewerModelTurns": [
+        23,
+        8
+      ],
+      "verificationScope": "changed-python-syntax-only"
+    },
+    {
+      "instanceId": "sympy__sympy-18189",
+      "workflow": "planned",
+      "run": 1,
+      "officialResolved": true,
+      "forgeCompleted": true,
+      "taskStatus": "completed",
+      "accepted": true,
+      "falseCompletion": false,
+      "infrastructureFailure": false,
+      "integrity": true,
+      "testChanges": 0,
+      "emptyPatch": false,
+      "patchHash": "3791f04f95d75f984bdca1412e7b098ae9cf0a01f4c7ca10e791d960a2222026",
+      "executionMs": 123241,
+      "modelTurns": 29,
+      "toolCalls": 28,
+      "requestTokens": 476999,
+      "inputTokens": 60453,
+      "outputTokens": 11554,
+      "cacheReadTokens": 404992,
+      "cacheWriteTokens": 0,
+      "reviewCalls": 1,
+      "repairs": 0,
+      "reviewVerdict": "ready",
+      "reviewAcceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        }
+      ],
+      "reviewerModelTurns": [
+        5
+      ],
+      "verificationScope": "changed-python-syntax-only"
+    }
+  ],
+  "runtimeDistFingerprint": "5cef772d99a39481568d2355c9bb294f4d211f4efc4dc0fe59c5fc4ab4f4818c",
+  "handoffObservations": {
+    "sympy": {
+      "reviewReceipts": 5,
+      "reviewModelTurns": 5
+    },
+    "astropy": {
+      "initialReceipts": 0,
+      "initialModelTurns": 23,
+      "repairReceipts": 12,
+      "repairOmittedReceipts": 17,
+      "repairModelTurns": 8
+    }
+  }
+}

@@ -14,6 +14,12 @@ The [three-arm report](evaluations/swebench-ablation-2026-11-12.md) and [allowli
 
 The original Planned report misclassified six workflow stops as infrastructure; all original rows are preserved. A separate keyless official regrading run uses identical patches and snapshots, produces zero model calls, retains original verdicts and brings official assessment to 15/15 with zero true infrastructure failures. Runtime dist hashes, image content IDs, model/harness identities and limits match across arms; all fingerprints are in the report. The follow-up receipt handoff and UI/classification changes postdate the model measurements and do not inherit their quality scores.
 
+## Command-evidence repair-path regression — 2026-11-12
+
+The [targeted real-model report](evaluations/review-command-evidence-2026-11-12.md) and [allowlisted aggregate](evaluations/review-command-evidence-2026-11-12.json) run the repaired code on Astropy and SymPy once each: both officially resolve and complete Forge delivery, with no false completions, integrity failures or infrastructure failures. SymPy’s reviewer receives five command receipts. Astropy initially has none and is correctly blocked, then uses one bounded repair, actual test receipts and a fresh review to finish. Its 111 turns and 563.7-second execution remain an efficiency concern. These purposively selected new model samples do not replace the original ablation or establish a general reviewer benefit.
+
+Final runtime CI at the measured code revision passes four OS/Node combinations, with 50 test files and 704 Windows / 701 Ubuntu cases plus tarball checks. A retained earlier mixed-source local check failure is distinguished from clean final CI in the report.
+
 ## Conversation qualification and five-task repetition — 2026-11-10
 
 The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.

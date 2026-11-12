@@ -84,7 +84,7 @@ Web 对单条模型回复触及最大输出（含只有思考、没有正文或�
 
 **Pi 负责**模型/工具循环、认证、内置工具、会话树、压缩、MCP 协议、Skills、扩展及资源发现。**Forge 负责**任务状态与交接、验证及保护门禁、预算/执行所有权、恢复、子任务生命周期和 Web 产品层；旧原型不属于活动构建。
 
-[Architecture Deep Dive](docs/architecture-deep-dive.md)解释设计与取舍；[评测文档](docs/evaluation.md)保留回归、模拟服务及真实模型结果。最新的 [SWE-bench Lite 三组实测](docs/evaluations/swebench-ablation-2026-11-12.md)使用 5 道真实 issue、每题每组重复 3 次：Direct / Planned-no-review / Planned 官方通过分别为 **9/15、11/15、9/15**，正确且完成交付分别为 **9、11、5**。当前独立审阅未带来交付改善；小样本也不足以证明规划普遍更强。默认保持自适应。分数绑定报告中的旧代码，后续修复尚未测得真实收益。
+[Architecture Deep Dive](docs/architecture-deep-dive.md)解释设计与取舍；[评测文档](docs/evaluation.md)保留回归、模拟服务及真实模型结果。最新的 [SWE-bench Lite 三组实测](docs/evaluations/swebench-ablation-2026-11-12.md)使用 5 道真实 issue、每题每组重复 3 次：Direct / Planned-no-review / Planned 官方通过分别为 **9/15、11/15、9/15**，正确且完成交付分别为 **9、11、5**。当前独立审阅未带来交付改善；小样本也不足以证明规划普遍更强。默认保持自适应。分数绑定报告中的旧代码。补齐审阅命令证据后的 [Astropy / SymPy 定向真实回归](docs/evaluations/review-command-evidence-2026-11-12.md)为 2/2 官方通过并完成交付；它只确认修复路径可用，尚未证明通用质量或效率收益。
 
 [真实模型 GitHub 工作流](.github/workflows/swebench-real.yml)需要显式配置的 Provider Secrets；[无 Key 补判](.github/workflows/swebench-regrade.yml)使用原补丁、保留旧报告并单列已解决但未交付的结果。[评测协议](docs/evaluations/swebench-lite-2026-11-10.md)记录固定名单、官方 harness、预算和隔离边界；[早期小题对照](docs/evaluations/deepseek-current-ablation-2026-11-11.md)及原始失败继续保留。关闭审阅仅限隔离评测，生产请求不能绕过门禁。
 

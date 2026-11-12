@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Qualify the command-evidence repair on two fresh real-model SWE-bench executions: Astropy and SymPy both pass official grading and Forge delivery. Preserve the single Astropy repair and its high cost, exact model/package/harness identities, prior ablation and mixed-source local failure. Treat 2/2 as a purposive regression rather than a general quality claim.
+
 - Publish the complete five-issue, three-repetition SWE-bench ablation with per-run fingerprints. Direct / evaluator-only planned-no-review / Planned resolve 9/15, 11/15 and 9/15, while correct completed deliveries are 9, 11 and 5. Retain the original Planned classification error and zero-model-call official regrading. Keep adaptive default; the independent reviewer shows no delivery benefit here and later fixes have no measured quality gain yet.
 
 - Supply independent reviewers bounded historical native shell receipts from the current task’s latest implementation, retaining failures, excerpt hashes and omission counts without sharing thinking or dialogue. Mark the receipts as historical and unattested, keep current verification/acceptance gates and read-only permissions, omit apparent credentials, and remind reviewers that the model-authored ledger cannot narrow the original user goal. This repairs an observed evidence handoff gap; real-model quality gains are not yet measured.
