@@ -46,7 +46,7 @@ stateDiagram-v2
 - 探索和审阅只注册 Pi 内置 `read/grep/find/ls`；可写 worker 另有 `write/edit`。调用再次检查来源与白名单。不加载全局或项目可执行扩展、MCP、codemode、提示模板或技能，也不解析/安装资源包或缓存预热。读取工具仍具有启动者权限，这不是 OS 沙箱。
 - 最多三个普通活跃子任务，从初始化开始预留名额，等清理结束才释放；单次用户请求最多十二次普通激活，自动继续不会重置计数。交付审阅由宿主单独计数，但同样受并发、父预算和每次门禁预算约束。
 - 主任务继续持有规范化项目锁。探索/审阅读取主目录；每个 worker 在 home 下独立 detached Git worktree 内写入。终端和其他主目录写入仍互斥。
-- 子任务的模型回合、工具调用、token 和费用同时计入父预算，另有每次激活预算；普通子任务上限为 3 分钟/12 回合/60 工具/16,000 生成 token/$2，reviewGate 使用更大的但仍有界的 8 分钟/40 回合/160 工具/48,000 生成 token/$6。父预算、取消信号和费用上限优先，reviewGate 不会把总任务预算扩大；审阅自身达到上限会以可识别的 `needs_attention` 原因结束，不伪装成代码失败或成功。
+- 子任务的模型回合、工具调用、token 和费用同时计入父预算，另有每次激活预算；普通子任务上限为 3 分钟/12 回合/60 工具/16,000 生成 token/$2，reviewGate 默认 5 分钟/24 回合/120 工具/32,000 生成 token/$4；设置中可显式选择扩展档 8 分钟/40 回合/160 工具/48,000 生成 token/$6。父预算、取消信号和费用上限优先，reviewGate 不会把总任务预算扩大；审阅自身达到上限会以可识别的 `needs_attention` 原因结束，不伪装成代码失败或成功。
 - 父停止、关闭服务或执行收尾会停止并等待子任务。空闲 abort 或重复 dispose 的尽力清理错误不篡改已完成结果；变更封存失败会记为失败。
 
 ## 可写任务与应用
@@ -68,3 +68,5 @@ worker 需要有 HEAD 的 Git 仓库。以当前提交创建独立 worktree，�
 Forge owns admission, a parent-owned catalog, capacity reservation, cancellation, aggregate budgets and result collection. Pi owns every child model/tool loop. `action=start` returns handles immediately; `status`, bounded `wait` and `result` manage retrieval. Pi's settlement boundary returns unread results for synthesis, and a host completion guard fails closed if collection fails. Omitting action retains blocking batches. Up to three children can explore/review with readers or edit detached worktrees. Read-only children support follow-ups; writers require new delegation. The compact catalog opens a separate details/review panel. Ordinary history omits internal children.
 
 Ownership does not survive an ordinary fork. Active records restore as interrupted without replay. Children inherit model/effort, have independent contexts, and cannot execute extensions, MCP or shell commands. Writers produce sealed proposals for explicit selected-file application; stale revisions and main-project conflicts are refused and application creates undo evidence. The user can apply only, or apply and run configured parent-project verification under the same project lease without another model request. Missing checks are rejected before writing; failed checks retain applied content and original output. Worktree cleanup retains proposals/transcripts. Parent cancellation waits for cleanup. These are application tool policies, not OS isolation. Automatic merge, direct child-panel messages, separate child models, external backends and measured quality gains remain outside the implementation.
+
+See [review outcomes / 审阅结果](review-outcomes.md) for structured stop reasons, recovery actions, legacy records, budget opt-in and missed-defect evidence boundaries.

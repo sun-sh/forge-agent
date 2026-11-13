@@ -30,6 +30,30 @@ export const reviewCases = Object.entries(variants).map(([id, variant]) => {
     acceptance: variant.criteria.map((criterion, index) => ({ id: 'A' + (index + 1), criterion, check: 'inspection', evidence: 'Current implementation and its behavior for the specified inputs.' })) };
 });
 
+// Executable mechanism regressions inspired by retained Flask/Matplotlib misses.
+// These dependency-free analogues are NOT upstream patches or official SWE-bench.
+const routeInitial = 'export function register(name, endpoint = "index") { if (endpoint.includes(".")) throw new TypeError("dotted endpoint"); return name + "." + endpoint; }\n';
+const routeCorrect = 'export function register(name, endpoint = "index") { if (name.includes(".")) throw new TypeError("dotted name"); if (endpoint.includes(".")) throw new TypeError("dotted endpoint"); return name + "." + endpoint; }\n';
+const routeDefective = 'export function register(name, endpoint = "index") { if (name.includes(".")) throw new TypeError("dotted name"); return name + "." + endpoint; }\n';
+const columnInitial = 'export function lineCoordinates(xs) { return xs; }\n';
+const columnCorrect = 'export function lineCoordinates(xs) { if (!Array.isArray(xs)) return [xs]; if (!xs.some(Array.isArray)) return [...xs]; if (xs.every(x => Array.isArray(x) && x.length === 1 && !Array.isArray(x[0]))) return xs.map(x => x[0]); throw new TypeError("unsupported shape"); }\n';
+const columnDefective = 'export function lineCoordinates(xs) { if (!Array.isArray(xs)) return [xs]; if (xs.some(Array.isArray)) throw new TypeError("require 1D"); return [...xs]; }\n';
+reviewCases.push(...[
+  { id: 'endpoint-override-regression', prompt: 'Reject dots in a registered group name because dots separate nested namespaces. Preserve existing public endpoint behavior, including explicit endpoint arguments.', initial: routeInitial, correct: routeCorrect, defective: routeDefective,
+    visible: 'assert.equal(mod.register("api"), "api.index"); assert.throws(() => mod.register("bad.name"));',
+    oracle: 'assert.equal(mod.register("api", "show"), "api.show"); assert.throws(() => mod.register("api", "a.b"), TypeError);',
+    criteria: ['Dotted group names are rejected.', 'Valid names still work; existing explicit endpoint validation is preserved.'] },
+  { id: 'column-vector-regression', prompt: 'Fix failed coordinate conversions so an invalid shape is rejected without corrupting later plotting. Preserve the public contract: scalar, 1D and Nx1 column vectors are supported; matrices wider than one column are unsupported.', initial: columnInitial, correct: columnCorrect, defective: columnDefective,
+    visible: 'assert.deepEqual(mod.lineCoordinates([1,2]), [1,2]); assert.throws(() => mod.lineCoordinates([[1,2],[3,4]])); assert.deepEqual(mod.lineCoordinates([3,4]), [3,4]);',
+    oracle: 'assert.deepEqual(mod.lineCoordinates([[1],[2]]), [1,2]); assert.deepEqual(mod.lineCoordinates(3), [3]);',
+    criteria: ['Unsupported input is rejected and a later valid conversion succeeds.', 'Preserve all previously supported input shapes.'],
+    ledgerConstraints: ['Implementer assumption: all two-dimensional data must be rejected to prevent conversion failures.'] }
+].map((entry) => ({ id: entry.id, prompt: entry.prompt, entry: 'solution.mjs',
+  initialFiles: { 'solution.mjs': entry.initial }, correctFiles: { 'solution.mjs': entry.correct }, defectiveFiles: { 'solution.mjs': entry.defective },
+  visible: entry.visible, oracle: entry.oracle, ledgerConstraints: entry.ledgerConstraints,
+  provenance: 'synthetic-mechanism-analogue-not-upstream',
+  acceptance: entry.criteria.map((criterion, index) => ({ id: 'A' + (index + 1), criterion, check: 'inspection', evidence: 'Trace the public implementation and supported input contract.' })) })));
+
 /** Frozen v1 policy for prompt comparison only; not imported by the product runtime. */
 export function legacyReviewPrompt(task, patch) {
   const evidence = { originalRequest: { characters: task.prompt.length, text: task.prompt, truncated: false }, originalGoal: task.requirements.goal,

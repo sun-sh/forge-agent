@@ -1,6 +1,6 @@
 import { marked } from '/vendor/marked.js';
 import DOMPurify from '/vendor/purify.js';
-import { safeMarkdown, textContent, sessionOutcome, verificationLabel } from './render.js';
+import { safeMarkdown, textContent, sessionOutcome, verificationLabel, reviewStopView } from './render.js';
 import { readEventStream, StreamError } from './stream.js';
 import { mountCustomProviders } from './providers.js';
 import { mountMcp } from './mcp.js';
@@ -350,8 +350,9 @@ function renderComposerControl() {
   $('composer-run-note').classList.toggle('hidden', !interrupted);
   if (interrupted) {
     const task = state.task;
-    $('composer-run-reason').textContent = task.status === 'budget_exceeded' ? '本段达到执行预算，可继续未完成部分' : task.status === 'aborted' ? '执行已停止，可继续未完成部分' : task.status === 'interrupted' ? '服务退出导致任务中断' : '任务在' + (TASK_LABELS[task.phase] || '执行') + '阶段暂停';
-    $('composer-run-detail').textContent = task.error || state.error || '检查当前结果后点击继续，或发送补充信息。';
+    const reviewStatus = task.phase === 'review' ? reviewStopView(task) : null;
+    $('composer-run-reason').textContent = reviewStatus?.label || (task.status === 'budget_exceeded' ? '本段达到执行预算，可继续未完成部分' : task.status === 'aborted' ? '执行已停止，可继续未完成部分' : task.status === 'interrupted' ? '服务退出导致任务中断' : '任务在' + (TASK_LABELS[task.phase] || '执行') + '阶段暂停');
+    $('composer-run-detail').textContent = reviewStatus?.detail || task.error || state.error || '检查当前结果后点击继续，或发送补充信息。';
   }
   resizeComposerInputs();
 }
@@ -1347,12 +1348,13 @@ function renderTask(task) {
   const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
   const visited = new Set((task.phases || []).map((item) => item.phase));
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? 'skipped' : 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? '—' : '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
-  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || '需要检查';
+  const reviewStatus = reviewStopView(task);
+  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : reviewStatus && task.phase === 'review' ? reviewStatus.label : task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || '需要检查';
   $('task-summary-phase').textContent = TASK_LABELS[task.phase] || '任务进度';
   $('task-summary-note').textContent = compactStatus + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '');
-  $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : task.error || sessionOutcome({ task }).label;
-  $('task-review').textContent = task.review ? (task.reviewer?.context === 'independent' ? '独立审阅' : '模型审阅') + (task.review.freshness === 'stale' ? '（已过期）' : task.review.freshness !== 'current' ? '（当前版本未确认）' : '') + '：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
-    + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : task.workflow === 'direct' || task.kind === 'verify' ? '本次未进行模型审阅。' : implementationWithoutChecks(task) ? '未配置自动验证，本次未启用独立审阅。' : '审阅尚未完成。';
+  $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : reviewStatus && task.phase === 'review' ? reviewStatus.detail + (task.error ? '\n' + task.error : '') : task.error || sessionOutcome({ task }).label;
+  $('task-review').textContent = (reviewStatus ? reviewStatus.label + '\n' + reviewStatus.detail + '\n' : '') + (task.review ? (task.reviewer?.context === 'independent' ? '独立审阅' : '模型审阅') + (task.review.freshness === 'stale' ? '（已过期）' : task.review.freshness !== 'current' ? '（当前版本未确认）' : '') + '：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
+    + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : task.workflow === 'direct' || task.kind === 'verify' ? '本次未进行模型审阅。' : implementationWithoutChecks(task) ? '未配置自动验证，本次未启用独立审阅。' : '审阅尚未完成。');
   $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
   const criteria = task.plan?.acceptance || [];
   $('task-plan').innerHTML = criteria.length ? '<details class="acceptance-plan"><summary>目标与验收 · ' + criteria.length + ' 项</summary><p>' + esc(task.plan.summary) + '</p><ol>' + criteria.map((item) => {
@@ -1930,10 +1932,15 @@ async function openSettings(tab, editModel) {
       toast('已填入预算预设；费用上限保持原值，点击保存后在下一段执行生效');
     }));
     const saveBudget = $('save-agent-budget');
+    const reviewBudgetLabel = document.createElement('label'); reviewBudgetLabel.textContent = '独立审阅预算';
+    const reviewBudgetSelect = document.createElement('select'); reviewBudgetSelect.id = 'budget-review-profile';
+    for (const [value, label] of [['standard', '标准 · 5 分钟 / 24 回合 / $4'], ['extended', '扩展 · 8 分钟 / 40 回合 / $6']]) { const option = document.createElement('option'); option.value = value; option.textContent = label; reviewBudgetSelect.append(option); }
+    reviewBudgetSelect.value = settings.reviewBudget || 'standard'; reviewBudgetLabel.append(reviewBudgetSelect);
+    saveBudget?.before(reviewBudgetLabel);
     if (saveBudget) saveBudget.onclick = async () => {
       const value = { maxDurationMs: Number($('budget-duration').value) * 60000, maxModelTurns: Number($('budget-turns').value), maxToolCalls: Number($('budget-tools').value), maxTotalTokens: Number($('budget-tokens').value), maxOutputTokens: Number($('budget-output-tokens').value), maxCostUsd: Number($('budget-cost').value) };
       setBusy(saveBudget, true, '保存中…');
-      try { const result = await api('/api/settings/budget', { method: 'POST', body: JSON.stringify({ budget: value }) }); settings.budget = result.budget; toast('执行预算已保存，下一条消息或继续任务时生效'); }
+      try { const result = await api('/api/settings/budget', { method: 'POST', body: JSON.stringify({ budget: value, reviewBudget: reviewBudgetSelect.value }) }); settings.budget = result.budget; settings.reviewBudget = result.reviewBudget; toast('执行预算已保存，下一条消息或继续任务时生效'); }
       catch (error) { toast(error.message, 'error'); }
       finally { setBusy(saveBudget, false); }
     };

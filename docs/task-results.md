@@ -24,7 +24,7 @@ Forge 将“宿主执行流程已结束”与“用户需求已验收”分开�
 
 - `status`：`in_progress`、`implemented_unverified`、`finished_unverified`、`not_applicable` 或 `blocked`。未观察到文件修改的自适应对话使用 `finished_unverified`；只读问答及纯检查使用 `not_applicable`，不会假称已实现代码。
 - `checks`：`passed`、`not_configured`、`not_run`、`running`、`failed` 或 `unconfirmed`，继续要求当前工作区/规则证据与保护路径。
-- `modelReview`：`passed`、`not_applicable`、`not_run`、`unconfirmed` 或 `changes_requested`。模型审阅是证据，不是外部行为验收。 该枚举和整个 `task.result` 由 `taskResultSchema` 在运行时用 Zod 严格校验；新增值必须同时更新 schema、消费方和回归测试，不能静默落入 fallback。 Planned-no-review 将其明确设置为 `not_applicable`，因此 UI 不会把“未启用审阅”渲染为审阅通过或绿色完成。
+- `modelReview`：`passed`、`not_applicable`、`not_run`、`unconfirmed`、`changes_requested`、`insufficient_evidence` 或 `budget_exhausted`。模型审阅是证据，不是外部行为验收。 该枚举和整个 `task.result` 由 `taskResultSchema` 在运行时用 Zod 严格校验；新增值必须同时更新 schema、消费方和回归测试，不能静默落入 fallback。 Planned-no-review 将其明确设置为 `not_applicable`，因此 UI 不会把“未启用审阅”渲染为审阅通过或绿色完成。
 - 当前宿主不签发“需求已验收”证明，`resolutionClaimed` 为 `false`。不能由模型文字、HTTP 提交、命令名字如 `pytest`/`test`，或旧记录中的成功标记改成 `true`。这不是对模型正文里任意措辞的自动判定；身份提示也要求模型区分实现和验收，但不能保证所有模型文字遵守。
 
 旧的 `task.status=completed`、`session.outcome=completed`、`phase=complete` 和队列 `status=completed` 保留为**调度/执行生命周期兼容字段**，仅表示该执行通过既有宿主门禁并结束，不能被接入方理解为 `resolved`。接入方应读取 `task.result` 判断交付声明，而不是把旧布尔值重命名为正确性。队列界面显示“队列执行结束”，会话、交付卡及任务中心使用未验收结果。
@@ -64,3 +64,5 @@ The host currently makes no complete behavioral acceptance attestation. Neither 
 SWE-bench retains official resolution, integrity and workflow-finished quality metrics. The old `completed` and `falseCompletion` fields preserve their definitions and comparability; new records additionally separate finished execution from resolution claims. `unresolvedFinishes` continues counting finished-but-unresolved patches. Explicit claim errors are measured over assessed claims, with a **null rate when there are no claims**, rather than marketing abstention as 0% errors. Old measurements remain immutable and missing historical claim fields stay unknown.
 
 A 9/15 resolution result with six unsuccessful patches remains 9/15 after changing labels. This change improves honesty of reporting, not measured coding quality. Deterministic regression/API tests are not a new real-model benchmark. A future behavioral-attestation contract would need explicit requirement coverage and workspace/test/evidence identities; no such contract is inferred from command keywords or generic model review here.
+
+See [review outcomes / 审阅结果](review-outcomes.md) for structured stop reasons, recovery actions, legacy records, budget opt-in and missed-defect evidence boundaries.

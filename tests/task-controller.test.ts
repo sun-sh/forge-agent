@@ -271,7 +271,7 @@ describe('task workflow controller', () => {
   it('stops with the exact unconfirmed IDs after the evidence follow-up instead of consuming all code repairs', async () => {
     const f = fixture(undefined, JSON.stringify({ verdict: 'changes_requested', summary: 'Still no relevant evidence', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'Environment cannot run this check' }] }));
     const result = await f.controller.run('Fix the task', 5, f.adapter);
-    expect(result).toMatchObject({ status: 'needs_attention', repairs: 1, reviewEvidenceRepairs: 1, review: { verdict: 'changes_requested' } });
+    expect(result).toMatchObject({ status: 'needs_attention', repairs: 1, reviewEvidenceRepairs: 1, review: { verdict: 'insufficient_evidence' }, reviewStop: { reason: 'insufficient_evidence', action: 'provide_evidence', unconfirmedIds: ['A1'] } });
     expect(result.error).toContain('A1'); expect(result.error).toContain('补证机会');
     expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(2);
     expect(f.phases.filter((phase) => phase === 'review')).toHaveLength(2);
@@ -347,6 +347,13 @@ describe('task workflow controller', () => {
     f.adapter.review = async () => { throw new ReviewBudgetExceededError('独立审阅达到 40 回合上限；请调整预算后继续。'); };
     const result = await f.controller.run('Fix code', 0, f.adapter);
     expect(result).toMatchObject({ status: 'needs_attention', phase: 'review', error: '独立审阅达到 40 回合上限；请调整预算后继续。' });
+  });
+  it('keeps explicit cancellation separate from review failures', async () => {
+    const f = fixture();
+    f.adapter.review = async () => { f.controller.cancel('Stopped by user'); throw new Error('aborted transport'); };
+    const task = await f.controller.run('Fix code', 0, f.adapter);
+    expect(task.status).toBe('aborted'); expect(task.error).toBe('Stopped by user');
+    expect(task.reviewStop).toBeUndefined();
   });
   it('includes optional host command evidence in the independent handoff without persisting raw receipts', async () => {
     const f = fixture();

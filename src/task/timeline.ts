@@ -95,7 +95,7 @@ export function executionTimeline(entries: readonly TimelineEntry[], options: { 
         if (node) node.freshness = outcome.evidence?.freshness ?? 'unconfirmed';
         if (node?.status === 'failed' && nodes.get(node.parentId!)?.kind === 'phase') nodes.get(node.parentId!)!.status = 'failed';
       }
-      if (snapshot.phase === 'review' && snapshot.review?.verdict === 'changes_requested' && nodes.has(phaseId(phaseIndex))) nodes.get(phaseId(phaseIndex))!.status = 'needs_attention';
+      if (snapshot.phase === 'review' && snapshot.review && snapshot.review.verdict !== 'ready' && nodes.has(phaseId(phaseIndex))) nodes.get(phaseId(phaseIndex))!.status = 'needs_attention';
       continue;
     }
     if (entry.type !== 'message' || !entry.message || typeof entry.message !== 'object') continue;

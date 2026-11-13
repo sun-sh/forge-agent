@@ -2,11 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { BudgetRuntime, budgetLimitsSchema, DEFAULT_BUDGET_LIMITS, loadAgentSettings } from '../src/task/budget.js';
+import { BudgetRuntime, budgetLimitsSchema, DEFAULT_BUDGET_LIMITS, loadAgentSettings, saveAgentSettings } from '../src/task/budget.js';
 
 const limits = { ...DEFAULT_BUDGET_LIMITS, maxDurationMs: 60_000, maxModelTurns: 2, maxToolCalls: 2, maxTotalTokens: 100, maxCostUsd: 1 };
 
 describe('host execution budgets', () => {
+  it('keeps the measured standard reviewer ceiling by default and persists explicit opt-in only', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'forge-review-budget-'));
+    expect((await loadAgentSettings(home)).reviewBudget).toBe('standard');
+    await saveAgentSettings(home, { budget: DEFAULT_BUDGET_LIMITS, reviewBudget: 'extended' });
+    expect((await loadAgentSettings(home)).reviewBudget).toBe('extended');
+    await writeFile(join(home, 'web-settings.json'), JSON.stringify({ budget: DEFAULT_BUDGET_LIMITS }));
+    expect((await loadAgentSettings(home)).reviewBudget).toBe('standard');
+    await writeFile(join(home, 'web-settings.json'), JSON.stringify({ budget: DEFAULT_BUDGET_LIMITS, reviewBudget: 'unlimited' }));
+    expect((await loadAgentSettings(home)).valid).toBe(false);
+  });
   it('does not silently widen a malformed persisted budget', async () => {
     const home = await mkdtemp(join(tmpdir(), 'forge-budget-settings-'));
     await writeFile(join(home, 'web-settings.json'), JSON.stringify({ budget: { maxCostUsd: 0.1 } }));

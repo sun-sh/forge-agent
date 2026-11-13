@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a schema-validated insufficient_evidence review verdict and durable reviewStop reasons/actions across child/task persistence, API and UI. Distinguish reviewer/parent budget exhaustion, evidence gaps and concrete defects; normalize legacy evidence-only reviews without inventing bugs. Restore 24-turn/$4 standard limits, retaining 40-turn/$6 as explicit opt-in. Add public-entry-path and supported-shape counterexample guidance plus externally checked paired mechanism analogues; do not claim that prior Flask/Matplotlib misses or larger-budget quality gains are validated.
+
+
 - Retain two separately fingerprinted real-model Astropy/SymPy regressions: both resolve 2/2, while delivered results are 1/2 then 2/2 after correcting an overly strict missing-reproduction rule. Preserve the first blocked correct patch, unknown costs and changed-sample limitations; the later automatic evidence-follow-up branch is covered separately by engineering regressions.
 
 - Add one bounded parent-session evidence follow-up for an independent review with exact acceptance coverage, no concrete defects and unconfirmed evidence. Share `verifyRetries` with verification/code repairs, persist `reviewEvidenceRepairs` across continuation/restart, rerun verification and start a fresh reviewer, and retain unconfirmed IDs when evidence is still missing. Invalid coverage, unmet criteria, stale checks or exhausted allowances never enter this path.

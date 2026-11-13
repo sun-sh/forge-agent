@@ -41,6 +41,19 @@ function implementationResultLabel(task) {
   const modified = task.kind === 'change' || task.artifacts?.length || task.changes?.files?.some((file) => file.observed);
   return (modified ? '已实现' : '执行结束') + ' · 需求未验收';
 }
+export function reviewStopView(task) {
+  let stop = task?.result?.reviewStop ?? task?.reviewStop;
+  if (!stop && task?.review) {
+    const review = task.review, unconfirmedIds = (review.acceptance || []).filter((item) => item.status === 'unconfirmed').map((item) => item.id);
+    if (review.issues?.length || review.acceptance?.some((item) => item.status === 'unmet')) stop = { reason: 'code_defects', issueCount: review.issues?.length || review.acceptance.filter((item) => item.status === 'unmet').length, unconfirmedIds };
+    else if (review.verdict === 'insufficient_evidence' || unconfirmedIds.length) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds };
+  }
+  if (!stop) return null;
+  if (stop.reason === 'budget_exhausted') return { label: '审阅未完成 · 预算耗尽', kind: 'unverified', action: 'adjust_budget', detail: (stop.budgetScope === 'parent' ? '父任务总预算已用尽。' : '独立审阅预算已用尽。') + '请在设置 → 关于 → 执行预算中调整对应预算后重试；现有文件和检查记录保留。' };
+  if (stop.reason === 'insufficient_evidence') return { label: '需求未验收 · 证据不足', kind: 'unverified', action: 'provide_evidence', detail: '无法确认' + (stop.unconfirmedIds?.length ? '：' + stop.unconfirmedIds.join('、') : '当前验收条件') + '。请补充相关测试或执行证据，或进行人工验收；这不表示已发现代码缺陷。' };
+  if (stop.reason === 'code_defects') return { label: '审阅发现 ' + stop.issueCount + ' 个问题', kind: 'failed', action: 'fix_code', detail: '请根据审阅问题和未满足的验收项修复代码，再运行验证和独立审阅。' };
+  return { label: stop.reason === 'invalid_review' ? '审阅结果格式无效' : '审阅执行失败', kind: 'failed', action: 'retry_review', detail: '审阅尚未产生有效结论。请查看执行记录并重试；未将其视为代码缺陷或审阅通过。' };
+}
 export function sessionOutcome(data) {
   if (data.task) {
     const labels = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '执行结束' };
@@ -54,6 +67,8 @@ export function sessionOutcome(data) {
       if (data.task.status === 'completed') return { label: data.task.workflow === 'planned' || readOnlyMode ? '回答结束 · 未执行修改' : '回答结束', kind: 'done' };
     }
     if (data.running) return { label: '正在' + (labels[data.task.phase] || '运行'), kind: 'running' };
+    const reviewStop = reviewStopView(data.task);
+    if (reviewStop && data.task.phase === 'review' && ['needs_attention', 'failed', 'budget_exceeded'].includes(data.task.status)) return { label: reviewStop.label, kind: reviewStop.kind };
     if (data.task.status === 'budget_exceeded') return { label: '执行预算已用尽 · 可继续', kind: 'failed' };
     if (data.task.status === 'interrupted') return { label: '任务中断 · 等待明确继续', kind: 'failed' };
     if (data.task.status === 'needs_attention') return { label: '需要检查 · 尚未通过完成门槛', kind: 'failed' };

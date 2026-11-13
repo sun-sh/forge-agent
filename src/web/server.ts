@@ -37,6 +37,7 @@ import { BudgetExceededError, BudgetRuntime, budgetLimitsSchema, loadAgentSettin
 import { homedir } from 'node:os';
 import { ProjectError, WebProjects } from './projects.js';
 import { ForgeSubagents } from './subagents.js';
+import { reviewBudgetProfileSchema, type ReviewBudgetProfile } from '../task/review-budget.js';
 import { CheckpointStore, CheckpointError } from '../task/checkpoints.js';
 import { TaskQueue, QueueError, QueueDeferredError } from '../task/queue.js';
 import { TaskProgress } from '../task/progress.js';
@@ -99,6 +100,7 @@ interface SessionState {
   mcpReloadPending?: boolean;
   budget?: BudgetRuntime;
   subagents?: ForgeSubagents;
+  reviewBudget?: ReviewBudgetProfile;
   progress?: TaskProgress;
 }
 const MAX_BODY = 10_000_000;
@@ -742,6 +744,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       parentModel: () => session.session?.model,
       thinkingLevel: () => session.session?.thinkingLevel ?? 'off',
       budget: () => session.budget,
+      reviewBudget: () => session.reviewBudget ?? 'standard',
       allowed: () => !session.closed && session.running && session.mode === 'agent' && !session.controller.readOnly
         && !(session.controller.active && ['answer', 'explore'].includes(session.controller.state?.kind ?? ''))
         && trustView(trustStore, session.settingsManager, session.project).trusted,
@@ -925,6 +928,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         } catch { session.manager.appendCustomEntry('forge.checkpoint', { sessionId: session.manager.getSessionId(), diagnostic: '当前执行未建立检查点（需要 Git 仓库根目录及可读写的本机存储）。' }); }
       }
       const runBudget = new BudgetRuntime(agentSettings.budget);
+      session.reviewBudget = agentSettings.reviewBudget ?? 'standard';
       budget = runBudget;
       session.budget = runBudget;
       stopBudgetUpdates = runBudget.subscribe((snapshot) => {
@@ -1551,7 +1555,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         const global = settingsManager.getGlobalSettings();
         const key = global.defaultProvider && global.defaultModel ? global.defaultProvider + '/' + global.defaultModel : undefined;
         const selected = catalog.models.find((model: any) => model.key === key && model.available) ?? catalog.models.find((model: any) => model.available);
-        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, compaction: settingsManager.getCompactionSettings(selected ? { provider: selected.provider, id: selected.id } : undefined), budget: agentSettings.budget, budgetValid: agentSettings.valid, budgetDiagnostic: agentSettings.diagnostic, settingsPath, piVersion: VERSION, network: { ...networkSettings, lastCheck: network.lastCheck } });
+        json(response, 200, { ...settingsCatalog(catalog), model: selected?.key ?? null, thinkingLevel: selected ? preferredThinkingLevel(selected, global.modelThinkingLevels?.[selected.key] ?? global.defaultThinkingLevel ?? 'medium') : 'off', modelThinkingLevels: global.modelThinkingLevels ?? {}, compaction: settingsManager.getCompactionSettings(selected ? { provider: selected.provider, id: selected.id } : undefined), budget: agentSettings.budget, reviewBudget: agentSettings.reviewBudget ?? 'standard', budgetValid: agentSettings.valid, budgetDiagnostic: agentSettings.diagnostic, settingsPath, piVersion: VERSION, network: { ...networkSettings, lastCheck: network.lastCheck } });
         return;
       }
       if (url.pathname === '/api/settings/network' && request.method === 'POST') {
@@ -1569,9 +1573,11 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
         assertModelsIdle();
         const parsed = budgetLimitsSchema.safeParse(input.budget);
         if (!parsed.success) throw new HttpError(400, '执行预算参数无效');
-        await saveAgentSettings(home, { budget: parsed.data });
-        agentSettings = { budget: parsed.data, valid: true };
-        json(response, 200, { budget: parsed.data });
+        const reviewBudget = reviewBudgetProfileSchema.safeParse(input.reviewBudget ?? agentSettings.reviewBudget ?? 'standard');
+        if (!reviewBudget.success) throw new HttpError(400, '审阅预算档位无效');
+        await saveAgentSettings(home, { budget: parsed.data, reviewBudget: reviewBudget.data });
+        agentSettings = { budget: parsed.data, reviewBudget: reviewBudget.data, valid: true };
+        json(response, 200, { budget: parsed.data, reviewBudget: reviewBudget.data });
         return;
       }
       if (url.pathname === '/api/settings' && request.method === 'POST') {

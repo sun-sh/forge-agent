@@ -30,6 +30,10 @@ describe('focused independent review handoff', () => {
     expect(handoff.prompt).toContain('original user explicitly required that exact check');
     expect(handoff.prompt).toContain('Preserve Nx1 input behavior');
     expect(handoff.prompt).toContain('If evidence is insufficient use unconfirmed');
+    expect(handoff.prompt).toContain('"insufficient_evidence"');
+    expect(handoff.prompt).toContain('ORIGINAL-REQUEST COUNTEREXAMPLE CHECK');
+    expect(handoff.prompt).toContain('explicit keyword overrides');
+    expect(handoff.prompt).toContain('Preserve previously supported input shapes');
   });
   it('keeps invalid combined steps out of plans and preserves legacy briefs', () => {
     const brief = parseTaskBrief(JSON.stringify(handoff.brief))!;

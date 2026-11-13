@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { readFile } from 'node:fs/promises';
-import { safeMarkdown, sessionOutcome, verificationLabel } from '../src/web/ui/render.js';
+import { safeMarkdown, sessionOutcome, verificationLabel, reviewStopView } from '../src/web/ui/render.js';
 import { createSseParser, readEventStream, StreamError } from '../src/web/ui/stream.js';
 import { mountCustomProviders } from '../src/web/ui/providers.js';
 import { mountMcp } from '../src/web/ui/mcp.js';
@@ -264,7 +264,7 @@ async function client(initial = {}) {
     matchMedia: () => reviewMedia,
     marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills, lifecycleUI,
     builtinCommands, filterCommands, parseCommand,
-    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome, verificationLabel,
+    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome, verificationLabel, reviewStopView,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
     fetch: async (url, init = {}) => {
       requests.push({ url, ...init });
@@ -1395,6 +1395,23 @@ describe('Web client integration', () => {
     expect(window.document.getElementById('budget-output-tokens').value).toBe('500000');
     expect(window.document.getElementById('budget-cost').value).toBe(cost);
     expect(requests.some((item) => item.url === '/api/settings/budget' && item.method === 'POST')).toBe(false);
+    expect(window.document.getElementById('budget-review-profile').value).toBe('standard');
+    window.document.getElementById('budget-review-profile').value = 'extended';
+    window.document.getElementById('save-agent-budget').click();
+    await vi.waitFor(() => expect(requests.some((item) => item.url === '/api/settings/budget' && JSON.parse(item.body).reviewBudget === 'extended')).toBe(true));
+  });
+  it.each([
+    [{ reason: 'budget_exhausted', action: 'adjust_budget', issueCount: 0, unconfirmedIds: [], budgetScope: 'reviewer' }, '审阅未完成', '执行预算'],
+    [{ reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: ['A1'] }, '证据不足', '人工验收'],
+    [{ reason: 'code_defects', action: 'fix_code', issueCount: 2, unconfirmedIds: [] }, '审阅发现 2 个问题', '修复代码']
+  ])('shows review outcome %j and its recovery action in actual task UI', async (reviewStop, label, action) => {
+    const { window, app } = await client(); app.state.sessionId = 'review-stopped';
+    app.applySnapshot({ id: 'review-stopped', running: false, task: { id: 'stopped', workflow: 'planned', kind: 'change', phase: 'review', status: 'needs_attention', repairs: 0, phases: [], reviewStop }, messages: [] });
+    expect(window.document.getElementById('task-summary-note').textContent).toContain(label);
+    expect(window.document.getElementById('task-review').textContent).toContain(action);
+    expect(window.document.getElementById('task-note').textContent).toContain(action);
+    expect(window.document.getElementById('composer-run-reason').textContent).toContain(label);
+    expect(window.document.getElementById('composer-run-detail').textContent).toContain(action);
   });
   it('keeps the task summary collapsed, preserves explicit expansion, and exposes the stop reason beside Continue', async () => {
     const { window, app } = await client(); app.state.sessionId = 'compact-status';

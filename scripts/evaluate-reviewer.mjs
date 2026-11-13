@@ -12,7 +12,7 @@ import { ForgeSubagents } from '../dist/web/subagents.js';
 import { BudgetRuntime, budgetLimitsSchema, DEFAULT_BUDGET_LIMITS } from '../dist/task/budget.js';
 import { createExecutionState } from '../dist/task/controller.js';
 import { buildReviewHandoff } from '../dist/task/review-handoff.js';
-import { parseReview } from '../dist/task/review.js';
+import { parseReview, reviewStop } from '../dist/task/review.js';
 import { captureGit, captureReviewPatch, compareGit } from '../dist/task/git.js';
 import { captureWorkspace } from '../dist/verification/evidence.js';
 import { pforgeHome } from '../dist/pforge-home.js';
@@ -27,23 +27,27 @@ if (real && !modelKey) throw new Error('Use --real --model provider/model [--rep
 if (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid thinking effort');
 const repeat = Number(option('--repeat', '1'));
 if (!Number.isInteger(repeat) || repeat < 1 || repeat > 20) throw new Error('repeat must be 1..20');
+const processTimeoutMs = Number(option('--process-timeout-ms', '10000'));
+if (!Number.isInteger(processTimeoutMs) || processTimeoutMs < 1000 || processTimeoutMs > 120000) throw new Error('process-timeout-ms must be 1000..120000');
 const limits = budgetLimitsSchema.parse(option('--budget') ? JSON.parse(await readFile(resolve(option('--budget')), 'utf8')) : DEFAULT_BUDGET_LIMITS);
 const configHome = resolve(option('--config-home', pforgeHome())), output = resolve(option('--output', '.forge-agent/reviewer-evals/' + new Date().toISOString().replaceAll(':', '-')));
 await mkdir(output, { recursive: true });
 const root = await mkdtemp(join(tmpdir(), 'forge-reviewer-eval-')), home = join(root, 'home'); await mkdir(home);
 const execute = promisify(execFile), results = [], validation = [];
-const cases = reviewCases.flatMap((task) => ['correct', 'defective'].map((candidate) => ({ ...task, candidate })));
+const selectedCases = option('--case') ? reviewCases.filter((task) => option('--case').split(',').includes(task.id)) : reviewCases;
+if (!selectedCases.length) throw new Error('No reviewer cases selected');
+const cases = selectedCases.flatMap((task) => ['correct', 'defective'].map((candidate) => ({ ...task, candidate })));
 const policies = ['baseline-v1', 'focused-v2'], schedule = evaluationSchedule(cases, policies, repeat);
-const suiteFingerprint = createHash('sha256').update(JSON.stringify(reviewCases)).digest('hex');
+const suiteFingerprint = createHash('sha256').update(JSON.stringify(selectedCases)).digest('hex');
 const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...[
   './review-cases.mjs', './evaluation-protocol.mjs', './evaluation-evidence.mjs', '../dist/task/review-handoff.js', '../dist/task/review.js',
-  '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/git.js', '../dist/task/budget.js', '../dist/web/subagents.js'
+  '../dist/task/controller.js', '../dist/task/plan.js', '../dist/task/git.js', '../dist/task/budget.js', '../dist/task/review-budget.js', '../dist/web/subagents.js'
 ].map((path) => new URL(path, import.meta.url))].map((path) => new URL(path)));
 const writeFiles = async (project, files) => { for (const [path, content] of Object.entries(files)) { await mkdir(dirname(join(project, path)), { recursive: true }); await writeFile(join(project, path), content); } };
 let runtime, model, mock, mockTask, fatalError;
 const report = () => ({ schemaVersion: 1, protocol: 'paired-candidate-review-v1', kind: validateOnly ? 'oracle-validation' : real ? 'real-model-review-diagnostic' : 'scripted-review-smoke',
   timestamp: new Date().toISOString(), suiteFingerprint, harnessFingerprint, model: modelKey, modelMetadata: model ? modelEvaluationMetadata(model) : undefined,
-  thinking, limits, repeat, order: 'counterbalanced-cyclic-v1', environment: { node: process.version, platform: process.platform, piVersion: VERSION }, validation, fatalError,
+  thinking, limits, repeat, processTimeoutMs, order: 'counterbalanced-cyclic-v1', environment: { node: process.version, platform: process.platform, piVersion: VERSION }, validation, fatalError,
   byPolicy: Object.fromEntries(policies.map((policy) => {
     const runs = results.filter((run) => run.policy === policy), costKnown = !real || Boolean(model && modelEvaluationMetadata(model).pricingKnown);
     return [policy, { ...reviewConfusion(runs), tokens: runs.reduce((sum, run) => sum + (run.budget?.totalTokens ?? 0), 0),
@@ -61,7 +65,7 @@ try {
     const imports = 'import assert from "node:assert/strict"; import * as mod from ' + JSON.stringify(pathToFileURL(join(project, task.entry)).href) + ';\n';
     const visible = join(root, 'visible.mjs'), oracle = join(root, 'oracle.mjs');
     await writeFile(visible, imports + task.visible); await writeFile(oracle, imports + task.oracle);
-    const pass = async (path) => { try { await execute(process.execPath, [path], { windowsHide: true, timeout: 10000 }); return true; } catch (e) { if (e.code !== 1) throw e; return false; } };
+    const pass = async (path) => { try { await execute(process.execPath, [path], { windowsHide: true, timeout: processTimeoutMs }); return true; } catch (e) { if (e.code === 1) return false; throw new Error('Oracle subprocess infrastructure failure: code=' + (e.code ?? 'none') + ', signal=' + (e.signal ?? 'none') + ', killed=' + Boolean(e.killed)); } };
     const visiblePass = await pass(visible), oraclePass = await pass(oracle);
     validation.push({ id: task.id, candidate: task.candidate, visiblePass, oraclePass, valid: visiblePass && oraclePass === (task.candidate === 'correct') });
   }
@@ -88,7 +92,7 @@ try {
       mockTask = candidate;
       const project = join(root, 'candidate-' + randomUUID()); await mkdir(project);
       await writeFiles(project, candidate.initialFiles);
-      const git = (args) => execute('git', args, { cwd: project, windowsHide: true, timeout: 10000 });
+      const git = (args) => execute('git', args, { cwd: project, windowsHide: true, timeout: processTimeoutMs });
       await git(['init']); await git(['add', '.']); await git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'fixture baseline']);
       const baseline = await captureGit(project);
       await writeFiles(project, candidate.candidate === 'correct' ? candidate.correctFiles : candidate.defectiveFiles);
@@ -115,7 +119,8 @@ try {
       const after = await captureWorkspace(project), unchanged = Boolean(before.digest && before.digest === after.digest);
       if (!unchanged) { valid = false; error = 'Review modified the candidate workspace'; }
       const record = { id: candidate.id, candidate: candidate.candidate, expectedDefect: candidate.candidate === 'defective', policy, run, position, valid, blocking, unchanged,
-        verdict: review?.verdict, error, elapsedMs: Math.round(performance.now() - started), promptCharacters: prompt.length, budget: budget.snapshot() };
+        verdict: review?.verdict, reviewStop: review ? reviewStop(review, candidate.acceptance.map((item) => item.id)) : undefined,
+        provenance: candidate.provenance ?? 'paired-fixture', error, elapsedMs: Math.round(performance.now() - started), promptCharacters: prompt.length, budget: budget.snapshot() };
       results.push(record);
       await writeFile(join(output, candidate.id + '.' + candidate.candidate + '.' + policy + '.r' + run + '.json'), JSON.stringify({ ...record, review }, null, 2));
       await persist(); console.log(candidate.id + ' · ' + candidate.candidate + ' · ' + policy + ' · ' + (valid ? blocking ? 'blocked' : 'accepted' : 'abstained'));

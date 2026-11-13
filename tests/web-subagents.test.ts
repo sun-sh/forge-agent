@@ -10,6 +10,7 @@ import { startWebConsole } from '../src/web/server.js';
 import { checkpointGit } from '../src/task/checkpoints.js';
 import { ReviewBudgetExceededError, ReviewFormatError } from '../src/task/review.js';
 import { REVIEW_GATE_LIMITS } from '../src/web/subagents.js';
+import { REVIEW_BUDGETS, type ReviewBudgetProfile } from '../src/task/review-budget.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
@@ -24,7 +25,7 @@ function answer(res: ServerResponse, input: any, content: string, call?: { name:
   res.write('data: ' + JSON.stringify({ id: 'test', object: 'chat.completion.chunk', model: input.model, choices: [], usage: { prompt_tokens: 30, completion_tokens: 10, total_tokens: 40 } }) + '\n\n');
   res.end('data: [DONE]\n\n');
 }
-async function fixture(handler: (input: any, res: ServerResponse) => void | Promise<void>) {
+async function fixture(handler: (input: any, res: ServerResponse) => void | Promise<void>, reviewBudget: ReviewBudgetProfile = 'standard') {
   const home = await mkdtemp(join(tmpdir(), 'forge-subagent-home-')), project = await mkdtemp(join(tmpdir(), 'forge-subagent-project-'));
   for (const [key, value] of Object.entries({ FORGE_AGENT_HOME: home, PFORGE_HOME: home, PI_CODING_AGENT_DIR: home, PI_CODING_AGENT_SESSION_DIR: join(home, 'sessions') })) vi.stubEnv(key, value);
   const requests: any[] = [];
@@ -47,7 +48,7 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
   manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'parent context' }], api: 'openai-completions', provider: 'mock', model: 'test', stopReason: 'stop', timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
   const budget = new BudgetRuntime({ ...DEFAULT_BUDGET_LIMITS }); budget.start();
   let allowed = true;
-  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, allowed: () => allowed, reviewAllowed: () => allowed, onChange: () => {} };
+  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, reviewBudget: () => reviewBudget, allowed: () => allowed, reviewAllowed: () => allowed, onChange: () => {} };
   const agents = new ForgeSubagents(options); budget.setAbort(() => { void agents.cancelAll(); });
   closers.push(async () => { await agents.close(); budget.finish('aborted'); });
   return { home, project, runtime, manager, agents, budget, requests, options, setAllowed: (value: boolean) => { allowed = value; } };
@@ -56,8 +57,8 @@ const task = (title = '检查实现', prompt = 'Read sample.txt and report evide
 
 describe('managed Pi subagents', () => {
   it('gives the independent review gate a larger but explicit bounded budget', () => {
-    expect(REVIEW_GATE_LIMITS).toEqual({ maxDurationMs: 480_000, maxModelTurns: 40, maxToolCalls: 160, maxOutputTokens: 48_000, maxCostUsd: 6 });
-    expect(REVIEW_GATE_LIMITS.maxModelTurns).toBeGreaterThan(24);
+    expect(REVIEW_GATE_LIMITS).toEqual({ maxDurationMs: 300_000, maxModelTurns: 24, maxToolCalls: 120, maxOutputTokens: 32_000, maxCostUsd: 4 });
+    expect(REVIEW_BUDGETS.extended).toEqual({ maxDurationMs: 480_000, maxModelTurns: 40, maxToolCalls: 160, maxOutputTokens: 48_000, maxCostUsd: 6 });
   });
   it('runs the host review gate in a fresh read-only child context', async () => {
     const f = await fixture((input, res) => answer(res, input, '{"verdict":"ready","summary":"Independent","issues":[],"acceptance":[]}'));
@@ -77,17 +78,17 @@ describe('managed Pi subagents', () => {
     let turns = 0;
     const f = await fixture((input, res) => ++turns <= 25
       ? answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } })
-      : answer(res, input, '{"verdict":"ready","summary":"Focused review finished","issues":[],"acceptance":[]}'));
+      : answer(res, input, '{"verdict":"ready","summary":"Focused review finished","issues":[],"acceptance":[]}'), 'extended');
     await f.agents.reviewGate('Review the supplied patch and requirements.', new AbortController().signal);
     expect(f.requests).toHaveLength(26);
-    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', budget: { status: 'completed', modelTurns: 26, limits: REVIEW_GATE_LIMITS } });
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', reviewBudget: 'extended', budget: { status: 'completed', modelTurns: 26, limits: REVIEW_BUDGETS.extended } });
     expect(f.budget.snapshot()).toMatchObject({ status: 'running', modelTurns: 26, toolCalls: 25 });
   });
   it('preserves the reviewer-local stop reason without consuming the parent budget or accepting partial work', async () => {
     const f = await fixture((input, res) => answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } }));
     await expect(f.agents.reviewGate('Review the supplied patch.', new AbortController().signal)).rejects.toBeInstanceOf(ReviewBudgetExceededError);
-    expect(f.requests).toHaveLength(40);
-    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'failed', collectedAt: expect.any(String), budget: { status: 'exceeded', modelTurns: 41, exceededReason: expect.stringContaining('40') } });
+    expect(f.requests).toHaveLength(24);
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'failed', errorCode: 'budget_exhausted', reviewStop: { reason: 'budget_exhausted', action: 'adjust_budget', budgetScope: 'reviewer' }, collectedAt: expect.any(String), budget: { status: 'exceeded', modelTurns: 25, exceededReason: expect.stringContaining('24') } });
     expect(f.budget.snapshot().status).toBe('running');
     expect(f.budget.snapshot().exceededReason).toBeUndefined();
   });

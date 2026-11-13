@@ -8,7 +8,7 @@ import { TASK_KINDS, intentHint, type TaskKind, type TaskIntentContext } from '.
 import { BudgetExceededError, BudgetRuntime, budgetSnapshotSchema, type BudgetSnapshot } from './budget.js';
 import { progressSnapshotSchema, TaskStalledError, type ProgressSnapshot } from './progress.js';
 import { acceptanceSatisfied, BRIEF_OUTPUT_CONTRACT, parseTaskBrief, parseTaskPlan, planFromBrief, preserveTaskBrief, PLAN_OUTPUT_CONTRACT, planReference, taskBriefSchema, taskPlanSchema, taskRequirements, taskRequirementsSchema, type TaskBrief, type TaskPlan, type TaskRequirements } from './plan.js';
-import { parseReview, ReviewBudgetExceededError, ReviewFormatError, reviewSchema, type TaskReview } from './review.js';
+import { normalizeReview, parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, reviewSchema, type ReviewStop, type TaskReview } from './review.js';
 import { buildReviewHandoff } from './review-handoff.js';
 import type { ReviewCommandEvidence } from './review-evidence.js';
 export { parseReview, type TaskReview } from './review.js';
@@ -59,6 +59,7 @@ export interface TaskState {
   /** Files written or edited by the agent during this task, including non-Git projects. */
   artifacts?: TaskArtifact[];
   review?: TaskReview;
+  reviewStop?: ReviewStop;
   /** Unresolved review survives interrupted repair/verification until a fresh ready review. */
   reviewFollowup?: TaskReview;
   reviewer?: { sessionId: string; model: string; context: 'independent'; formatRetries?: number; handoff?: { version: 2; scope: 'initial' | 'repair'; characters: number } };
@@ -86,7 +87,7 @@ export const taskStateSchema = z.object({
   // Typed checkpoint context can resume a phase; it never grants tool permissions or trust.
   baseline: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), truncated: z.boolean().optional(), files: z.array(fileSchema).max(200) }).optional(),
   changes: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), headChanged: z.boolean().optional(), truncated: z.boolean(), files: z.array(fileSchema.extend({ preexisting: z.boolean(), observed: z.boolean() })).max(200) }).optional(),
-  verification: verificationOutcomeSchema.optional(), validation: z.enum(['verified', 'unconfigured', 'unconfirmed', 'failed']).optional(), artifacts: z.array(artifactSchema).max(100).optional(), reviewFollowup: persistedReviewSchema.optional(), review: persistedReviewSchema.optional(), plan: taskPlanSchema.optional(), budget: budgetSnapshotSchema.optional(), progress: progressSnapshotSchema.optional(), error: z.string().optional()
+  verification: verificationOutcomeSchema.optional(), validation: z.enum(['verified', 'unconfigured', 'unconfirmed', 'failed']).optional(), artifacts: z.array(artifactSchema).max(100).optional(), reviewFollowup: persistedReviewSchema.optional(), review: persistedReviewSchema.optional(), reviewStop: reviewStopSchema.optional(), plan: taskPlanSchema.optional(), budget: budgetSnapshotSchema.optional(), progress: progressSnapshotSchema.optional(), error: z.string().optional()
 });
 export function restoreTask(entries: ReadonlyArray<{ type: string; customType?: string; data?: unknown }>): TaskState | undefined {
   const entry = [...entries].reverse().find((item) => item.type === 'custom' && item.customType === 'pforge.task');
@@ -94,6 +95,17 @@ export function restoreTask(entries: ReadonlyArray<{ type: string; customType?: 
   const result = taskStateSchema.safeParse(entry.data);
   if (!result.success) return undefined;
   const task = result.data;
+  if (task.review) task.review = normalizeReview(task.review);
+  if (task.reviewFollowup) task.reviewFollowup = normalizeReview(task.reviewFollowup);
+  if (!task.reviewStop && task.review && task.status !== 'completed') task.reviewStop = reviewStop(task.review, task.plan?.acceptance.map((item) => item.id));
+  if (!task.reviewStop && task.phase === 'review' && task.status !== 'completed') {
+    const child = [...entries].reverse().find((item) => {
+      if (item.type !== 'custom' || item.customType !== 'forge.subagent') return false;
+      const value = item.data as { purpose?: string; startedAt?: string; id?: string } | undefined;
+      return value?.purpose === 'review_gate' && typeof value.startedAt === 'string' && value.startedAt >= task.startedAt && (!task.reviewer || value.id === task.reviewer.sessionId);
+    })?.data as { budget?: { status?: string } } | undefined;
+    if (child?.budget?.status === 'exceeded') task.reviewStop = { reason: 'budget_exhausted', action: 'adjust_budget', issueCount: 0, unconfirmedIds: [], budgetScope: task.budget?.status === 'exceeded' ? 'parent' : 'reviewer' };
+  }
   if (!task.requirements && task.brief) task.requirements = taskRequirements(task.brief);
   if (task.status === 'running') { task.status = 'interrupted'; task.error = task.workflow === 'direct'
     ? '服务已停止。请明确继续，系统将复用当前会话和工作区，不重放上次操作。'
@@ -234,6 +246,7 @@ export class TaskController {
       ...(previous?.baseline ? { baseline: structuredClone(previous.baseline) } : {}), ...(previous?.validation ? { validation: previous.validation } : {}), ...(previous?.artifacts ? { artifacts: structuredClone(previous.artifacts) } : {}) };
     this.state.reviewRequired = metadata.reviewRequired !== false;
     const task = this.state;
+    if (previous?.reviewStop) task.reviewStop = structuredClone(previous.reviewStop);
     let previousFindings = previous?.reviewFollowup ?? (previous?.review && (previous.review.verdict !== 'ready' || previous.review.issues.length || !acceptanceSatisfied(previous.plan, previous.review.acceptance)) ? previous.review : undefined);
     if (previousFindings) task.reviewFollowup = structuredClone(previousFindings);
     budget?.setOnChange((snapshot) => this.recordBudget(snapshot));
@@ -241,7 +254,7 @@ export class TaskController {
     const check = () => { signal.throwIfAborted(); budget?.check(); };
     const execute = async (phase: Exclude<TaskPhase, 'verify' | 'complete'>, message: string, first = false, enterPhase = !first) => {
       check();
-      if (phase === 'review') task.reviewer = undefined;
+      if (phase === 'review') { task.reviewer = undefined; task.reviewStop = undefined; }
       if (enterPhase) this.phase(phase);
       let text: string;
       if (phase === 'review') {
@@ -369,6 +382,8 @@ export class TaskController {
           const text = await execute('review', handoff.prompt);
           if (task.reviewer) task.reviewer.handoff = { version: handoff.version, scope: handoff.scope, characters: handoff.characters };
           task.review = parseReview(text);
+          task.reviewStop = task.review ? reviewStop(task.review, task.plan?.acceptance.map((item) => item.id))
+            : { reason: 'invalid_review', action: 'retry_review', issueCount: 0, unconfirmedIds: [] };
           task.verification = structuredClone(await adapter.refreshVerification(signal)); check();
           const reviewedChanges = await adapter.changes(baseline, signal); check();
           const version = (changes: GitChanges) => JSON.stringify({ head: changes.head, files: changes.files.map(({ path, fingerprint }) => ({ path, fingerprint })) });
@@ -380,13 +395,13 @@ export class TaskController {
           // to collect evidence. Missing/duplicate IDs or unsupported claims
           // must not trigger implementation as if they were code defects.
           const acceptance = task.review?.acceptance;
-          const evidenceGaps = task.review?.verdict === 'changes_requested' && !task.review.issues.length && acceptance
+          const evidenceGaps = task.review?.verdict === 'insufficient_evidence' && !task.review.issues.length && acceptance
             && acceptance.length === task.plan!.acceptance.length && new Set(acceptance.map((item) => item.id)).size === acceptance.length
             && task.plan!.acceptance.every((item) => acceptance.some((finding) => finding.id === item.id))
             && acceptance.every((item) => item.status !== 'unmet')
             ? acceptance.filter((item) => item.status === 'unconfirmed') : [];
           const collectEvidence = evidenceGaps.length > 0 && (task.reviewEvidenceRepairs ?? 0) < 1;
-          if (!stale && passed && task.review?.verdict === 'changes_requested' && (task.review.issues.length || collectEvidence) && task.repairs < retries) {
+          if (!stale && passed && task.review && (task.review.verdict === 'changes_requested' && task.review.issues.length || collectEvidence) && task.repairs < retries) {
             task.reviewFollowup = structuredClone(task.review); previousFindings = task.reviewFollowup;
             if (collectEvidence) task.reviewEvidenceRepairs = (task.reviewEvidenceRepairs ?? 0) + 1;
             task.repairs++; this.commit();
@@ -401,12 +416,18 @@ export class TaskController {
           if (!task.review || task.review.verdict !== 'ready' || task.review.issues.length || !acceptanceSatisfied(task.plan, task.review.acceptance) || !passed || stale) {
             task.status = 'needs_attention';
             task.error = stale ? '验证后工作区发生变化，现有证据已过期，请重新检查并验证。' : !passed ? task.verification.evidence?.reason ?? '没有有效的自动验证通过证据，请配置验证或人工检查。' : !task.review ? '审阅结果格式无效，需要人工检查。' : evidenceGaps.length ? `审阅证据仍未确认（${evidenceGaps.map((item) => item.id).join('、')}）；补证机会或共享修复额度已用尽，请检查执行记录。` : !acceptanceSatisfied(task.plan, task.review.acceptance) ? '审阅未逐项确认全部验收条件；缺失、重复或未确认的条目不能算完成。' : '审阅发现待处理问题，修复预算已耗尽或结果不一致。';
-          } else { task.reviewFollowup = undefined; this.phase('complete'); task.status = 'completed'; task.error = undefined; }
+          } else { task.reviewFollowup = undefined; task.reviewStop = undefined; this.phase('complete'); task.status = 'completed'; task.error = undefined; }
           break;
         }
         }
       }
     } catch (error) {
+      if (task.phase === 'review' && (!signal.aborted || budget?.exceededReason)) {
+        task.reviewStop = error instanceof ReviewBudgetExceededError || budget?.exceededReason || error instanceof BudgetExceededError
+          ? { reason: 'budget_exhausted', action: 'adjust_budget', issueCount: 0, unconfirmedIds: [], budgetScope: budget?.exceededReason ? 'parent' : 'reviewer' }
+          : { reason: error instanceof ReviewFormatError ? 'invalid_review' : 'review_failed', action: 'retry_review', issueCount: 0, unconfirmedIds: [] };
+        if (error instanceof ReviewBudgetExceededError && error.sessionId && error.model) task.reviewer = { sessionId: error.sessionId, model: error.model, context: 'independent' };
+      }
       if (error instanceof VerificationInterruptedError) task.verification = { status: 'failed', attempts: task.repairs, runId: task.id, checkedAt: new Date().toISOString(), report: error.report, error: error.message };
       if (budget?.exceededReason || error instanceof BudgetExceededError) { task.status = 'budget_exceeded'; task.error = budget?.exceededReason ?? (error instanceof Error ? error.message : String(error)); }
       else if (error instanceof TaskStalledError || error instanceof InvalidTaskPlanError || error instanceof ReviewEvidenceError || error instanceof ReviewFormatError || error instanceof ReviewBudgetExceededError) { task.status = 'needs_attention'; task.error = error.message; }

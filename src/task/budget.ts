@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { replaceMetadataFile } from './persistence.js';
+import { reviewBudgetProfileSchema, type ReviewBudgetProfile } from './review-budget.js';
 
 export const budgetLimitsSchema = z.object({
   maxDurationMs: z.number().int().min(60_000).max(86_400_000),
@@ -48,16 +49,17 @@ export const budgetSnapshotSchema = z.object({
   costIncomplete: z.boolean().optional(), usage: z.object({ input: z.number().int().min(0), output: z.number().int().min(0), cacheRead: z.number().int().min(0), cacheWrite: z.number().int().min(0) }).strict().optional()
 }).strict();
 
-const settingsSchema = z.object({ budget: budgetLimitsSchema }).strict();
+const settingsSchema = z.object({ budget: budgetLimitsSchema, reviewBudget: reviewBudgetProfileSchema.default('standard') }).strict();
 export interface AgentSettings {
   budget: BudgetLimits;
+  reviewBudget?: ReviewBudgetProfile;
   /** Missing settings are normal; a malformed existing file is not. */
   valid: boolean;
   diagnostic?: string;
 }
 
 function defaultSettings(): AgentSettings {
-  return { budget: { ...DEFAULT_BUDGET_LIMITS }, valid: true };
+  return { budget: { ...DEFAULT_BUDGET_LIMITS }, reviewBudget: 'standard', valid: true };
 }
 
 export async function loadAgentSettings(home: string): Promise<AgentSettings> {
@@ -81,7 +83,7 @@ export async function loadAgentSettings(home: string): Promise<AgentSettings> {
   }
 }
 
-export async function saveAgentSettings(home: string, settings: Pick<AgentSettings, 'budget'>): Promise<void> {
+export async function saveAgentSettings(home: string, settings: Pick<AgentSettings, 'budget' | 'reviewBudget'>): Promise<void> {
   const parsed = settingsSchema.parse(settings);
   const path = join(home, 'web-settings.json');
   await mkdir(dirname(path), { recursive: true });
