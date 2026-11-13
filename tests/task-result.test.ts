@@ -27,6 +27,10 @@ describe('execution results without unsupported resolution claims', () => {
       expect(taskResult(task)).toEqual({ version: 1, status: 'implemented_unverified', execution: 'finished', acceptance: 'unverified', resolutionClaimed: false, checks: 'passed', modelReview: 'passed' });
     }
   });
+  it('uses not-applicable review semantics for planned-no-review', () => {
+    const task = implemented('planned'); task.reviewRequired = false;
+    expect(taskResult(task)).toMatchObject({ status: 'implemented_unverified', acceptance: 'unverified', modelReview: 'not_applicable', resolutionClaimed: false });
+  });
   it('finishes an implementation without configured checks without reopening its execution', () => {
     const task = implemented(); task.verification = { status: 'skipped', attempts: 0, reason: 'No verification commands configured.' };
     expect(taskResult(task)).toMatchObject({ status: 'implemented_unverified', execution: 'finished', checks: 'not_configured', resolutionClaimed: false });

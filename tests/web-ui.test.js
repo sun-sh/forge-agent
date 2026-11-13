@@ -67,6 +67,12 @@ describe('reviewing host-owned changes', () => {
   });
 });
 
+it('uses a warning color for unverified status instead of the success green', async () => {
+    const css = await readFile(new URL('../src/web/ui/style.css', import.meta.url), 'utf8');
+    expect(css).toContain('.status-dot.unverified{background:var(--warn)}');
+    expect(css).not.toContain('.status-dot.unverified{background:var(--ok)}');
+  });
+
 describe('safe agent output', () => {
   it('keeps subagent navigation compact and displays child output safely in a separate panel', async () => {
     const { window, app, requests, reviewMedia } = await client();
@@ -142,6 +148,7 @@ describe('safe agent output', () => {
     const verification = { status: 'passed', evidenceId: 'v1', evidence: { freshness: 'current', workspace: { digest: 'a'.repeat(64) } }, report: { passed: true, results: [{ passed: true, exitCode: 0 }] } };
     expect(sessionOutcome({ task: { ...task, verification } }).label).toBe('已实现 · 需求未验收 · 配置检查通过 · 未进行模型审阅');
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification } }).kind).toBe('failed');
+    expect(sessionOutcome({ task: { ...task, workflow: 'planned', reviewRequired: false, verification, result: { status: 'implemented_unverified', modelReview: 'not_applicable' } } }).label).toContain('未启用审阅');
     expect(sessionOutcome({ task: { ...task, verification } }).kind).toBe('unverified');
     const review = { verdict: 'ready', issues: [], freshness: 'current', evidenceId: 'v1' };
     expect(sessionOutcome({ task: { ...task, workflow: 'planned', verification, review } }).label).toContain('模型审阅通过');

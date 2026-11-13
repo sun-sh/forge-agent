@@ -68,6 +68,12 @@ export function sessionOutcome(data) {
       const unconfigured = verificationUnconfigured(verification);
       const reviewed = Boolean(verification?.evidenceId) && data.task.review?.verdict === 'ready' && !data.task.review.issues?.length && data.task.review.freshness === 'current' && currentVerification(verification) && data.task.review.evidenceId === verification.evidenceId && acceptanceMet;
       const reviewLabel = data.task.reviewer?.context === 'independent' ? '独立模型审阅通过' : '模型审阅通过';
+      const productResult = data.task.result;
+      if (productResult?.status === 'blocked') return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
+      if (productResult && ['implemented_unverified', 'finished_unverified'].includes(productResult.status)) {
+        const resultReview = productResult.modelReview === 'not_applicable' ? ' · 未启用审阅' : productResult.modelReview === 'passed' ? ' · 独立模型审阅通过' : productResult.modelReview === 'changes_requested' ? ' · 审阅发现待处理问题' : ' · 未进行模型审阅';
+        return { label: implementationResultLabel(data.task) + ' · ' + verificationLabel(verification) + resultReview, kind: 'unverified' };
+      }
       if (data.task.reviewFollowup || data.task.review && (data.task.review.verdict !== 'ready' || data.task.review.issues?.length || !acceptanceMet)) return { label: '审阅发现待处理问题 · 需要检查', kind: 'failed' };
       if (unconfigured) return { label: implementationResultLabel(data.task) + ' · 未配置自动验证', kind: 'unverified' };
       if (data.task.workflow === 'planned' && data.task.kind === 'change' && (!currentVerification(verification) || data.task.reviewRequired !== false && !reviewed)) return { label: '需要检查 · 完成证据不完整', kind: 'failed' };

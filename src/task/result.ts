@@ -18,7 +18,7 @@ export function taskResult(task: TaskState) {
   const reviewed = review?.verdict === 'ready' && !review.issues.length && !task.reviewFollowup
     && review.freshness === 'current' && checks === 'passed' && Boolean(verification?.evidenceId)
     && review.evidenceId === verification?.evidenceId && acceptanceSatisfied(task.plan, review.acceptance);
-  const modelReview = reviewed ? 'passed' as const : task.reviewFollowup || review?.issues.length || review?.verdict === 'changes_requested'
+  const modelReview = task.reviewRequired === false ? 'not_applicable' as const : reviewed ? 'passed' as const : task.reviewFollowup || review?.issues.length || review?.verdict === 'changes_requested'
     ? 'changes_requested' as const : review ? 'unconfirmed' as const : 'not_run' as const;
   const readOnly = ['ask', 'plan'].includes(task.mode ?? '') || ['answer', 'explore', 'verify'].includes(task.kind ?? '');
   const implementation = !readOnly && (task.kind === 'change' || Boolean(task.artifacts?.length) || Boolean(task.changes?.files.some((file) => file.observed)));
