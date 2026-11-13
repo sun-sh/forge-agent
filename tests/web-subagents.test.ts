@@ -56,6 +56,20 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('persists an explicit reviewer budget choice through HTTP settings and rejects unknown profiles', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'unused'));
+    const server = await startWebConsole({ cwd: f.project, port: 0 }); closers.push(server.close);
+    const headers = { 'x-pforge-token': server.token, 'content-type': 'application/json' }, origin = new URL(server.url).origin;
+    const before = await (await fetch(origin + '/api/settings', { headers })).json() as any;
+    expect(before.reviewBudget).toBe('standard');
+    const save = await fetch(origin + '/api/settings/budget', { method: 'POST', headers, body: JSON.stringify({ budget: f.budget.limits, reviewBudget: 'extended' }) });
+    expect(save.status).toBe(200); expect(await save.json()).toMatchObject({ reviewBudget: 'extended' });
+    expect((await (await fetch(origin + '/api/settings', { headers })).json() as any).reviewBudget).toBe('extended');
+    const invalid = await fetch(origin + '/api/settings/budget', { method: 'POST', headers, body: JSON.stringify({ budget: f.budget.limits, reviewBudget: 'unlimited' }) });
+    expect(invalid.status).toBe(400);
+    expect(JSON.parse(await readFile(join(f.home, 'web-settings.json'), 'utf8')).reviewBudget).toBe('extended');
+    expect(f.requests).toHaveLength(0);
+  });
   it('gives the independent review gate a larger but explicit bounded budget', () => {
     expect(REVIEW_GATE_LIMITS).toEqual({ maxDurationMs: 300_000, maxModelTurns: 24, maxToolCalls: 120, maxOutputTokens: 32_000, maxCostUsd: 4 });
     expect(REVIEW_BUDGETS.extended).toEqual({ maxDurationMs: 480_000, maxModelTurns: 40, maxToolCalls: 160, maxOutputTokens: 48_000, maxCostUsd: 6 });

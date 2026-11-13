@@ -7,6 +7,13 @@ import { reviewStopView, sessionOutcome } from '../src/web/ui/render.js';
 
 const candidate = (verdict: string, issues: string[], status: string) => JSON.stringify({ verdict, summary: 'Review evidence', issues, acceptance: [{ id: 'A1', status, evidence: 'src/main.ts: observed trigger' }] });
 describe('structured review reasons across schema, persistence, API and UI', () => {
+  it('recovers a budget reason only from a matching current-task child snapshot', () => {
+    const task = createExecutionState('Fix code', { workflow: 'planned' }); task.phase = 'review'; task.status = 'needs_attention';
+    const child = (startedAt: string) => ({ type: 'custom', customType: 'forge.subagent', data: { purpose: 'review_gate', startedAt, budget: { status: 'exceeded' } } });
+    const saved = { type: 'custom', customType: 'pforge.task', data: task };
+    expect(restoreTask([saved, child(task.startedAt)])?.reviewStop).toMatchObject({ reason: 'budget_exhausted', action: 'adjust_budget', budgetScope: 'reviewer' });
+    expect(restoreTask([saved, child('2000-01-01T00:00:00.000Z')])?.reviewStop).toBeUndefined();
+  });
   it('accepts insufficient evidence separately and maps legacy evidence-only reviews conservatively', () => {
     const next = parseReview(candidate('insufficient_evidence', [], 'unconfirmed'))!;
     expect(next.verdict).toBe('insufficient_evidence');

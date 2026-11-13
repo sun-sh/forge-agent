@@ -20,14 +20,15 @@ describe('Web host controls', () => {
     const origin = new URL(gateway.url).origin, headers = { 'x-pforge-token': gateway.token, 'content-type': 'application/json' };
     const initial = await fetch(origin + '/api/settings', { headers });
     expect(initial.status).toBe(200);
-    const initialPayload = await initial.json() as { budget?: { maxModelTurns?: number } };
+    const initialPayload = await initial.json() as { budget?: { maxModelTurns?: number }; reviewBudget?: string };
     expect(initialPayload.budget).toMatchObject({ maxModelTurns: 240 });
+    expect(initialPayload.reviewBudget).toBe('standard');
     const invalid = await fetch(origin + '/api/settings/budget', { method: 'POST', headers, body: JSON.stringify({ budget: { maxModelTurns: 0 } }) });
     expect(invalid.status).toBe(400);
     const limits = { maxDurationMs: 120000, maxModelTurns: 7, maxToolCalls: 20, maxTotalTokens: 30000, maxOutputTokens: 50000, maxCostUsd: 2.5 };
     const saved = await fetch(origin + '/api/settings/budget', { method: 'POST', headers, body: JSON.stringify({ budget: limits }) });
-    expect(saved.status).toBe(200); expect(await saved.json()).toEqual({ budget: limits });
-    expect(JSON.parse(await readFile(join(home, 'web-settings.json'), 'utf8'))).toEqual({ budget: limits });
+    expect(saved.status).toBe(200); expect(await saved.json()).toEqual({ budget: limits, reviewBudget: 'standard' });
+    expect(JSON.parse(await readFile(join(home, 'web-settings.json'), 'utf8'))).toEqual({ budget: limits, reviewBudget: 'standard' });
   });
 
   it('rejects a second terminal command for the same project while the first is running', async () => {
