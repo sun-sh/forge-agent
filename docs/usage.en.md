@@ -44,6 +44,8 @@ Receipts are `historical-unattested`: they do not certify current files, accepta
 
 The reviewer starts from one full requirement ledger and the actual patch, reading other files only for missing context. After a repair, a fresh reviewer gets the previous blocking findings to recheck, with full original acceptance coverage still required.
 
+When there are no concrete issues and the exact, unique acceptance ledger contains only met and unconfirmed items, the host may ask the parent Pi session to collect focused evidence once, then rerun configured verification and start a fresh reviewer. This consumes one shared `verifyRetries` allowance; cancellation, recovery and continuation preserve consumption, and `verifyRetries: 0` disables automatic follow-up. The parent retains its existing tool permissions, protected baseline and user scope. A remaining evidence gap becomes `needs_attention` with the unconfirmed IDs; it is never automatically marked met.
+
 The reviewer receives actual staged, unstaged and untracked text patches, marked when they include pre-existing user work. Limits are 2,000 lines per file and 60,000 patch characters in total. Oversized, binary, sensitive, truncated or HEAD-changing evidence requires manual inspection. Use a Git repository root for complete review evidence. Patches remain in the reviewer's local Pi transcript instead of being copied into every task-counter snapshot.
 
 ### Protect tests, lockfiles or other project paths

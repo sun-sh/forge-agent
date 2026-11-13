@@ -15,6 +15,8 @@ Forge 在 Web 父会话之上管理子任务；每个子任务仍由 Pi `createA
 - [官方子 Agent UI 文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-subagent/README.md)
 - [官方子 Agent 生命周期文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/subagent/subagent/README.md)
 
+独立审阅只有未确认验收项、没有具体问题时，宿主可在父 Pi 会话补证一次，随后重新验证并创建全新 reviewer。补证与验证失败、代码缺陷修复共用 `verifyRetries`，并单独持久化 `reviewEvidenceRepairs`（0 或 1）；继续和重启不重置。缺失/重复/未知验收 ID、`unmet` 或无效审阅不能触发这条补证路径。补证也不增加子 Agent 的 shell、写入或网络权限。
+
 ## 状态、归属和恢复
 
 ```mermaid

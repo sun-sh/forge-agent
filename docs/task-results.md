@@ -31,6 +31,10 @@ Forge 将“宿主执行流程已结束”与“用户需求已验收”分开�
 
 `result` 从当前任务与证据计算，不作为第二套状态存储；历史恢复、证据过期、保护失败和收尾异常都重新派生。旧 Pi 日志、任务 ID、重试额度、队列和继续行为不迁移，不因为“需求未验收”自动重新运行、卡住输入或制造额外 reviewer 调用。现有验证失败、保护变化、Planned 审阅阻断和持久化失败仍阻止正常结束。
 
+### 审阅补证与恢复
+
+规划任务可带有 `reviewEvidenceRepairs: 0 | 1`，记录唯一一次自动补证是否已经使用；旧任务缺少该字段时按 0 处理。它消耗共享的 `repairs` / `verifyRetries`，继续与恢复保留次数。只有完整唯一的验收 ID、无具体 issues、无 `unmet` 且存在 `unconfirmed` 时可触发；补证在父 Pi 会话中进行，再重新验证和独立审阅。仍缺证据时 `result.status` 保持 `blocked`，不会由补证次数直接升级为审阅通过或需求验收。
+
 ### 评测不能靠换名字变好
 
 SWE-bench 的新记录额外保存 `executionFinished`、`resultStatus`、`acceptanceStatus` 和 `resolutionClaimed`。原 `completed` 与 `falseCompletion` 为兼容仍保留，后者继续表示“宿主门禁已结束，但外部验收不接受的结果”，不会被 UI 标签改变：
@@ -46,6 +50,8 @@ SWE-bench 的新记录额外保存 `executionFinished`、`resultStatus`、`accep
 以后若接入需求级行为验收，需要显式的验收条件、执行证据、工作区/测试版本绑定与覆盖/失败约束；当前不把任意测试命令、模型判断或关键词当作这个契约，也没有添加新配置键或暗中读取 SWE-bench 隐藏测试。
 
 ## English
+
+Planned tasks may persist `reviewEvidenceRepairs: 0 | 1`; an absent legacy field means zero. One automatic evidence follow-up consumes the shared repair allowance and survives continuation/restart. It requires exact unique acceptance IDs, no issues or unmet items, and at least one unconfirmed item. The parent Pi session gathers focused evidence, then the host verifies again and creates a fresh independent reviewer. A remaining gap stays blocked; this counter never certifies behavioral acceptance.
 
 Forge separates workflow settlement from requirement acceptance. Generic configured commands and an independent model review do not carry a host-verifiable contract covering every requested behavior. Both workflows therefore expose implemented-but-unverified delivery rather than certifying resolution. Configured-command and model-review evidence remain separate.
 

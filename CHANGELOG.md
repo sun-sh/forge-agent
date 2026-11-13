@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Retain two separately fingerprinted real-model Astropy/SymPy regressions: both resolve 2/2, while delivered results are 1/2 then 2/2 after correcting an overly strict missing-reproduction rule. Preserve the first blocked correct patch, unknown costs and changed-sample limitations; the later automatic evidence-follow-up branch is covered separately by engineering regressions.
+
+- Add one bounded parent-session evidence follow-up for an independent review with exact acceptance coverage, no concrete defects and unconfirmed evidence. Share `verifyRetries` with verification/code repairs, persist `reviewEvidenceRepairs` across continuation/restart, rerun verification and start a fresh reviewer, and retain unconfirmed IDs when evidence is still missing. Invalid coverage, unmet criteria, stale checks or exhausted allowances never enter this path.
+
 - Increase the independent delivery reviewer from 5 minutes / 24 turns / 120 tools / 32,000 output tokens / $4 to a larger but bounded 8 minutes / 40 turns / 160 tools / 48,000 output tokens / $6. Keep ordinary child limits unchanged and preserve parent-budget precedence. Classify reviewer-local exhaustion as a structured attention state. Improve the historical command handoff with conservative test-result categories, failure and zero-test summaries, receipt prioritization, and per-implementation-attempt reset. Do not turn a missing model-proposed reproduction receipt into an automatic blocker when the patch and focused code evidence establish the behavior; keep that limitation in notes unless the user explicitly required the check. These changes improve evidence transfer without turning heuristic receipts into verification or claiming a model-quality gain.
 
 - Add a strict Zod runtime schema for derived `task.result`, including the closed `modelReview` enum. `taskResult` and `publicTask` validate before returning API/SSE data, and unknown enum values fail regression tests instead of falling through to UI defaults.

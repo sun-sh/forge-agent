@@ -63,6 +63,8 @@ plan 和 implement 保持在父 Pi 会话中，以便继续使用同一项目上
 
 Web 的 `output-guard.ts` 在 Pi `agent_before_settle` 边界识别 `length` 和无正文/无工具的空结果，最多请求两次原会话续接，不另建模型/工具循环。失败保留在原阶段，不将“无文件、只有思考”的截断执行误当实现结束；父用量与取消仍由已有 Pi hooks 统计。旧记录已错误进入 verify 时，宿主依据最后模型 stopReason 恢复 implement。它不会提高用户配置的单次输出上限，也不暗中降低思考档位。
 
+只有证据缺口的审阅使用单独的有界处理：当 verdict 为 `changes_requested`、`issues` 为空、验收 ID 完整唯一、没有 `unmet` 且至少一项 `unconfirmed` 时，父 Pi 会话最多补证一次。宿主仍要先确认当前验证有效、补丁未过期且共享修复额度未耗尽；补证消耗 `repairs`，并在 TaskState 的 `reviewEvidenceRepairs` 中保留 0/1 次数，随中断恢复一起持久化。补证不是新的模型循环或权限模式，仍在 Pi 的 implement 会话执行，随后重新验证并创建新的只读 reviewer。无法确认时保留明确的验收 ID 和 `needs_attention`；旧验证报告或删除验证配置不能消除尚未解决的审阅。
+
 ### 公共联网工具
 
 Forge 通过具名 Pi 扩展注册 `web_search` / `web_fetch`，没有额外的模型或工具循环。正文提取复用 Mozilla Readability / LinkeDOM，IP 分类复用 ipaddr.js。网络配置存放在 Forge home 的 `network.json`，改变配置通过已有资源串行重载链路应用；运行任务不被中途改写。Plan / Ask 与 inspect 按具名扩展来源允许只读网页工具，不按工具名字放行项目自定义实现。独立交付 reviewer 与 worktree worker 没有因此增加网络权限。

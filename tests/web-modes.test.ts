@@ -18,7 +18,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
@@ -27,6 +27,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   let pause = false;
   let pausePhase: string | undefined;
   let implementationRequested = false;
+  let reviews = 0, evidenceRequested = false;
   const requests: any[] = [];
   const upstream = createServer(async (req, res) => {
     let raw = ''; for await (const part of req) raw += part;
@@ -35,10 +36,15 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
     if (pause || pausePhase && phase === pausePhase) await new Promise<void>((resolve) => { release = resolve; });
     if (res.destroyed) return;
     let calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
+    if (!calls && phase === 'implement' && options.reviewEvidenceGap && !evidenceRequested && JSON.stringify(input).includes('only evidence-only follow-up')) {
+      const tool = input.tools.find((item: any) => ['powershell', 'bash'].includes(item.function.name))?.function.name;
+      calls = [{ name: tool ?? 'bash', arguments: { command: 'node -e "console.log(\'SUPPLEMENT_CHECK_PASSED\')"' } }]; evidenceRequested = true;
+    }
     if (!calls && phase === 'implement' && options.implementationCommand && !implementationRequested) { const tool = input.tools.find((item: any) => ['powershell', 'bash'].includes(item.function.name))?.function.name; calls = [{ name: tool ?? 'bash', arguments: { command: options.implementationCommand } }]; implementationRequested = true; }
     if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
+    const evidenceGap = phase === 'review' && options.reviewEvidenceGap && reviews++ === 0;
     res.writeHead(200, { 'content-type': 'text/event-stream' });
-    const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Fixture review passed', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input).includes('End inspection with exactly one JSON object') ? JSON.stringify({ ...handoff.brief, ...(options.briefIntent ? { intent: options.briefIntent } : {}) }) : 'Mode response complete' };
+    const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: evidenceGap ? 'changes_requested' : 'ready', summary: evidenceGap ? 'Missing focused command evidence' : 'Fixture review passed', issues: [], acceptance: evidenceGap ? handoff.acceptance.map((item) => ({ ...item, status: 'unconfirmed' })) : handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input).includes('End inspection with exactly one JSON object') ? JSON.stringify({ ...handoff.brief, ...(options.briefIntent ? { intent: options.briefIntent } : {}) }) : 'Mode response complete' };
     for (const [part, finish] of [[delta, null], [{}, calls ? 'tool_calls' : 'stop']]) res.write('data: ' + JSON.stringify({ id: 'mode-response', object: 'chat.completion.chunk', model: 'mock', created: 1, choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');
     res.end('data: [DONE]\n\n');
   });
@@ -56,7 +62,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: 'openai-completions', apiKey: 'test-only', models: [{ id: 'mock' }] } } }));
   await mkdir(join(root, '.forge-agent'));
   await writeFile(join(root, 'verify.cjs'), "require('node:fs').writeFileSync('.forge-agent/verified', 'yes'); console.log('verified-exact-output')");
-  await writeFile(join(root, 'pforge.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node verify.cjs' }], verifyRetries: 0 }));
+  await writeFile(join(root, 'pforge.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node verify.cjs' }], verifyRetries: options.reviewEvidenceGap ? 1 : 0 }));
   await writeFile(join(root, 'readme.txt'), 'read-only evidence');
   await writeFile(join(root, '.gitignore'), '.forge-agent/\n.pforge/\n');
   await checkpointGit(root, ['init', '-q']); await checkpointGit(root, ['add', '.']);
@@ -111,6 +117,23 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(messages).toContain('model-authored interpretations');
     expect(reviewer.tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     expect(JSON.stringify(state.task)).not.toContain(marker);
+  });
+  it('collects an unconfirmed review receipt through Pi and rechecks with a new independent reviewer', async () => {
+    const f = await fixture({ reviewEvidenceGap: true, implementationWrite: { path: 'implementation-result.txt', content: 'keep this implementation' } });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Implement the focused change and check it.', workflow: 'planned' });
+    const state = await f.settled(session.id, 45000);
+    expect(state.task).toMatchObject({ status: 'completed', finalization: 'succeeded', repairs: 1, reviewEvidenceRepairs: 1, result: { status: 'implemented_unverified', modelReview: 'passed' } });
+    expect(state.task.reviewFollowup).toBeUndefined();
+    expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('keep this implementation');
+    const reviewers = state.subagents.filter((child: any) => child.purpose === 'review_gate');
+    expect(reviewers).toHaveLength(2); expect(new Set(reviewers.map((child: any) => child.id)).size).toBe(2);
+    const requests = f.requests.filter((input) => JSON.stringify(input.messages).includes('historicalCommands'));
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1].messages)).toContain('SUPPLEMENT_CHECK_PASSED');
+    expect(JSON.stringify(requests[1].messages)).toContain('REPAIR RECHECK');
+    expect(state.messages.filter((entry: any) => entry.role === 'user')).toHaveLength(1);
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'implement', 'verify', 'review', 'complete']);
   });
   it('admits an unknown request resolved to verification once, without resetting its user turn', async () => {
     const f = await fixture({ briefIntent: 'verify' });

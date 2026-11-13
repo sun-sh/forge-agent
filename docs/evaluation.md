@@ -24,6 +24,10 @@ The [targeted real-model report](evaluations/review-command-evidence-2026-11-12.
 
 Final runtime CI at the measured code revision passes four OS/Node combinations, with 50 test files and 704 Windows / 701 Ubuntu cases plus tarball checks. A retained earlier mixed-source local check failure is distinguished from clean final CI in the report.
 
+## Review budgets and receipt policy — 2026-11-13
+
+The [two-run report](evaluations/review-budget-evidence-2026-11-13.md) and [allowlisted aggregate](evaluations/review-budget-evidence-2026-11-13.json) retain four fresh real-model executions. Both runs officially resolve Astropy and SymPy; the first delivers only Astropy because an overly strict missing-reproduction rule blocks SymPy, while the corrected prompt's new samples deliver both. No reviewer exceeds five turns, so this does not attribute success to the larger 40-turn budget. Changed patches, generated acceptance and inline test evidence prevent a causal prompt-only comparison. The subsequent one-shot evidence follow-up is covered by host-state and real Pi shell/reviewer fixture tests, not those earlier model runs. Old failures, budgets and code fingerprints remain immutable.
+
 ## Conversation qualification and five-task repetition — 2026-11-10
 
 The [conversation qualification](evaluations/conversation-stability-2026-11-10.md) records per-chat navigation/configuration, genuine Pi history tools, retained timeout diagnostics, a final 48-file / 669-test local check, final isolated Edge acceptance and clean tgz installation. One seeded real-model history task separately passed all ten functional gates. This does not establish retrieval recall or host filesystem isolation.

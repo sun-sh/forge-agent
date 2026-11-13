@@ -51,6 +51,10 @@ The independent reviewer in the planned workflow has a larger but bounded budget
 
 Public web search and URL text reading work out of the box without a search API key. **Settings → Tools** provides an opt-out and an actual document-connection test. Results retain source URLs; use browser MCP for interactive or authenticated pages. The UI manages models, MCP, Skills, context compaction and scoped reference memory. Ordinary workers have no shell, MCP or nested delegation and suit bounded file tasks. See [subagent design](docs/subagents.md) for permissions, budgets and proposal limits.
 
+An evidence-only review gap can trigger one focused follow-up within the shared repair allowance, followed by fresh verification and review. Remaining gaps retain explicit reasons, and continuation/restart preserve consumption.
+
+The new [review-budget/evidence regression](docs/evaluations/review-budget-evidence-2026-11-13.md) retains both attempts: 2/2 resolved with 1/2 delivered, then 2/2 resolved and delivered after correcting an overly strict receipt rule. The subsequent automatic evidence follow-up has engineering regressions only and does not inherit those model scores.
+
 ## Configure verification and protected paths
 
 Create `forge-agent.json` in the target project root; YAML is also supported:

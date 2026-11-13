@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-13",
+  "scope": "Two purposive two-issue regressions; one new model sample per issue and revision. Not paired patch replay or a representative coding benchmark.",
+  "currentFollowupBranchMeasured": false,
+  "runs": [
+    {
+      "runId": "43367262320",
+      "codeRevision": "aa06158d152224b71e0569271b14aae386c475be",
+      "sourceReportHash": "a9b543e29f61cf76e9782dc8146b7f011a31ad71419d361427250f48f62d9444",
+      "protocol": "forge-swebench-lite-official-v2",
+      "executionClassificationVersion": 1,
+      "cohortFingerprint": "6f849fab0a72be3783f518cd07ed75da3c9dae18b084cc3b3529826df4ed84c6",
+      "harnessCommit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+      "harnessFingerprint": "c5f40acb01cf4ba558a497d1250a9ed9497c172e4143fa104d136cee084e143a",
+      "backendHash": "06de453652119882dc311f17cd4c1e8aca5e52b09b6fd5a6ba46cfde4c923abc",
+      "packageHash": "f38cf930a8962597f7707d5542f7421538a2e87c90e7dde9229687812551d359",
+      "modelConfigurationHash": "0b11fc90e879b5c13d184085422b59e1d9187fed65166232dc02b7005ac0f429",
+      "validationFingerprint": "9eb7dd3ba6d1fae3e6da34b9b17ba7ed90c8aaeb38a16542be952eaa58f09e67",
+      "model": "deepseek-flash",
+      "api": "openai-completions",
+      "thinking": "medium",
+      "pricingKnown": false,
+      "limits": {
+        "maxDurationMs": 1800000,
+        "maxModelTurns": 160,
+        "maxToolCalls": 400,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 200000,
+        "maxCostUsd": 50
+      },
+      "validation": {
+        "valid": 2,
+        "total": 2,
+        "harness": {
+          "commit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+          "version": "5.0.2",
+          "sourceHash": "96c0f10104f3a401aecaed82dd8e8236c2c6604b9969b5aa6135af302a15b3d9"
+        }
+      },
+      "nodeImage": {
+        "imageId": "sha256:8c3a0351e2535c75b4f15dcdd918612e419e829306291a93ddce97f4746581bd",
+        "imageRef": "node:22.21.1-bookworm-slim",
+        "repoDigests": [
+          "node@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c"
+        ]
+      },
+      "startedAt": "2026-11-13T04:46:22.257Z",
+      "finishedAt": "2026-11-13T04:56:44.207Z",
+      "summary": {
+        "scheduled": 2,
+        "validationSkipped": 0,
+        "evaluated": 2,
+        "resolved": 2,
+        "accepted": 2,
+        "forgeCompleted": 1,
+        "resolvedNotCompleted": 1,
+        "deliveredAccepted": 1,
+        "workflowFailures": 1,
+        "unresolvedFinishes": 0,
+        "unverifiedFinishes": 1,
+        "resolutionClaims": 0,
+        "assessedResolutionClaims": 0,
+        "falseResolutionClaims": 0,
+        "falseResolutionClaimRate": null,
+        "falseCompletions": 0,
+        "infrastructureFailures": 0,
+        "integrityViolations": 0,
+        "emptyPatches": 0,
+        "p50ExecutionMs": 276909,
+        "requestTokens": 3289755,
+        "outputTokens": 51709,
+        "costUsd": null
+      },
+      "results": [
+        {
+          "instanceId": "astropy__astropy-6938",
+          "workflow": "planned",
+          "run": 1,
+          "officialResolved": true,
+          "forgeCompleted": true,
+          "accepted": true,
+          "resultStatus": "implemented_unverified",
+          "acceptanceStatus": "unverified",
+          "resolutionClaimed": false,
+          "taskStatus": "completed",
+          "workflowFailure": false,
+          "failureKind": null,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "integrity": true,
+          "testChanges": 0,
+          "emptyPatch": false,
+          "patchHash": "a222302384358dedb10858cd53b884dd795f52536e8ab90c52d06a4ec0c4d5de",
+          "snapshotHash": "cc990750ea3564d57a2995cef7262cd77ac6960d590ae5a27e430c7be3b6f918",
+          "executionMs": 276909,
+          "modelTurns": 48,
+          "toolCalls": 53,
+          "requestTokens": 2163347,
+          "outputTokens": 32766,
+          "cacheReadTokens": 2014976,
+          "costUsd": null,
+          "reviewCalls": 1,
+          "repairs": 0,
+          "reviewVerdict": "ready",
+          "reviewAcceptance": [
+            {
+              "id": "A1",
+              "status": "met"
+            },
+            {
+              "id": "A2",
+              "status": "met"
+            },
+            {
+              "id": "A3",
+              "status": "met"
+            },
+            {
+              "id": "A4",
+              "status": "met"
+            }
+          ],
+          "reviewers": [
+            {
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "requestTokens": 48384,
+              "outputTokens": 8451,
+              "limits": {
+                "maxDurationMs": 480000,
+                "maxModelTurns": 40,
+                "maxToolCalls": 160,
+                "maxTotalTokens": 0,
+                "maxOutputTokens": 48000,
+                "maxCostUsd": 6
+              },
+              "exceeded": false
+            }
+          ],
+          "verificationScope": "changed-python-syntax-only"
+        },
+        {
+          "instanceId": "sympy__sympy-18189",
+          "workflow": "planned",
+          "run": 1,
+          "officialResolved": true,
+          "forgeCompleted": false,
+          "accepted": true,
+          "resultStatus": "blocked",
+          "acceptanceStatus": "unverified",
+          "resolutionClaimed": false,
+          "taskStatus": "needs_attention",
+          "workflowFailure": true,
+          "failureKind": "completion_gate",
+          "falseCompletion": null,
+          "infrastructureFailure": false,
+          "integrity": true,
+          "testChanges": 0,
+          "emptyPatch": false,
+          "patchHash": "41b3140ba4c9ed2ee48c4bef139113da382ea9b6d5364075ff2f569d89e6b077",
+          "snapshotHash": "e9269d79071bd351b8d30b2ca4dff628f35b05e4f64a884851efd0ccdb749564",
+          "executionMs": 207746,
+          "modelTurns": 40,
+          "toolCalls": 41,
+          "requestTokens": 1126408,
+          "outputTokens": 18943,
+          "cacheReadTokens": 1029888,
+          "costUsd": null,
+          "reviewCalls": 1,
+          "repairs": 0,
+          "reviewVerdict": "changes_requested",
+          "reviewAcceptance": [
+            {
+              "id": "A1",
+              "status": "unconfirmed"
+            },
+            {
+              "id": "A2",
+              "status": "unconfirmed"
+            },
+            {
+              "id": "A3",
+              "status": "unconfirmed"
+            },
+            {
+              "id": "A4",
+              "status": "met"
+            },
+            {
+              "id": "A5",
+              "status": "met"
+            }
+          ],
+          "reviewers": [
+            {
+              "status": "completed",
+              "modelTurns": 5,
+              "toolCalls": 5,
+              "requestTokens": 80084,
+              "outputTokens": 3870,
+              "limits": {
+                "maxDurationMs": 480000,
+                "maxModelTurns": 40,
+                "maxToolCalls": 160,
+                "maxTotalTokens": 0,
+                "maxOutputTokens": 48000,
+                "maxCostUsd": 6
+              },
+              "exceeded": false
+            }
+          ],
+          "verificationScope": "changed-python-syntax-only"
+        }
+      ]
+    },
+    {
+      "runId": "43382266784",
+      "codeRevision": "d49d727b8f495395cd4f8647399f4037c70d657a",
+      "sourceReportHash": "d04127949b343cf6c0e6b0662cd6d52f2f0425557623a9b128f438b170f4e19f",
+      "protocol": "forge-swebench-lite-official-v2",
+      "executionClassificationVersion": 1,
+      "cohortFingerprint": "6f849fab0a72be3783f518cd07ed75da3c9dae18b084cc3b3529826df4ed84c6",
+      "harnessCommit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+      "harnessFingerprint": "c5f40acb01cf4ba558a497d1250a9ed9497c172e4143fa104d136cee084e143a",
+      "backendHash": "06de453652119882dc311f17cd4c1e8aca5e52b09b6fd5a6ba46cfde4c923abc",
+      "packageHash": "a1e96ac26cc8a88c0bd0808f930f643698d006be0f556426b2ba92dd8c2741b7",
+      "modelConfigurationHash": "0b11fc90e879b5c13d184085422b59e1d9187fed65166232dc02b7005ac0f429",
+      "validationFingerprint": "1b71eac8fae0121c02ff4cfda9fd027599f8aa2704f10fdc9c252bd7345007cb",
+      "model": "deepseek-flash",
+      "api": "openai-completions",
+      "thinking": "medium",
+      "pricingKnown": false,
+      "limits": {
+        "maxDurationMs": 1800000,
+        "maxModelTurns": 160,
+        "maxToolCalls": 400,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 200000,
+        "maxCostUsd": 50
+      },
+      "validation": {
+        "valid": 2,
+        "total": 2,
+        "harness": {
+          "commit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+          "version": "5.0.2",
+          "sourceHash": "96c0f10104f3a401aecaed82dd8e8236c2c6604b9969b5aa6135af302a15b3d9"
+        }
+      },
+      "nodeImage": {
+        "imageId": "sha256:8c3a0351e2535c75b4f15dcdd918612e419e829306291a93ddce97f4746581bd",
+        "imageRef": "node:22.21.1-bookworm-slim",
+        "repoDigests": [
+          "node@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c"
+        ]
+      },
+      "startedAt": "2026-11-13T07:01:02.223Z",
+      "finishedAt": "2026-11-13T07:11:54.564Z",
+      "summary": {
+        "scheduled": 2,
+        "validationSkipped": 0,
+        "evaluated": 2,
+        "resolved": 2,
+        "accepted": 2,
+        "forgeCompleted": 2,
+        "resolvedNotCompleted": 0,
+        "deliveredAccepted": 2,
+        "workflowFailures": 0,
+        "unresolvedFinishes": 0,
+        "unverifiedFinishes": 2,
+        "resolutionClaims": 0,
+        "assessedResolutionClaims": 0,
+        "falseResolutionClaims": 0,
+        "falseResolutionClaimRate": null,
+        "falseCompletions": 0,
+        "infrastructureFailures": 0,
+        "integrityViolations": 0,
+        "emptyPatches": 0,
+        "p50ExecutionMs": 398260,
+        "requestTokens": 3334737,
+        "outputTokens": 52993,
+        "costUsd": null
+      },
+      "results": [
+        {
+          "instanceId": "astropy__astropy-6938",
+          "workflow": "planned",
+          "run": 1,
+          "officialResolved": true,
+          "forgeCompleted": true,
+          "accepted": true,
+          "resultStatus": "implemented_unverified",
+          "acceptanceStatus": "unverified",
+          "resolutionClaimed": false,
+          "taskStatus": "completed",
+          "workflowFailure": false,
+          "failureKind": null,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "integrity": true,
+          "testChanges": 0,
+          "emptyPatch": false,
+          "patchHash": "f580d0ca660630f9a048e6dcf975f1d6d370a85fb2a9ea2defc0e7e8dc16e2e9",
+          "snapshotHash": "84b1ee5c15cfbfcdb365d80f3cc28e6d6db5275392868c6b44ede982d07c8606",
+          "executionMs": 398260,
+          "modelTurns": 77,
+          "toolCalls": 77,
+          "requestTokens": 2857487,
+          "outputTokens": 41212,
+          "cacheReadTokens": 2727296,
+          "costUsd": null,
+          "reviewCalls": 1,
+          "repairs": 0,
+          "reviewVerdict": "ready",
+          "reviewAcceptance": [
+            {
+              "id": "A1",
+              "status": "met"
+            },
+            {
+              "id": "A2",
+              "status": "met"
+            },
+            {
+              "id": "A3",
+              "status": "met"
+            },
+            {
+              "id": "A4",
+              "status": "met"
+            }
+          ],
+          "reviewers": [
+            {
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "requestTokens": 79083,
+              "outputTokens": 12119,
+              "limits": {
+                "maxDurationMs": 480000,
+                "maxModelTurns": 40,
+                "maxToolCalls": 160,
+                "maxTotalTokens": 0,
+                "maxOutputTokens": 48000,
+                "maxCostUsd": 6
+              },
+              "exceeded": false
+            }
+          ],
+          "verificationScope": "changed-python-syntax-only"
+        },
+        {
+          "instanceId": "sympy__sympy-18189",
+          "workflow": "planned",
+          "run": 1,
+          "officialResolved": true,
+          "forgeCompleted": true,
+          "accepted": true,
+          "resultStatus": "implemented_unverified",
+          "acceptanceStatus": "unverified",
+          "resolutionClaimed": false,
+          "taskStatus": "completed",
+          "workflowFailure": false,
+          "failureKind": null,
+          "falseCompletion": false,
+          "infrastructureFailure": false,
+          "integrity": true,
+          "testChanges": 0,
+          "emptyPatch": false,
+          "patchHash": "10189ce6e8dfae864b295a89204755ba2bf71fa42ac4224230d45ebc012708a8",
+          "snapshotHash": "076a192ab8e88f72a05b10b36a137304d2c46ef5bd1895c4b90ca319114e41e8",
+          "executionMs": 103495,
+          "modelTurns": 23,
+          "toolCalls": 26,
+          "requestTokens": 477250,
+          "outputTokens": 11781,
+          "cacheReadTokens": 383872,
+          "costUsd": null,
+          "reviewCalls": 1,
+          "repairs": 0,
+          "reviewVerdict": "ready",
+          "reviewAcceptance": [
+            {
+              "id": "A1",
+              "status": "met"
+            },
+            {
+              "id": "A2",
+              "status": "met"
+            },
+            {
+              "id": "A3",
+              "status": "met"
+            },
+            {
+              "id": "A4",
+              "status": "met"
+            }
+          ],
+          "reviewers": [
+            {
+              "status": "completed",
+              "modelTurns": 5,
+              "toolCalls": 6,
+              "requestTokens": 80162,
+              "outputTokens": 4562,
+              "limits": {
+                "maxDurationMs": 480000,
+                "maxModelTurns": 40,
+                "maxToolCalls": 160,
+                "maxTotalTokens": 0,
+                "maxOutputTokens": 48000,
+                "maxCostUsd": 6
+              },
+              "exceeded": false
+            }
+          ],
+          "verificationScope": "changed-python-syntax-only"
+        }
+      ]
+    }
+  ]
+}

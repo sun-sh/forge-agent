@@ -253,6 +253,65 @@ describe('task workflow controller', () => {
     expect(result.status).toBe('needs_attention'); expect(result.repairs).toBe(1); expect(calls).toBe(2);
     expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(2);
   });
+  it('collects missing acceptance evidence once, then verifies and independently reviews without inventing a defect', async () => {
+    const f = fixture(), review = f.adapter.review!, verify = f.adapter.verify;
+    let reviews = 0, checks = 0;
+    f.adapter.review = async (message, signal) => ++reviews === 1
+      ? { text: JSON.stringify({ verdict: 'changes_requested', summary: 'No direct reproduction receipt', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'Run a focused reproduction without changing tests' }] }), sessionId: randomUUID(), model: 'mock/independent-reviewer' }
+      : review(message, signal);
+    f.adapter.verify = async (signal) => { checks++; return verify(signal); };
+    const result = await f.controller.run('Fix the task', 2, f.adapter);
+    expect(result).toMatchObject({ status: 'completed', repairs: 1, reviewEvidenceRepairs: 1, review: { verdict: 'ready', freshness: 'current' } });
+    expect(result.reviewFollowup).toBeUndefined(); expect(reviews).toBe(2); expect(checks).toBe(2);
+    const prompt = f.messages.find((text) => text.includes('only evidence-only follow-up'));
+    expect(prompt).toContain('without a concrete code defect'); expect(prompt).toContain('Preserve protected files');
+    expect(prompt).not.toContain('found concrete blocking defects');
+    expect(restoreTask([{ type: 'custom', customType: 'pforge.task', data: result }])?.reviewEvidenceRepairs).toBe(1);
+  });
+  it('stops with the exact unconfirmed IDs after the evidence follow-up instead of consuming all code repairs', async () => {
+    const f = fixture(undefined, JSON.stringify({ verdict: 'changes_requested', summary: 'Still no relevant evidence', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'Environment cannot run this check' }] }));
+    const result = await f.controller.run('Fix the task', 5, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', repairs: 1, reviewEvidenceRepairs: 1, review: { verdict: 'changes_requested' } });
+    expect(result.error).toContain('A1'); expect(result.error).toContain('补证机会');
+    expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(2);
+    expect(f.phases.filter((phase) => phase === 'review')).toHaveLength(2);
+  });
+  it('does not reset the shared repair counter to collect review evidence', async () => {
+    const f = fixture(undefined, JSON.stringify({ verdict: 'changes_requested', summary: 'Missing evidence', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'No receipt' }] }));
+    const pass = await f.adapter.verify(new AbortController().signal); let checks = 0;
+    f.adapter.verify = async () => ++checks === 1 ? { status: 'failed', attempts: 0, error: 'Configured check failed' } : pass;
+    const result = await f.controller.run('Fix the task', 1, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', repairs: 1 });
+    expect(result.reviewEvidenceRepairs).toBeUndefined();
+    expect(f.messages.filter((text) => text.includes('only evidence-only follow-up'))).toHaveLength(0);
+  });
+  it.each([
+    { acceptance: [] }, { acceptance: [{ id: 'A2', status: 'unconfirmed', evidence: 'Invented ID' }] },
+    { acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'one' }, { id: 'A1', status: 'unconfirmed', evidence: 'duplicate' }] },
+    { acceptance: [{ id: 'A1', status: 'unmet', evidence: 'This is a defect, not missing evidence' }] }
+  ])('does not turn malformed or unmet acceptance into an evidence-only follow-up: %j', async ({ acceptance }) => {
+    const f = fixture(undefined, JSON.stringify({ verdict: 'changes_requested', summary: 'Incomplete review', issues: [], acceptance }));
+    const result = await f.controller.run('Fix the task', 5, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', repairs: 0 });
+    expect(result.reviewEvidenceRepairs).toBeUndefined();
+    expect(f.phases.filter((phase) => phase === 'implement')).toHaveLength(1);
+  });
+  it('retains evidence follow-up consumption and findings across cancellation and restart', async () => {
+    const f = fixture(undefined, JSON.stringify({ verdict: 'changes_requested', summary: 'Missing evidence', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed', evidence: 'No receipt' }] }));
+    const execute = f.adapter.execute;
+    f.adapter.execute = async (...args) => {
+      if (args[1].includes('only evidence-only follow-up')) { f.controller.cancel('Stopped during evidence collection'); throw new Error('interrupted'); }
+      return execute(...args);
+    };
+    const stopped = await f.controller.run('Fix the task', 3, f.adapter);
+    expect(stopped).toMatchObject({ status: 'aborted', repairs: 1, reviewEvidenceRepairs: 1 });
+    const saved = restoreTask([{ type: 'custom', customType: 'pforge.task', data: stopped }])!;
+    expect(saved.reviewFollowup?.acceptance?.[0]?.status).toBe('unconfirmed');
+    f.adapter.execute = execute;
+    const resumed = await f.controller.run(saved.prompt, 3, f.adapter, saved.id, undefined, { workflow: 'planned', resumeState: saved });
+    expect(resumed).toMatchObject({ status: 'needs_attention', repairs: 1, reviewEvidenceRepairs: 1 });
+    expect(f.messages.filter((text) => text.includes('only evidence-only follow-up'))).toHaveLength(0);
+  });
   it('persists invalidated verification and review without claiming current completion', async () => {
     const f = fixture(); const result = await f.controller.run('Fix the task', 0, f.adapter);
     const stale = withTaskEvidence(result, { ...result.verification!, evidence: { ...evidence, freshness: 'stale', reason: 'Changed after undo' } });

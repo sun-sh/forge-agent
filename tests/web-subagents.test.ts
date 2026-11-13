@@ -8,7 +8,7 @@ import { ForgeSubagents } from '../src/web/subagents.js';
 import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../src/task/budget.js';
 import { startWebConsole } from '../src/web/server.js';
 import { checkpointGit } from '../src/task/checkpoints.js';
-import { ReviewFormatError } from '../src/task/review.js';
+import { ReviewBudgetExceededError, ReviewFormatError } from '../src/task/review.js';
 import { REVIEW_GATE_LIMITS } from '../src/web/subagents.js';
 
 const closers: Array<() => Promise<unknown>> = [];
@@ -72,6 +72,24 @@ describe('managed Pi subagents', () => {
     expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'review_gate', role: 'reviewer', status: 'completed', collectedAt: expect.any(String) });
     await expect(f.agents.delegate([{ title: 'continue gate', role: 'reviewer', prompt: 'continue', id: review.sessionId }], 'follow-up')).rejects.toThrow('交付审阅不能续问');
+  });
+  it('allows a real Pi reviewer to finish beyond the previous 24-turn ceiling', async () => {
+    let turns = 0;
+    const f = await fixture((input, res) => ++turns <= 25
+      ? answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } })
+      : answer(res, input, '{"verdict":"ready","summary":"Focused review finished","issues":[],"acceptance":[]}'));
+    await f.agents.reviewGate('Review the supplied patch and requirements.', new AbortController().signal);
+    expect(f.requests).toHaveLength(26);
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', budget: { status: 'completed', modelTurns: 26, limits: REVIEW_GATE_LIMITS } });
+    expect(f.budget.snapshot()).toMatchObject({ status: 'running', modelTurns: 26, toolCalls: 25 });
+  });
+  it('preserves the reviewer-local stop reason without consuming the parent budget or accepting partial work', async () => {
+    const f = await fixture((input, res) => answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } }));
+    await expect(f.agents.reviewGate('Review the supplied patch.', new AbortController().signal)).rejects.toBeInstanceOf(ReviewBudgetExceededError);
+    expect(f.requests).toHaveLength(40);
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'failed', collectedAt: expect.any(String), budget: { status: 'exceeded', modelTurns: 41, exceededReason: expect.stringContaining('40') } });
+    expect(f.budget.snapshot().status).toBe('running');
+    expect(f.budget.snapshot().exceededReason).toBeUndefined();
   });
   it('carries a structured scope and acceptance handoff into an independent child', async () => {
     const f = await fixture((input, res) => answer(res, input, 'Completed: inspected sample.txt. Unverified: parent must run tests. Next: compare the result with acceptance.'));
