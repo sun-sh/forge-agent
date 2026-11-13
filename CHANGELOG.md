@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Retain a 24-review real-model paired synthetic diagnostic: both prompts accept 6/6 correct and block 6/6 defective candidates, with no demonstrated decision gain and at most four turns. Preserve the pre-model oracle failure, unknown pricing, captured harness identity and distinction from unqualified upstream SWE-bench misses.
+
+
 - Add a schema-validated insufficient_evidence review verdict and durable reviewStop reasons/actions across child/task persistence, API and UI. Distinguish reviewer/parent budget exhaustion, evidence gaps and concrete defects; normalize legacy evidence-only reviews without inventing bugs. Restore 24-turn/$4 standard limits, retaining 40-turn/$6 as explicit opt-in. Add public-entry-path and supported-shape counterexample guidance plus externally checked paired mechanism analogues; do not claim that prior Flask/Matplotlib misses or larger-budget quality gains are validated.
 
 

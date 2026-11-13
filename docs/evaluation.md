@@ -4,6 +4,10 @@
 
 [Execution versus acceptance](task-results.md) now reports implemented-but-unverified results without a behavioral-attestation contract. Official resolution and finished-but-unacceptable metrics retain their original definitions; relabeling the six Direct failures does not improve 9/15 resolution or erase six unsuccessful finished outcomes. Explicit resolution claims are counted separately, with a null error rate when there are no assessed claims. Historical reports and missing claim fields remain untouched. This reporting change adds no model calls and has no new coding-quality score.
 
+## Reviewer outcome and counterexample qualification — 2026-11-13
+
+[Structured review outcomes](review-outcomes.md) distinguish budget exhaustion, insufficient evidence and concrete defects. The [paired real-model diagnostic](evaluations/review-counterexamples-2026-11-13.md) retains 24 reviews over two fixed synthetic mechanisms. Both prompts block 6/6 defective candidates and accept 6/6 correct candidates, with no demonstrated decision gain and at most four turns. It retains the pre-model oracle failure and does not qualify the historical upstream Flask/Matplotlib misses; code/suite fingerprints and all repetitions are in the allowlisted aggregate.
+
 ## SWE-bench Lite adapter
 
 The [portable SWE-bench protocol](evaluations/swebench-lite-2026-11-10.md) and [GitHub Docker smoke](evaluations/swebench-lite-github-smoke-2026-11-11.md) fixes the official 300-instance snapshot, a seeded 20-task/12-repository cohort, harness commit, and explicit budgets. A dedicated controller runs Forge in task-image containers, then submits complete patches to fresh containers through official execution/parsing/grading. Gold patches, hidden tests and grading records stay outside model workspaces. Official resolution is separate from Forge completion and test-preservation acceptance; missing/invalid test evidence remains infrastructure data.
