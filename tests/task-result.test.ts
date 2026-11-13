@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createExecutionState, restoreTask, type TaskState } from '../src/task/controller.js';
-import { publicTask, taskResult } from '../src/task/result.js';
+import { publicTask, taskResult, taskResultSchema } from '../src/task/result.js';
 import { TaskRegistry } from '../src/task/registry.js';
 
 const verification = () => ({
@@ -18,6 +18,15 @@ function implemented(workflow: 'direct' | 'planned' = 'direct'): TaskState {
   task.artifacts = [{ path: 'app.py', operation: 'edit' }]; task.verification = verification();
   return task;
 }
+
+  it('runtime-validates the closed result enum and rejects undocumented values', () => {
+    const task = implemented('planned'); task.reviewRequired = false;
+    const result = taskResult(task);
+    expect(taskResultSchema.parse(result)).toEqual(result);
+    expect(() => taskResultSchema.parse({ ...result, modelReview: 'new_status' })).toThrow();
+    expect(() => taskResultSchema.parse({ ...result, resolutionClaimed: true })).toThrow();
+    expect(publicTask({ ...task, result: { status: 'future' } } as any).result).toEqual(result);
+  });
 
 describe('execution results without unsupported resolution claims', () => {
   it('does not promote configured checks, their names, or model review into behavioral acceptance', () => {

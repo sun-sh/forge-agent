@@ -1,6 +1,19 @@
+import { z } from 'zod';
 import type { TaskState } from './controller.js';
 import { acceptanceSatisfied } from './plan.js';
 import { isVerified, isVerificationUnconfigured } from '../verification/pi-extension.js';
+
+
+export const taskResultSchema = z.object({
+  version: z.literal(1),
+  status: z.enum(['in_progress', 'blocked', 'implemented_unverified', 'finished_unverified', 'not_applicable']),
+  execution: z.enum(['running', 'blocked', 'finished']),
+  acceptance: z.enum(['unverified', 'not_applicable']),
+  resolutionClaimed: z.literal(false),
+  checks: z.enum(['passed', 'not_configured', 'not_run', 'running', 'failed', 'unconfirmed']),
+  modelReview: z.enum(['passed', 'not_applicable', 'not_run', 'unconfirmed', 'changes_requested'])
+}).strict();
+export type TaskResult = z.infer<typeof taskResultSchema>;
 
 /** Product result, separate from the legacy scheduler status `completed`.
  * No current Forge source attests to complete behavioral acceptance. Neither
@@ -27,8 +40,8 @@ export function taskResult(task: TaskState) {
     || verification?.protection && verification.protection.status !== 'unchanged'
     || checks === 'failed' || checks === 'unconfirmed' || modelReview === 'changes_requested'
     || task.workflow === 'planned' && task.kind === 'change' && checks !== 'not_configured' && (checks !== 'passed' || task.reviewRequired !== false && !reviewed));
-  return {
-    version: 1 as const,
+  return taskResultSchema.parse({
+    version: 1,
     status: running ? 'in_progress' as const : blocked ? 'blocked' as const
       : readOnly ? 'not_applicable' as const : implementation ? 'implemented_unverified' as const : 'finished_unverified' as const,
     execution: running ? 'running' as const : blocked ? 'blocked' as const : 'finished' as const,
@@ -36,9 +49,9 @@ export function taskResult(task: TaskState) {
     resolutionClaimed: false as const,
     checks,
     modelReview
-  };
+  });
 }
 
-export function publicTask<T extends TaskState>(task: T): Omit<T, 'result'> & { result: ReturnType<typeof taskResult> } {
+export function publicTask<T extends TaskState>(task: T): Omit<T, 'result'> & { result: TaskResult } {
   return { ...task, result: taskResult(task) };
 }
