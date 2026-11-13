@@ -68,6 +68,7 @@ describe('managed Pi subagents', () => {
     expect(text(f.requests[0])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
     expect(text(f.requests[0])).toContain('Return exactly the structured review JSON');
     expect(text(f.requests[0])).not.toContain('result with explicit sections');
+    expect(text(f.requests[0])).toContain('Missing a direct reproduction receipt is an evidence limitation');
     expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'review_gate', role: 'reviewer', status: 'completed', collectedAt: expect.any(String) });
     await expect(f.agents.delegate([{ title: 'continue gate', role: 'reviewer', prompt: 'continue', id: review.sessionId }], 'follow-up')).rejects.toThrow('交付审阅不能续问');

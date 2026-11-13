@@ -26,6 +26,8 @@ describe('focused independent review handoff', () => {
     expect(handoff.prompt).toContain('historical-unattested');
     expect(handoff.prompt).toContain('model-authored interpretations');
     expect(handoff.prompt).toContain('not the implementation transcript or a current-workspace attestation');
+    expect(handoff.prompt).toContain('Missing a direct reproduction receipt is an evidence limitation, not by itself a blocking defect');
+    expect(handoff.prompt).toContain('original user explicitly required that exact check');
     expect(handoff.prompt).toContain('Preserve Nx1 input behavior');
     expect(handoff.prompt).toContain('If evidence is insufficient use unconfirmed');
   });
