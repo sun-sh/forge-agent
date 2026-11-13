@@ -6,6 +6,7 @@ import { VerificationInterruptedError } from '../src/verification/verify.js';
 import { randomUUID } from 'node:crypto';
 import handoff from './fixtures/task-handoff.json' with { type: 'json' };
 import { ReviewEvidenceError } from '../src/task/git.js';
+import { ReviewBudgetExceededError } from '../src/task/review.js';
 
 const evidence = { workspace: { version: 1 as const, scope: 'git' as const, digest: 'a'.repeat(64), files: 1 }, configHash: 'b'.repeat(64), freshness: 'current' as const };
 
@@ -282,9 +283,15 @@ describe('task workflow controller', () => {
     expect(f.saved.length).toBeGreaterThan(6);
     expect(f.controller.active).toBe(false);
   });
+  it('keeps a reviewer-local budget stop reviewable instead of reporting a generic task failure', async () => {
+    const f = fixture();
+    f.adapter.review = async () => { throw new ReviewBudgetExceededError('独立审阅达到 40 回合上限；请调整预算后继续。'); };
+    const result = await f.controller.run('Fix code', 0, f.adapter);
+    expect(result).toMatchObject({ status: 'needs_attention', phase: 'review', error: '独立审阅达到 40 回合上限；请调整预算后继续。' });
+  });
   it('includes optional host command evidence in the independent handoff without persisting raw receipts', async () => {
     const f = fixture();
-    f.adapter.commandEvidence = () => ({ version: 1, source: 'pi-selected-branch', scope: 'latest-implementation', freshness: 'historical-unattested', commands: [{ toolCallId: 'test-call', tool: 'bash', command: { text: 'python bin/test', characters: 15, sha256: 'a'.repeat(64), truncated: false }, output: { text: 'UNIQUE_TEST_RECEIPT 43 passed', characters: 29, sha256: 'b'.repeat(64), truncated: false }, toolError: false }], omitted: 0, scanTruncated: false });
+    f.adapter.commandEvidence = () => ({ version: 1, source: 'pi-selected-branch', scope: 'latest-implementation', freshness: 'historical-unattested', classification: 'heuristic-not-verification', commands: [{ toolCallId: 'test-call', tool: 'bash', command: { text: 'python bin/test', characters: 15, sha256: 'a'.repeat(64), truncated: false }, output: { text: 'UNIQUE_TEST_RECEIPT 43 passed', characters: 29, sha256: 'b'.repeat(64), truncated: false }, toolError: false, kind: 'test', outcome: 'passed' }], omitted: 0, scanTruncated: false, summary: { receipts: 1, retainedReceipts: 1, testReceipts: 1, failedReceipts: 0, zeroTestReceipts: 0, sourceTruncatedReceipts: 0 } });
     const task = await f.controller.run('Fix code', 0, f.adapter);
     expect(task.status).toBe('completed');
     expect(f.messages.at(-1)).toContain('UNIQUE_TEST_RECEIPT 43 passed');

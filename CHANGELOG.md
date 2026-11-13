@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Increase the independent delivery reviewer from 5 minutes / 24 turns / 120 tools / 32,000 output tokens / $4 to a larger but bounded 8 minutes / 40 turns / 160 tools / 48,000 output tokens / $6. Keep ordinary child limits unchanged and preserve parent-budget precedence. Classify reviewer-local exhaustion as a structured attention state. Improve the historical command handoff with conservative test-result categories, failure and zero-test summaries, receipt prioritization, and per-implementation-attempt reset; this improves evidence transfer without turning heuristic receipts into verification or claiming a model-quality gain.
+
 - Add a strict Zod runtime schema for derived `task.result`, including the closed `modelReview` enum. `taskResult` and `publicTask` validate before returning API/SSE data, and unknown enum values fail regression tests instead of falling through to UI defaults.
 
 - Align planned-no-review across the derived task result and Web renderer: it is `implemented_unverified` with `modelReview=not_applicable`, and the UI labels it as unverified. Give the unverified status a warning color instead of the success green, with regressions for both semantics and CSS.

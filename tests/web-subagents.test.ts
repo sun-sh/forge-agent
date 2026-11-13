@@ -9,6 +9,7 @@ import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../src/task/budget.js';
 import { startWebConsole } from '../src/web/server.js';
 import { checkpointGit } from '../src/task/checkpoints.js';
 import { ReviewFormatError } from '../src/task/review.js';
+import { REVIEW_GATE_LIMITS } from '../src/web/subagents.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
@@ -54,6 +55,10 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('gives the independent review gate a larger but explicit bounded budget', () => {
+    expect(REVIEW_GATE_LIMITS).toEqual({ maxDurationMs: 480_000, maxModelTurns: 40, maxToolCalls: 160, maxOutputTokens: 48_000, maxCostUsd: 6 });
+    expect(REVIEW_GATE_LIMITS.maxModelTurns).toBeGreaterThan(24);
+  });
   it('runs the host review gate in a fresh read-only child context', async () => {
     const f = await fixture((input, res) => answer(res, input, '{"verdict":"ready","summary":"Independent","issues":[],"acceptance":[]}'));
     const review = await f.agents.reviewGate('Original goal: inspect sample.txt. Evidence: current changes.', new AbortController().signal);

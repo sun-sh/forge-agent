@@ -1,5 +1,7 @@
 # Independent review command-evidence regression — 2026-11-12
 
+This report is frozen to the code, package and reviewer budget recorded below. The later reviewer-budget and receipt-classification changes in the current source have not been measured by this report.
+
 The implementation at `b574ddb269c95f05bbfbeb25a52f2bc42c294ce1` supplies the fresh, read-only Pi reviewer bounded native shell receipts from the latest implementation phase. These historical observations retain visible failures, zero-test runs, upstream/source truncation, excerpt hashes and omissions. They do not attest to the current workspace, replace the configured verification gate, or add execution permissions. The original user request remains authoritative over the model-authored requirement ledger.
 
 本次修复给独立只读 reviewer 补充最近实现阶段的有界命令回执，保留失败、零测试和截断标记；历史回执不会自动升级为当前版本验证。通过新提示提醒 reviewer 对照原请求，仍不等于实现了通用的要求来源证明。
@@ -10,7 +12,7 @@ The implementation at `b574ddb269c95f05bbfbeb25a52f2bc42c294ce1` supplies the fr
 - New run: [43204052484](https://github.com/sun-sh/forge-agent/actions/runs/43204052484), the new code above, `deepseek-flash`, `medium`, Planned, one repetition each of Astropy 6938 and SymPy 18189.
 - These two cases were selected because the old review arm blocked officially passing patches. This is a purposive repair-path regression, not a representative quality estimate.
 - New model samples are not paired replay of the old implementation patches. A better or worse result cannot be attributed solely to receipt handoff.
-- Same frozen per-task limits: 30 minutes, 160 parent model turns, 400 tool calls and 200,000 output tokens; cumulative request-token cap disabled; catalog cost unknown. The existing local reviewer limit remains unchanged.
+- Same frozen per-task limits: 30 minutes, 160 parent model turns, 400 tool calls and 200,000 output tokens; cumulative request-token cap disabled; catalog cost unknown. In this historical run, the reviewer limit was the then-current 5-minute / 24-turn / 120-tool / 32,000-output-token / $4 limit; it must not be read as evidence for the later 8-minute / 40-turn limit.
 - Baseline/gold validation, test/config protection, current host syntax checks and independent official grading remain required. Hidden acceptance is not returned to the model.
 
 ## Real-model outcome / 真实模型结果

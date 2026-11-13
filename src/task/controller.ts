@@ -8,7 +8,7 @@ import { TASK_KINDS, intentHint, type TaskKind, type TaskIntentContext } from '.
 import { BudgetExceededError, BudgetRuntime, budgetSnapshotSchema, type BudgetSnapshot } from './budget.js';
 import { progressSnapshotSchema, TaskStalledError, type ProgressSnapshot } from './progress.js';
 import { acceptanceSatisfied, BRIEF_OUTPUT_CONTRACT, parseTaskBrief, parseTaskPlan, planFromBrief, preserveTaskBrief, PLAN_OUTPUT_CONTRACT, planReference, taskBriefSchema, taskPlanSchema, taskRequirements, taskRequirementsSchema, type TaskBrief, type TaskPlan, type TaskRequirements } from './plan.js';
-import { parseReview, ReviewFormatError, reviewSchema, type TaskReview } from './review.js';
+import { parseReview, ReviewBudgetExceededError, ReviewFormatError, reviewSchema, type TaskReview } from './review.js';
 import { buildReviewHandoff } from './review-handoff.js';
 import type { ReviewCommandEvidence } from './review-evidence.js';
 export { parseReview, type TaskReview } from './review.js';
@@ -392,7 +392,7 @@ export class TaskController {
     } catch (error) {
       if (error instanceof VerificationInterruptedError) task.verification = { status: 'failed', attempts: task.repairs, runId: task.id, checkedAt: new Date().toISOString(), report: error.report, error: error.message };
       if (budget?.exceededReason || error instanceof BudgetExceededError) { task.status = 'budget_exceeded'; task.error = budget?.exceededReason ?? (error instanceof Error ? error.message : String(error)); }
-      else if (error instanceof TaskStalledError || error instanceof InvalidTaskPlanError || error instanceof ReviewEvidenceError || error instanceof ReviewFormatError) { task.status = 'needs_attention'; task.error = error.message; }
+      else if (error instanceof TaskStalledError || error instanceof InvalidTaskPlanError || error instanceof ReviewEvidenceError || error instanceof ReviewFormatError || error instanceof ReviewBudgetExceededError) { task.status = 'needs_attention'; task.error = error.message; }
       else { task.status = signal.aborted ? 'aborted' : 'failed'; task.error = signal.aborted ? task.error ?? '任务已停止。' : error instanceof Error ? error.message : String(error); }
     } finally {
       const last = task.phases.at(-1); if (last && !last.endedAt) last.endedAt = new Date().toISOString();
