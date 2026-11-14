@@ -55,6 +55,8 @@ An evidence-only review gap can trigger one focused follow-up within the shared 
 
 Planned changes with configured `verify` commands now freeze 2–3 reproduction/boundary checks from the original request in a fresh read-only Pi session before implementation. The designer receives a convergence notice after six reads/searches and loses reading tools after ten, leaving an opportunity to return its plan or limitation. Format correction does not reopen tools, and hard budgets stay unchanged. The parent Pi session executes exact commands under Agent mode, project trust and the shared budget; the host records native exit codes, outputs and workspace fingerprints. Missing/failed/stale check evidence cannot be overridden by static `ready`. Continuation reuses the plan and obtains new receipts. Expectations remain model hypotheses, and passing commands do not certify resolution. See [behavioral checks](docs/behavior-checks.md). Adaptive/read-only/unconfigured-check paths do not add this workflow.
 
+The [original-image fixed-patch qualification](docs/evaluations/behavior-upstream-2026-11-14.md) retains passing controls, invalid-check/environment blocks and unfinished design. It does not demonstrate repair of the historical defect misses.
+
 
 The new [review-budget/evidence regression](docs/evaluations/review-budget-evidence-2026-11-13.md) retains both attempts: 2/2 resolved with 1/2 delivered, then 2/2 resolved and delivered after correcting an overly strict receipt rule. The subsequent automatic evidence follow-up has engineering regressions only and does not inherit those model scores.
 

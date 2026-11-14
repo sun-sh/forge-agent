@@ -23,3 +23,6 @@ Actual native execution requires a Linux Docker host and the fixed image/package
 
 
 The initial Actions attempt reached the original images but the worker could not read host-owned mode-0600 auth files after `docker cp` under dropped capabilities. These failures preceded task design/execution; the Provider preflight had already made a small model request. They are retained separately. Configuration is now written through stdin by the container user with `umask 077`, preserving ownership without exposing values in argv/logs. Candidate, model and budgets are unchanged by this transport repair.
+
+
+See the [published original-image qualification](evaluations/behavior-upstream-2026-11-14.md) for all infrastructure, first-attempt and revised outcomes. A successful workflow is not a defect-detection score.

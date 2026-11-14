@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Bound independent check-design exploration with a notice after six native reads/searches and a ten-read collection window, reserving a final Pi turn for the structured plan or an explicit limitation. Keep the 12-turn/three-minute ceiling unchanged; retain original-image budget-exhausted attempts separately.
+- Retain original-image behavioral-gate qualification: both correct fixed candidates pass native checks in the revised run; invalid expectations/environment and design-budget stops do not qualify historical defect misses. Preserve the infrastructure attempt, first run and revised fingerprints separately.
+
+- Bound independent check-design exploration with a notice after six native reads/searches and a ten-read collection window, leaving an opportunity for native Pi finalization with a structured plan or an explicit limitation, subject to unchanged hard budgets. Keep the 12-turn/three-minute ceiling unchanged; retain original-image budget-exhausted attempts separately.
 
 - Add a manual four-case immutable upstream behavioral replay: original image/patch/snapshot/grading fingerprints, independent pre-patch design, native Pi checks, no repairs, hidden-label exclusion and retained failures. This prepares qualification of the new behavior gate without relabeling historical SWE-bench scores.
 

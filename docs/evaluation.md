@@ -4,6 +4,10 @@
 
 [Execution versus acceptance](task-results.md) now reports implemented-but-unverified results without a behavioral-attestation contract. Official resolution and finished-but-unacceptable metrics retain their original definitions; relabeling the six Direct failures does not improve 9/15 resolution or erase six unsuccessful finished outcomes. Explicit resolution claims are counted separately, with a null error rate when there are no assessed claims. Historical reports and missing claim fields remain untouched. This reporting change adds no model calls and has no new coding-quality score.
 
+## Original-image behavioral-gate qualification — 2026-11-14
+
+The [four frozen upstream candidates](evaluations/behavior-upstream-2026-11-14.md) retain an infrastructure attempt, a first four-stop run and a separate convergence revision. In the revised run, Astropy/SymPy each pass three native checks and deliver; Flask stops on invalid check expectations/environment compatibility, and Matplotlib stops before a plan on output-budget exhaustion. Neither stop demonstrates detection of the historical official defect. All four final reviewers return ready. Code/image/patch/harness fingerprints and all outcomes remain separate; no new SWE-bench resolution score or causal quality gain is claimed.
+
 ## Native behavioral gate diagnostic — 2026-11-14
 
 The [three retained real-model attempts](evaluations/behavior-native-gate-2026-11-14.md) exercise a fixed correct/defective pair through actual independent check design, native parent Pi commands and final review. Attempts 1/2 block the correct candidate due to check-plan format errors. After specific schema feedback, attempt 3 uses one frozen plan: three checks pass for correct and fail for defective, with external assertions agreeing after saved decisions. This is one explicitly specified miniature task, not repair of the 12 upstream reviewer misses, a new SWE-bench score or a reliability estimate. Fingerprints, unknown prices and earlier failures remain separate.
