@@ -45,3 +45,8 @@ The [real-model diagnostic](evaluations/behavior-native-gate-2026-11-14.md) reta
 
 
 See the [frozen upstream replay protocol](upstream-behavior-replay.md) for the next four-case qualification in original Docker images. Its setup is not an upstream model-quality result until execution evidence is published.
+
+
+## Designer convergence
+
+The first original-image replay exhausted the designer's 12-turn cap on Matplotlib and Astropy while reading source, before producing checks. The designer now reads the supplied file hints first, receives a remaining-read notice after six native reads/searches, and loses further tools after ten; a final native Pi turn must return the bounded plan or an explicit unavailable result. The model-turn, duration and cost ceilings are unchanged. This is a collection/finalization boundary, not another agent loop or a claim that ten reads establish behavior. The original exhausted runs remain published separately from any subsequent qualification.

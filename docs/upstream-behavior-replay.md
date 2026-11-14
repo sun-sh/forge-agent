@@ -22,4 +22,4 @@ Actual native execution requires a Linux Docker host and the fixed image/package
 中文：这轮只重放四份真实旧补丁，不重写代码、不偷看官方测试。检查方案在注入补丁前根据原始问题独立产生，命令由 Pi 原生工具实际执行，再经过当前验证和审阅。旧官方标签仅在容器外用于对照；缺环境、缺证据和超预算不算检出缺陷。当前文档描述协议，不预先宣称结果成功。
 
 
-The initial Actions attempt reached the original images but the worker could not read host-owned mode-0600 auth files after `docker cp` under dropped capabilities. Those pre-model failures are retained separately. Configuration is now written through stdin by the container user with `umask 077`, preserving ownership without exposing values in argv/logs. Candidate, model and budgets are unchanged by this transport repair.
+The initial Actions attempt reached the original images but the worker could not read host-owned mode-0600 auth files after `docker cp` under dropped capabilities. These failures preceded task design/execution; the Provider preflight had already made a small model request. They are retained separately. Configuration is now written through stdin by the container user with `umask 077`, preserving ownership without exposing values in argv/logs. Candidate, model and budgets are unchanged by this transport repair.

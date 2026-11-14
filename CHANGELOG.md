@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bound independent check-design exploration with a notice after six native reads/searches and a ten-read collection window, reserving a final Pi turn for the structured plan or an explicit limitation. Keep the 12-turn/three-minute ceiling unchanged; retain original-image budget-exhausted attempts separately.
+
 - Add a manual four-case immutable upstream behavioral replay: original image/patch/snapshot/grading fingerprints, independent pre-patch design, native Pi checks, no repairs, hidden-label exclusion and retained failures. This prepares qualification of the new behavior gate without relabeling historical SWE-bench scores.
 
 - Add independent pre-implementation behavioral check design and frozen native-Pi execution for Planned changes with configured verification. Preserve original-request anchors, reproduction/boundary cases, run IDs, native exit codes/output, workspace binding and recovery; missing/failed/stale checks cannot be replaced by model-ready. Keep commands inside existing Pi mode/trust/budget policy and retain unverified acceptance. Add typed review issue kinds so missing execution/environment/ambiguous expectations request evidence instead of being counted as source defects. No historical SWE-bench score is inherited.

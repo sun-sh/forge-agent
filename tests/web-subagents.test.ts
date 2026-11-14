@@ -102,6 +102,23 @@ describe('managed Pi subagents', () => {
     expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'behavior_plan', formatRetries: 1, status: 'completed', budget: { limits: { maxModelTurns: 12 } } });
   });
+  it.each([false, true])('closes the designer read window through structured handoff (format correction: %s)', async (needsCorrection) => {
+    const plan = { version: 1, status: 'ready', summary: 'Use collected evidence', assumptions: [], unresolved: [], checks: [
+      { id: 'B1', kind: 'reproduction', requestQuote: 'Fix behavior', expectation: 'Original trigger works', command: 'node repro.cjs', shell: 'bash', timeoutSeconds: 60 },
+      { id: 'B2', kind: 'boundary', requestQuote: 'Fix behavior', expectation: 'Boundary remains valid', command: 'node boundary.cjs', shell: 'bash', timeoutSeconds: 60 }
+    ] };
+    let finals = 0;
+    const f = await fixture((input, res) => (input.tools ?? []).length
+      ? answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } })
+      : answer(res, input, needsCorrection && ++finals === 1 ? 'Checks are ready, but this is not JSON.' : JSON.stringify(plan)));
+    const result = await f.agents.behaviorPlan('PFORGE TASK PHASE: behavior_plan\nOriginal request: Fix behavior.', new AbortController().signal);
+    expect(JSON.parse(result.text)).toEqual(plan);
+    expect(f.requests).toHaveLength(needsCorrection ? 12 : 11);
+    for (const request of f.requests.slice(10)) expect(request.tools ?? []).toEqual([]);
+    expect(text(f.requests[6])).toContain('focused file reads/searches remain');
+    expect(text(f.requests.at(-1))).toContain('File evidence collection is closed');
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', ...(needsCorrection ? { formatRetries: 1 } : {}), budget: { toolCalls: 10, modelTurns: needsCorrection ? 12 : 11, limits: { maxModelTurns: 12 } } });
+  });
   it('allows a real Pi reviewer to finish beyond the previous 24-turn ceiling', async () => {
     let turns = 0;
     const f = await fixture((input, res) => ++turns <= 25
