@@ -23,6 +23,18 @@ const docker=parameters=>command('docker',parameters);
 await mkdir(output);let container,buildRoot;
 const report={schemaVersion:1,protocol:manifest.protocol,case:spec,startedAt:new Date().toISOString(),scope:'One fixed historical patch; real original-image behavior checks and review; no new implementation or official grading',preflightOnly:args.includes('--prepare-only')};
 const persist=()=>json(join(output,'report.json'),report);
+async function writeContainerFile(container, target, bytes) {
+ if (!/^\/tmp\/forge-home\/(?:auth|models)\.json$/.test(target)) throw new Error('Unexpected credential destination');
+ // Creating the file as the actual container user avoids copying host UID 1001
+ // into a capability-dropped container. No credential bytes enter argv or logs.
+ await new Promise((accept, reject) => {
+  const child = spawn('docker', ['exec','-i',container,'sh','-c','umask 077; cat > '+target], { stdio: ['pipe','ignore','ignore'] });
+  const timer = setTimeout(() => child.kill('SIGTERM'), 30000);
+  child.once('error', error => { clearTimeout(timer); reject(error); });
+  child.once('close', code => { clearTimeout(timer); code === 0 ? accept() : reject(new Error('Container configuration write failed: '+code)); });
+  child.stdin.on('error', reject); child.stdin.end(bytes);
+ });
+}
 async function boundedProcess(bin,parameters,path,timeout){
  return new Promise((accept,reject)=>{const log=createWriteStream(path),child=spawn(bin,parameters,{windowsHide:true,stdio:['ignore','pipe','pipe']});let timedOut=false;
  const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');},timeout);child.stdout.pipe(log,{end:false});child.stderr.pipe(log,{end:false});
@@ -64,13 +76,14 @@ try{
   report.runnerImageId=(await docker(['image','inspect','--format','{{.Id}}',tag])).stdout.trim();await persist();
   container=(await docker(['create','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=512','--memory=6g','--cpus=2',tag,'tail','-f','/dev/null'])).stdout.trim();
   await docker(['start',container]);await docker(['exec',container,'mkdir','-p','/tmp/forge-home','/tmp/forge-output']);
-  for(const name of ['auth.json','models.json'])await docker(['cp',join(configHome,name),container+':/tmp/forge-home/'+name]);
+  for(const name of ['auth.json','models.json'])await writeContainerFile(container,'/tmp/forge-home/'+name,await readFile(join(configHome,name)));
   await docker(['cp',join(output,'worker-input.json'),container+':/tmp/forge-input.json']);await docker(['cp',join(output,'candidate.patch'),container+':/tmp/candidate.patch']);
   const shell="source /opt/miniconda3/bin/activate testbed && export PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-o cache_dir=/tmp/forge-pytest-cache' FORGE_AGENT_HOME=/tmp/forge-home PFORGE_HOME=/tmp/forge-home PI_CODING_AGENT_DIR=/tmp/forge-home PI_CODING_AGENT_SESSION_DIR=/tmp/forge-home/sessions && exec node /opt/forge/behavior-agent.mjs";
   let failure;
   try{await boundedProcess('docker',['exec',container,'bash','-c',shell],join(output,'execution.log'),manifest.limits.maxDurationMs+120000);}catch(error){failure=error.message;await docker(['kill',container]).catch(()=>{});}
   await docker(['cp',container+':/tmp/forge-output/.',output]);
-  report.result=await load(join(output,'result.json'));report.executionFailure=failure;
+  report.executionFailure=failure;
+  try { report.result=await load(join(output,'result.json')); } catch { throw new Error('Worker did not write result.json; preserved execution.log and subprocess failure'); }
   if(failure||report.result.error||!report.result.candidateUnchanged||report.result.protection!=='unchanged')process.exitCode=1;
   console.log(JSON.stringify({id:spec.id,behavior:report.result.task?.behavior?.status,review:report.result.task?.review?.verdict,product:report.result.product?.status,officialHistorical:spec.originalOfficialResolved,unchanged:report.result.candidateUnchanged}));
  }
