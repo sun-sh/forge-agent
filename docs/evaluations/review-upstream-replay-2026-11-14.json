@@ -1,0 +1,1757 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "protocol": "retained-upstream-review-replay-v1",
+  "protocolSha256": "9619e7c40eccb0b6f336127b2ca1ede90346de410bd0fabaac2f84de53ece7c8",
+  "protocolFileSha256": "da12b7c6314fbfb2a2e5abf07ea07cc44bfd40d6a2c2530357f308912243c715",
+  "sourceReportSha256": "09a2610f8fa83d2782ed596f40204adb9d3d7e84c7f9644442a8641a4eadb52e",
+  "codeRevision": "48a808e2bfb2bc7b22b74d7c08f8f396a9215c7f",
+  "harnessFingerprint": "e4ace975e3468f014f11593d6a56bf8c1b5ce261ef0ece5083f64ef9e2b349d3",
+  "originalRunId": "43184349339",
+  "originalRegradeRunId": "43196437456",
+  "originalSourceReportSha256": "a1792a3e12313809fd574f62f0539f67f71cd82ee4ddea5f99ba7aaf35070bff",
+  "originalGradedReportSha256": "26f74f0deb4ef4de37ceeff8e88c0aadce1801bed6afab1b6e6a94ccc293dd97",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "api": "openai-completions",
+  "thinking": "medium",
+  "pricingKnown": false,
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "piVersion": "1.4.0"
+  },
+  "startedAt": "2026-11-13T17:42:16.248Z",
+  "finishedAt": "2026-11-13T18:06:24.397Z",
+  "scope": "Current handoff and real read-only Pi reviewer on four frozen original candidates; no implementation generation, source/test execution, fresh verification, automatic repair or official regrading.",
+  "repeat": 3,
+  "schedule": [
+    {
+      "id": "pallets__flask-4045",
+      "run": 1,
+      "position": 1
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 1,
+      "position": 2
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 1,
+      "position": 3
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 1,
+      "position": 4
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 2,
+      "position": 1
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 2,
+      "position": 2
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 2,
+      "position": 3
+    },
+    {
+      "id": "pallets__flask-4045",
+      "run": 2,
+      "position": 4
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 3,
+      "position": 1
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 3,
+      "position": 2
+    },
+    {
+      "id": "pallets__flask-4045",
+      "run": 3,
+      "position": 3
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 3,
+      "position": 4
+    }
+  ],
+  "reviewBudget": {
+    "profile": "standard",
+    "maxDurationMs": 300000,
+    "maxModelTurns": 24,
+    "maxToolCalls": 120,
+    "maxOutputTokens": 32000,
+    "maxCostUsd": 4
+  },
+  "parentBudget": {
+    "maxDurationMs": 5400000,
+    "maxModelTurns": 240,
+    "maxToolCalls": 500,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 300000,
+    "maxCostUsd": 40
+  },
+  "selection": "First original Planned repetition for Flask, Matplotlib, Astropy and SymPy, fixed before new model calls. Labels and prior review outcomes excluded from every handoff.",
+  "missingEvidencePolicy": "insufficient_evidence, incomplete coverage, format failures and budget exhaustion are abstentions, not successful defect detections",
+  "freshnessPolicy": "Original configured-check result marked historical/unconfirmed; no check or test is rerun. Historical native command receipts retain original outputs/classification.",
+  "sourceLimitations": [
+    "Tracked source tree and candidate patch are exact; no original Python environment, ignored build products or temporary ad hoc scripts are recreated.",
+    "Matplotlib uses a registry manifest pinned to the original image config, a bounded layer prefix, SHA-1 verified loose objects and a shallow fetch of the fixed public base. The full 971577772-byte layer was not downloaded/verified; final tree and exact patch are checked.",
+    "Eight Matplotlib asset symlinks retain mode/target bytes as Windows Git placeholders. Astropy astropy_helpers remains an uninitialized gitlink. Tool transcripts are audited for any dependency on these paths.",
+    "Original configured-check success is supplied as historical/unconfirmed, never a fresh workspace attestation. Full implementation or reviewer transcripts and official test results are excluded.",
+    "This is a deliberately selected four-candidate diagnostic, three fresh reviews each; not 12 independent coding tasks, a full SWE-bench score or a causal same-model before/after ablation.",
+    "Configured model/service differs from the earlier official deepseek-flash arm; the current configured model ID is recorded without provider endpoint or credential values. Prior decisions remain historical observations."
+  ],
+  "priorPreparationFailures": [
+    {
+      "attempt": 1,
+      "reportSha256": "227ffcd200a4714cfbcd45f79991ab1aa4fd0683dcd6e7bf33cc849d7f386769",
+      "harnessFingerprint": "092fe35d367bc4591e4352a34b19efd08f5e8f4b23f694aa4f2f296a9b47c51f",
+      "reviewDecisions": 0,
+      "preparedCandidates": 0,
+      "failure": "Git diff object abbreviations differed in the smaller source-only object database; candidate content was unchanged. Fixed rendering width before retry."
+    },
+    {
+      "attempt": 2,
+      "reportSha256": "84f63dac3570f2e55d68bf1ed9820c1440421a0114e13b24c15c2ad01f639b68",
+      "harnessFingerprint": "870b7655168285e45e55b31314541da55def34d5562963963a511dfd274fad5b",
+      "reviewDecisions": 0,
+      "preparedCandidates": 1,
+      "failure": "Matplotlib full task-layer download timed out before model calls. Switched to pinned shallow base plus content-verified loose objects."
+    },
+    {
+      "attempt": 3,
+      "reportSha256": "869180c751c84464e4216b7cdd3d760c3f8474d22c11db848954798c90b8f54d",
+      "harnessFingerprint": "7630ab2e14fc79435d07003756ca928cd7ce1c354a25d4088fbfbc8190c5a848",
+      "reviewDecisions": 0,
+      "preparedCandidates": 1,
+      "failure": "Windows Git alternate-object path metadata was invalid; no model calls."
+    },
+    {
+      "attempt": 4,
+      "reportSha256": "122c36ebf29b6f7cdd54651d0d34bcbbe6d3053b263f6ab9a31f9330addfb11b",
+      "harnessFingerprint": "8cdca6c5ea67c7d7c13696d7808221235d6685028f80ebbfdc85e2792f62c668",
+      "reviewDecisions": 0,
+      "preparedCandidates": 1,
+      "failure": "Diagnostics identified CRLF in the Windows alternate-object path; no model calls."
+    },
+    {
+      "attempt": 5,
+      "reportSha256": "3bdd3ce9bbd8552765293a155e6e3a2b484479ef69e6dba6607211e34f633141",
+      "harnessFingerprint": "ac34b114442c272719a629776e4201622ec98deb9279c32b1e096f8d007769ed",
+      "reviewDecisions": 0,
+      "preparedCandidates": 1,
+      "failure": "Matplotlib resource symlinks were initially rejected; later retained original Git mode/target bytes as Windows placeholders."
+    },
+    {
+      "attempt": 6,
+      "reportSha256": "5d55d534d0da1fab018bd645397ccaad7c628552cfe7487a356e75d5e0283629",
+      "harnessFingerprint": "1d61b77a704138aa5238afe893532911100da88f1d4dea46362cb2cefea838e8",
+      "reviewDecisions": 0,
+      "preparedCandidates": 2,
+      "failure": "Astropy astropy_helpers gitlink was initially rejected; later retained as a recorded uninitialized submodule."
+    }
+  ],
+  "cases": [
+    {
+      "id": "pallets__flask-4045",
+      "sourceKey": "pallets__flask-4045.planned.r1",
+      "officialResolved": false,
+      "originalCompleted": true,
+      "originalReviewVerdict": "ready",
+      "originalTaskError": null,
+      "patchHash": "770690aee527cfcd6752d1ddc9d66866709be021b54e4dcc49f8affa1b859191",
+      "snapshotSha256": "376241542e109e5a7a631f54e345f03513d84d95509c1abea3e6c406c50fec8f",
+      "officialReportSha256": "8e7eeb60c63a4807dfe2bc194d400b1deee6f440ecca5af1eedbc94ffb418493",
+      "baseCommit": "d8c37f43724cd9fb0870f77877b7c4c7e38a19e0",
+      "effectiveHead": "277886950a064f3525e9eda7c47e22363343af61",
+      "sourceTree": "dbead88be96fabe6a398df3f124987b9f78e1524",
+      "sourceFileCount": 235,
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": [],
+      "sourceImage": {
+        "imageId": "sha256:459abea2907f6db45f2a50cea2929e3e0867665eab9b9c6feb80fa737b2f0426",
+        "imageRef": "swebench/sweb.eval.x86_64.pallets_1776_flask-4045:latest",
+        "manifestDigest": "sha256:431573fcf066022cec6e296bdb1105b5135283a3ebdf13b9ad1bd1859580a7c0",
+        "layerDigest": "sha256:5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "layerBytes": 5749961,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "downloadedBytes": 5749961
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5"
+      ],
+      "commandSummary": {
+        "receipts": 18,
+        "retainedReceipts": 12,
+        "testReceipts": 8,
+        "failedReceipts": 7,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "064109faac99f86c4fa2bd6772a3dab09fb0159419dc87d2588a5ebcfa60b2e8",
+      "handoffCharacters": 28018,
+      "workspaceDigest": "9e4d2349c4de96becd0d53c50e8329d613190c8a2822473408bca7d4e08fb643",
+      "originalRequest": {
+        "text": "Raise error when blueprint name contains a dot\nThis is required since every dot is now significant since blueprints can be nested. An error was already added for endpoint names in 1.0, but should have been added for this as well.\n\n\nEvaluation policy: implement the issue in the existing repository; preserve existing tests, test configuration and Forge verification configuration. The configured visible check only checks changed Python syntax unless an explicit repository check was supplied. Run any relevant existing tests yourself. Final acceptance is performed externally; do not search for issue solutions or reference patches online."
+      },
+      "modelAuthoredRequirements": {
+        "goal": "Make Flask raise an error when a Blueprint name contains a dot, since dots are now significant for nested blueprints, mirroring the existing endpoint-name restriction added in 1.0.",
+        "affectedPaths": [
+          "src/flask/blueprints.py",
+          "CHANGES.rst",
+          "docs/blueprints.rst"
+        ],
+        "constraints": [
+          "Add the check in Blueprint.__init__ so constructing Blueprint('app.ui', __name__) fails immediately with ValueError; upstream-compatible message: \"'name' may not contain a dot '.' character.\"",
+          "Place the check before self.name = name (after super().__init__), keeping the existing endpoint/view-function dot assertions in Blueprint.add_url_rule unchanged.",
+          "Protected paths must not be changed, added to or deleted: tests/, examples/javascript/tests, examples/tutorial/tests, forge-agent.json, pforge.json, pforge.yaml, pforge.yml, forge-agent.yaml, forge-agent.yml.",
+          "Do not modify existing tests even though tests/test_blueprints.py::test_dotted_names constructs Blueprint('myapp.frontend', __name__) and will now fail by design; external acceptance supplies its own tests.",
+          "Keep Python >= 3.6 compatible syntax and the repository's flake8/black style (max line 80/88 B950, double quotes).",
+          "Preserve all other blueprint behavior: nested blueprints registered via Blueprint.register_blueprint, name_prefix, error handlers, CLI groups and endpoints must be unaffected.",
+          "Changelog entry under the existing 'Version 2.0.1 / Unreleased' section; do not invent issue/PR numbers.",
+          "No new runtime dependencies."
+        ],
+        "acceptance": [
+          {
+            "criterion": "Constructing a Blueprint whose name contains a dot raises ValueError before registration.",
+            "check": "automated",
+            "evidence": "python -c snippet asserting pytest.raises(ValueError) for flask.Blueprint('app.ui', __name__) and that message mentions a dot; plus a new-style check mirroring upstream 'test_dotted_name_not_allowed' run ad hoc (not committed to protected tests/) passes.",
+            "id": "A1"
+          },
+          {
+            "criterion": "Blueprints with valid names and nested blueprint registration still work.",
+            "check": "automated",
+            "evidence": "python -m pytest tests/test_blueprints.py -q -k 'not dotted_names' passes, especially test_nested_blueprint, test_dotted_names_from_app and test_route_decorator_custom_endpoint_with_dots; full python -m pytest tests -q shows only the stale test_dotted_names failure.",
+            "id": "A2"
+          },
+          {
+            "criterion": "Only the intended source/docs/changelog files change; protected tests and config untouched.",
+            "check": "inspection",
+            "evidence": "git status/diff --stat lists only src/flask/blueprints.py, CHANGES.rst (and optionally docs/blueprints.rst); protected paths byte-identical.",
+            "id": "A3"
+          },
+          {
+            "criterion": "Changed Python stays syntactically valid and lint-clean.",
+            "check": "automated",
+            "evidence": "python -m compileall -q src/flask and python -m flake8 src/flask/blueprints.py exit 0.",
+            "id": "A4"
+          },
+          {
+            "criterion": "Change is documented.",
+            "check": "inspection",
+            "evidence": "CHANGES.rst 2.0.1 Unreleased bullet states blueprint names may not contain dots and that ValueError is raised.",
+            "id": "A5"
+          }
+        ],
+        "unresolved": []
+      },
+      "historicalOfficialFailures": {
+        "failToPass": [
+          "tests/test_blueprints.py::test_route_decorator_custom_endpoint_with_dots"
+        ],
+        "passToPass": []
+      },
+      "officialLabelsExcludedFromReview": true
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "sourceKey": "matplotlib__matplotlib-23563.planned.r1",
+      "officialResolved": false,
+      "originalCompleted": true,
+      "originalReviewVerdict": "ready",
+      "originalTaskError": null,
+      "patchHash": "4ca8be6d8883e43dc0de1b03fb0c04693267689874425d756b645c0077431cd7",
+      "snapshotSha256": "0d849310a98c3b387266367ebac982d35269bf424a6b505edcceb98d125a0896",
+      "officialReportSha256": "a816053557e1f5e3a03e89d67d8f1076dfe32c09a6bd1beab584d33719c03e4b",
+      "baseCommit": "149a0398b391cfc4eddb5e659f50b3c66f32ea65",
+      "effectiveHead": "84620c55178a66fa19105e561e5ff461fc07f9e4",
+      "sourceTree": "ad28d05b4c4bba6fbd08eec3b7e70612497b33aa",
+      "sourceFileCount": 4471,
+      "symlinkPlaceholders": [
+        "lib/matplotlib/mpl-data/images/back-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/filesave-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/forward-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/help-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/home-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/move-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/subplots-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/zoom_to_rect-symbolic.svg"
+      ],
+      "uninitializedSubmodules": [],
+      "sourceImage": {
+        "imageId": "sha256:93f13bec950adf1aa64132b4653af0503c6acdb49e8c3a771ae8efdf0813dac6",
+        "imageRef": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23563:latest",
+        "manifestDigest": "sha256:d868994deae1f816cb23b878db1e4c4cf371ef5f8d77d8bd2129c133ed0a4cbf",
+        "layerDigest": "sha256:10cb0b56e4d746893b68e02ddb5bfcf303a79f2bcd7266d16a35d3eaaa17e1f3",
+        "layerBytes": 971577772,
+        "sourceMode": "base-shallow-fetch-plus-verified-loose-objects",
+        "fullLayerVerified": false,
+        "downloadedSourceSha256": "489b6fd9265c9db11d47c2abc2438152e01dac6117502dfe6e55c12b9841cb83",
+        "downloadedBytes": 16777216
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4"
+      ],
+      "commandSummary": {
+        "receipts": 6,
+        "retainedReceipts": 6,
+        "testReceipts": 2,
+        "failedReceipts": 0,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "16c7b0e9c17b45bb831652dacd76db3a95d5c78ad034c955f2b56798bb1956fd",
+      "handoffCharacters": 24516,
+      "workspaceDigest": "82e08fbe94362bd322b01074fcdf494a2fb8596a713178e4b73a8ec7afe5dd51",
+      "originalRequest": {
+        "text": "[Bug]: 'Line3D' object has no attribute '_verts3d'\n### Bug summary\n\nI use matplotlib 3D to visualize some lines in 3D. When I first run the following code, the code can run right. But, if I give `x_s_0[n]` a numpy array, it will report the error 'input operand has more dimensions than allowed by the axis remapping'. The point is when next I give  `x_s_0[n]` and other variables an int number, the AttributeError: 'Line3D' object has no attribute '_verts3d' will appear and can not be fixed whatever I change the variables or delete them. The error can be only fixed when I restart the kernel of ipython console. I don't know why it happens, so I come here for help.\n\n### Code for reproduction\n\n```python\nx_s_0 = np.array(['my int number list'])\r\nx_e_0 = np.array(['my int number list'])\r\ny_s_0 = np.array(['my int number list'])\r\ny_e_0 = np.array(['my int number list'])\r\nz_s_0 = np.array(['my int number list'])\r\nz_e_0 = np.array(['my int number list'])\r\n\r\nfig = plt.figure()\r\n        ax = fig.gca(projection='3d')\r\n        ax.view_init(elev=90, azim=0)\r\n        ax.set_zlim3d(-10, 10)\r\n        clr_list = 'r-'\r\n\r\n        for n in range(np.size(z_s_0, axis=0)):\r\n            ax.plot([int(x_s_0[n]), int(x_e_0[n])],\r\n                    [int(y_s_0[n]), int(y_e_0[n])],\r\n                    [int(z_s_0[n]), int(z_e_0[n])], clr_list)\r\n\r\n        plt.xlabel('x')\r\n        plt.ylabel('y')\r\n        # ax.zlabel('z')\r\n        plt.title('90-0')\r\n        plt.show()\n```\n\n\n### Actual outcome\n\nTraceback (most recent call last):\r\n  File \"<user-environment-path>\", line 3444, in run_code\r\n    exec(code_obj, self.user_global_ns, self.user_ns)\r\n  File \"<ipython-input-80-e04907066a16>\", line 20, in <module>\r\n    plt.show()\r\n  File \"<user-environment-path>\", line 368, in show\r\n    return _backend_mod.show(*args, **kwargs)\r\n  File \"<user-environment-path>\", line 29, in __call__\r\n    manager.show(**kwargs)\r\n  File \"<user-environment-path>\", line 112, in show\r\n    self.canvas.show()\r\n  File \"<user-environment-path>\", line 68, in show\r\n    FigureCanvasAgg.draw(self)\r\n  File \"<user-environment-path>\", line 436, in draw\r\n    self.figure.draw(self.renderer)\r\n  File \"<user-environment-path>\", line 73, in draw_wrapper\r\n    result = draw(artist, renderer, *args, **kwargs)\r\n  File \"<user-environment-path>\", line 50, in draw_wrapper\r\n    return draw(artist, renderer)\r\n  File \"<user-environment-path>\", line 2803, in draw\r\n    mimage._draw_list_compositing_images(\r\n  File \"<user-environment-path>\", line 132, in _draw_list_compositing_images\r\n    a.draw(renderer)\r\n  File \"<user-environment-path>\", line 50, in draw_wrapper\r\n    return draw(artist, renderer)\r\n  File \"<user-environment-path>\", line 469, in draw\r\n    super().draw(renderer)\r\n  File \"<user-environment-path>\", line 50, in draw_wrapper\r\n    return draw(artist, renderer)\r\n  File \"<user-environment-path>\", line 3082, in draw\r\n    mimage._draw_list_compositing_images(\r\n  File \"<user-environment-path>\", line 132, in _draw_list_compositing_images\r\n    a.draw(renderer)\r\n  File \"<user-environment-path>\", line 50, in draw_wrapper\r\n    return draw(artist, renderer)\r\n  File \"<user-environment-path>\", line 215, in draw\r\n    xs3d, ys3d, zs3d = self._verts3d\r\nAttributeError: 'Line3D' object has no attribute '_verts3d'\n\n### Expected outcome\n\nSome 3D lines\n\n### Additional information\n\n_No response_\n\n### Operating system\n\nLocal: windows + pycharm, Remote: Ubuntu 20.04\n\n### Matplotlib Version\n\n3.5.0\n\n### Matplotlib Backend\n\nmodule://backend_interagg\n\n### Python version\n\n3.8.12\n\n### Jupyter version\n\n_No response_\n\n### Installation\n\npip\n\n\nEvaluation policy: implement the issue in the existing repository; preserve existing tests, test configuration and Forge verification configuration. The configured visible check only checks changed Python syntax unless an explicit repository check was supplied. Run any relevant existing tests yourself. Final acceptance is performed externally; do not search for issue solutions or reference patches online."
+      },
+      "modelAuthoredRequirements": {
+        "goal": "Fix mplot3d so a 3D line plot given non-1D (e.g. 2D) data raises a clear, immediate error without leaving a half-converted Line3D in the axes, so later plotting/drawing works normally instead of failing with AttributeError: 'Line3D' object has no attribute '_verts3d'.",
+        "affectedPaths": [
+          "lib/mpl_toolkits/mplot3d/axes3d.py",
+          "lib/mpl_toolkits/mplot3d/art3d.py"
+        ],
+        "constraints": [
+          "Implement the fix in the existing repository; do not search for or copy upstream issue/patch solutions online.",
+          "Preserve existing tests, test configuration and Forge verification configuration.",
+          "lib/mpl_toolkits/tests, lib/matplotlib/tests, lib/matplotlib/testing, requirements/testing, examples/text_labels_and_annotations/usetex_baseline_test.py, examples/units/evans_test.py, forge-agent.json are protected: do not add, modify or delete them (new tests therefore go only in a scratch script outside the repo, e.g. /tmp).",
+          "Docstring documents xs/ys/zs as 1D array-like (or scalar z), so safe default: non-1D input is an error (ValueError), not silently flattened or auto-split into multiple lines.",
+          "Keep behavior for valid 1D/scalar inputs identical (existing image-comparison tests must still pass), including scalar x/y (`ax.plot(1, 1, 'o')`), empty data and zdir handling.",
+          "Do not introduce new public API or deprecations beyond the error/robustness fix; error message should mention 1D/1-dimensional data and include the offending shapes."
+        ],
+        "acceptance": [
+          {
+            "criterion": "Repro from the report no longer corrupts the axes: ax.plot(<2D arrays>) raises ValueError at plot time, and a following 1D ax.plot(...) + fig.canvas.draw() succeeds with no AttributeError.",
+            "check": "automated",
+            "evidence": "Scratch script output (Agg backend) showing ValueError caught from the 2D call, then successful draw of the 1D line; grep of traceback shows no '_verts3d' AttributeError.",
+            "id": "A1"
+          },
+          {
+            "criterion": "A failed 3D conversion cannot leave a Line3D without _verts3d in ax.children.",
+            "check": "automated",
+            "evidence": "Scratch script asserting all(isinstance(l, Line2D) and hasattr(l, '_verts3d') for l in ax.lines) after the failed 2D call, or that the failed call added no line.",
+            "id": "A2"
+          },
+          {
+            "criterion": "Existing mplot3d behavior for valid 1D input is unchanged.",
+            "check": "automated",
+            "evidence": "python -m pytest lib/mpl_toolkits/tests/test_mplot3d.py -k 'lines3d or plot_scalar or lines or plot' -q passes, plus a broader run of test_mplot3d.py as far as the environment allows.",
+            "id": "A3"
+          },
+          {
+            "criterion": "Changed files compile.",
+            "check": "automated",
+            "evidence": "python /tmp/forge-visible.py (configured visible check) exits 0.",
+            "id": "A4"
+          }
+        ],
+        "unresolved": []
+      },
+      "historicalOfficialFailures": {
+        "failToPass": [
+          "lib/mpl_toolkits/tests/test_mplot3d.py::test_draw_single_lines_from_Nx1"
+        ],
+        "passToPass": []
+      },
+      "officialLabelsExcludedFromReview": true
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "sourceKey": "astropy__astropy-6938.planned.r1",
+      "officialResolved": true,
+      "originalCompleted": false,
+      "originalReviewVerdict": null,
+      "originalTaskError": "任务超过模型回合上限 24",
+      "patchHash": "f580d0ca660630f9a048e6dcf975f1d6d370a85fb2a9ea2defc0e7e8dc16e2e9",
+      "snapshotSha256": "7d84a12aca57b095145ee22d3b7d8ee25c95b159f27364248135096155d8925e",
+      "officialReportSha256": "1424c0b3621434e905557f55c3c9318987743e4ecade58760625f5b22d30f95c",
+      "baseCommit": "c76af9ed6bb89bfba45b9f5bc1e635188278e2fa",
+      "effectiveHead": "8784d2be8f7d89ee795e36e4fa751ea6a8ee3e0f",
+      "sourceTree": "e74e96d9bd4359a51960f6ba465da019aec0ab1a",
+      "sourceFileCount": 1793,
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": [
+        "astropy_helpers"
+      ],
+      "sourceImage": {
+        "imageId": "sha256:23df7aaa729e3a457bd0b6a83665178777019580c31c0b8a18069709167fb730",
+        "imageRef": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938:latest",
+        "manifestDigest": "sha256:e71ac0096dd19e742e2e70d088e970ee10471347847409c89cd40dbf32f4715e",
+        "layerDigest": "sha256:cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "layerBytes": 55724179,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "downloadedBytes": 55724179
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ],
+      "commandSummary": {
+        "receipts": 13,
+        "retainedReceipts": 12,
+        "testReceipts": 7,
+        "failedReceipts": 4,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "656dc38e32006c41121bc344908e5d0e96cf75e3be07ca7225e164ae61bce915",
+      "handoffCharacters": 30636,
+      "workspaceDigest": "5d07ab20607b8ee7a90a54dbcd28bdd0f2ade9667306302435b77e06da784e40",
+      "originalRequest": {
+        "text": "Possible bug in io.fits related to D exponents\nI came across the following code in ``fitsrec.py``:\r\n\r\n```python\r\n        # Replace exponent separator in floating point numbers\r\n        if 'D' in format:\r\n            output_field.replace(encode_ascii('E'), encode_ascii('D'))\r\n```\r\n\r\nI think this may be incorrect because as far as I can tell ``replace`` is not an in-place operation for ``chararray`` (it returns a copy). Commenting out this code doesn't cause any tests to fail so I think this code isn't being tested anyway.\n\n\nEvaluation policy: implement the issue in the existing repository; preserve existing tests, test configuration and Forge verification configuration. The configured visible check only checks changed Python syntax unless an explicit repository check was supplied. Run any relevant existing tests yourself. Final acceptance is performed externally; do not search for issue solutions or reference patches online."
+      },
+      "modelAuthoredRequirements": {
+        "goal": "Fix FITS ASCII-table writing so columns with TFORM code D emit a D exponent separator in written data instead of E, by making the separator replacement actually modify the raw output field, while preserving behavior for all other ASCII formats and leaving tests/config untouched.",
+        "affectedPaths": [
+          "astropy/io/fits/fitsrec.py"
+        ],
+        "constraints": [
+          "Implement inside the existing astropy repository with a minimal functional change.",
+          "Do not modify, add, or delete any protected path, including all astropy/io/fits/tests files, conftest.py, forge-agent.json and other Forge/verification config; the configured tests and verification config must remain exactly as-is.",
+          "Preserve existing tests and test configuration; do not add or edit test files in protected directories (manual verification must use a temporary script outside the protected tree, e.g. /tmp).",
+          "Do not fetch or consult online issue solutions or reference patches.",
+          "Only the D-exponent write path in fitsrec.py should change; behavior for E, F, I, J, A and logical ASCII columns must stay identical.",
+          "Keep existing code style (no f-strings; repo targets older Python/numpy).",
+          "Safe default: implement the fix as in-place assignment back into output_field (`output_field[:] = output_field.replace(...)`); if manual verification shows numpy chararray replace alters width/padding, fall back to replacing 'E' with 'D' in each formatted value inside the existing loop.",
+          "Safe default: compiled extensions are already built in place, so run tests with `python -m pytest` from /testbed without rebuilding."
+        ],
+        "acceptance": [
+          {
+            "criterion": "An ASCII table column with explicit format 'D25.17' is written with 'D' exponent separators in the file data section (no E exponent in that column).",
+            "check": "automated",
+            "evidence": "Temporary script (outside the repo test tree) builds TableHDU with Column(format='D25.17', array=float64 values), writes to BytesIO/temp file, and asserts b'D+' or b'D-' appears in raw bytes while the D column contains no b'E+'/b'E-' exponent.",
+            "id": "A1"
+          },
+          {
+            "criterion": "A float64 column in an ASCII table (default format D25.17) also writes D exponents, matching its TFORM code.",
+            "check": "automated",
+            "evidence": "Same script creates TableHDU from float64 data without explicit format; written bytes contain b'D+'/b'D-'.",
+            "id": "A2"
+          },
+          {
+            "criterion": "Files written with D exponents read back to the same numeric values (round-trip for explicit D, default float64, and D precision-0 columns).",
+            "check": "automated",
+            "evidence": "Script reopens written files with fits.open and compares data values to the inputs within expected precision.",
+            "id": "A3"
+          },
+          {
+            "criterion": "Other ASCII format codes are unchanged: E columns still use 'E', F columns keep exact existing formatting (e.g. raw b'   1.   2.   3.' for F5.0), and A/I columns are unaffected.",
+            "check": "automated",
+            "evidence": "Script checks E/F/A/I raw bytes; existing TestColumnFunctions.test_zero_precision_float_column and TestTableFunctions.test_ascii_table pass.",
+            "id": "A4"
+          },
+          {
+            "criterion": "Existing FITS table test suite still passes.",
+            "check": "automated",
+            "evidence": "`python -m pytest astropy/io/fits/tests/test_table.py -q` exits 0 (optionally also astropy/io/fits/tests/test_core.py).",
+            "id": "A5"
+          },
+          {
+            "criterion": "Only the intended source file changed; protected tests and Forge/config files are untouched.",
+            "check": "inspection",
+            "evidence": "git status/diff shows only astropy/io/fits/fitsrec.py modified, with no additions/deletions under protected paths.",
+            "id": "A6"
+          }
+        ],
+        "unresolved": []
+      },
+      "historicalOfficialFailures": {
+        "failToPass": [],
+        "passToPass": []
+      },
+      "officialLabelsExcludedFromReview": true
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "sourceKey": "sympy__sympy-18189.planned.r1",
+      "officialResolved": true,
+      "originalCompleted": false,
+      "originalReviewVerdict": "ready",
+      "originalTaskError": "审阅未逐项确认全部验收条件；缺失、重复或未确认的条目不能算完成。",
+      "patchHash": "10189ce6e8dfae864b295a89204755ba2bf71fa42ac4224230d45ebc012708a8",
+      "snapshotSha256": "e9087998fa38a2b3c1ad9667c99a2ebece005ebe39dceb642f5763e3a3d6513e",
+      "officialReportSha256": "762355f91a368a129fbfd8250150856ebb28c7e57e56982463f49cd509c2a15b",
+      "baseCommit": "1923822ddf8265199dbd9ef9ce09641d3fd042b9",
+      "effectiveHead": "32537e483e2c24352d01019e86ed5199a9350ae4",
+      "sourceTree": "cdeb81de0eaea114053d5f2427930110d5c34ad6",
+      "sourceFileCount": 1723,
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": [],
+      "sourceImage": {
+        "imageId": "sha256:576f6177b9b019c7eaaad1b546d6805007436b1a0cff5707d52236a741f37f47",
+        "imageRef": "swebench/sweb.eval.x86_64.sympy_1776_sympy-18189:latest",
+        "manifestDigest": "sha256:5d4dcec6309087223683586740b4fd96e27c0ef1678bccc872a0dd4eba1743b9",
+        "layerDigest": "sha256:f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "layerBytes": 73036869,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "downloadedBytes": 73036869
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3"
+      ],
+      "commandSummary": {
+        "receipts": 7,
+        "retainedReceipts": 7,
+        "testReceipts": 4,
+        "failedReceipts": 1,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "30f7d7287b1ffc58f67e70943010669c9991616505d8024198e94faaf5d2d969",
+      "handoffCharacters": 16559,
+      "workspaceDigest": "c42373d744e1515d1b037042de3f2c1829e424c798d28e2cd9badd0108680990",
+      "originalRequest": {
+        "text": "diophantine: incomplete results depending on syms order with permute=True\n```\r\nIn [10]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(m,n), permute=True)\r\nOut[10]: {(-3, -2), (-3, 2), (-2, -3), (-2, 3), (2, -3), (2, 3), (3, -2), (3, 2)}\r\n\r\nIn [11]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(n,m), permute=True)\r\nOut[11]: {(3, 2)}\r\n```\r\n\ndiophantine: incomplete results depending on syms order with permute=True\n```\r\nIn [10]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(m,n), permute=True)\r\nOut[10]: {(-3, -2), (-3, 2), (-2, -3), (-2, 3), (2, -3), (2, 3), (3, -2), (3, 2)}\r\n\r\nIn [11]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(n,m), permute=True)\r\nOut[11]: {(3, 2)}\r\n```\r\n\n\n\nEvaluation policy: implement the issue in the existing repository; preserve existing tests, test configuration and Forge verification configuration. The configured visible check only checks changed Python syntax unless an explicit repository check was supplied. Run any relevant existing tests yourself. Final acceptance is performed externally; do not search for issue solutions or reference patches online."
+      },
+      "modelAuthoredRequirements": {
+        "goal": "Fix sympy.solvers.diophantine.diophantine so that permute=True is honored when syms is supplied in a different order, making the returned solution set independent of syms ordering (issue repro: n**4 + m**4 - 2**4 - 3**4 with syms=(m,n) vs (n,m)).",
+        "affectedPaths": [
+          "/testbed/sympy/solvers/diophantine.py"
+        ],
+        "constraints": [
+          "Implement in the existing repository; preserve existing behavior for calls without syms or without permute.",
+          "Do not modify protected paths, including sympy/solvers/tests and forge-agent.json; no tests may be added or changed there.",
+          "Do not search for or use issue solutions or reference patches online.",
+          "Keep the change minimal and consistent with the surrounding diophantine() implementation.",
+          "The syms handling must still return tuples oriented/reordered as before; only the dropped permute flag is in scope.",
+          "Assumption: syms is a permutation of the equation's variables, as used in the issue; subset handling is pre-existing behavior and out of scope."
+        ],
+        "acceptance": [
+          {
+            "criterion": "Both syms orders return the same complete 8-element set for the issue equation with permute=True: {(-3,-2),(-3,2),(-2,-3),(-2,3),(2,-3),(2,3),(3,-2),(3,2)}.",
+            "check": "automated",
+            "evidence": "Run a Python snippet constructing m,n symbols and asserting diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(m,n), permute=True) == diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(n,m), permute=True) == the 8-element set.",
+            "id": "A1"
+          },
+          {
+            "criterion": "Existing diophantine test module still passes (excluding any pre-existing slow test as needed).",
+            "check": "automated",
+            "evidence": "python -m pytest sympy/solvers/tests/test_diophantine.py -q (or -k 'not non_perfect_slow') exits successfully; report resulting pass/skip counts.",
+            "id": "A2"
+          },
+          {
+            "criterion": "Changed Python syntax is valid and the repository visible verification passes.",
+            "check": "automated",
+            "evidence": "python /tmp/forge-visible.py exits successfully after the edit.",
+            "id": "A3"
+          }
+        ],
+        "unresolved": []
+      },
+      "historicalOfficialFailures": {
+        "failToPass": [],
+        "passToPass": []
+      },
+      "officialLabelsExcludedFromReview": true
+    }
+  ],
+  "summary": {
+    "reviews": 12,
+    "defectiveAccepted": 6,
+    "defectiveBlocked": 0,
+    "correctAccepted": 5,
+    "correctBlocked": 0,
+    "abstained": 1,
+    "requestTokens": 1043200,
+    "outputTokens": 82577,
+    "elapsedMs": 1401017,
+    "costUsd": null
+  },
+  "byCase": [
+    {
+      "id": "pallets__flask-4045",
+      "officialResolved": false,
+      "accepted": 3,
+      "defectBlocked": 0,
+      "abstained": 0
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "officialResolved": false,
+      "accepted": 3,
+      "defectBlocked": 0,
+      "abstained": 0
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "officialResolved": true,
+      "accepted": 2,
+      "defectBlocked": 0,
+      "abstained": 1
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "officialResolved": true,
+      "accepted": 3,
+      "defectBlocked": 0,
+      "abstained": 0
+    }
+  ],
+  "results": [
+    {
+      "id": "pallets__flask-4045",
+      "run": 1,
+      "position": 1,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds the dot check in Blueprint.__init__ after super().__init__ and before self.name, with the exact upstream message, and updates the docstring, versionchanged note, docs, and the 2.0.1 Unreleased changelog. Nested blueprint registration applies name_prefix at registration time (blueprints.py:359), not by constructing dotted names, so valid names and nesting remain unaffected. The only newly failing existing test besides the acknowledged test_dotted_names is tests/test_basic.py::test_inject_blueprint_url_defaults, which constructs Blueprint('foo.bar.baz', ...) and therefore fails under the intended restriction rather than due to an implementation defect.",
+        "issues": [],
+        "notes": [
+          "Historical receipt for `pytest tests/test_blueprints.py -k 'not dotted_names'` shows 36 failures/2 errors, but the baseline-vs-change diff shows the environment (Werkzeug 2.3.7 vs Flask 2.0.1.dev0) already causes 226 baseline failures; the only changes attributable to the patch are test_dotted_names (TypeError -> ValueError) and test_inject_blueprint_url_defaults (new ValueError).",
+          "tests/test_basic.py::test_inject_blueprint_url_defaults uses Blueprint('foo.bar.baz', ...) and now fails by the same intended design rationale as test_dotted_names. It is an existing test encoding the old dotted-name behavior; external acceptance's test patch is expected to update it. This is not a source-code defect and tests were left untouched as required.",
+          "The first flake8 receipt failed only because flake8 was not installed; after ad hoc installation `flake8 src/flask/blueprints.py` exited 0 and `compileall` exited 0. The added lines are within the length limits."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "src/flask/blueprints.py lines 201-202: `if \".\" in name: raise ValueError(\"'name' may not contain a dot '.' character.\")` placed after super().__init__ and before self.name. Ad-hoc receipt printed \"A1 ok: 'name' may not contain a dot '.' character.\" and also constructed Blueprint('app_ui') without error."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Nested registration uses `bp_options[\"name_prefix\"] = options.get(\"name_prefix\", \"\") + self.name + \".\"` at blueprints.py:359 and endpoint naming at blueprints.py:101, so no dotted name is constructed during nesting and the __init__ guard cannot fire for valid nested blueprints. Baseline-vs-change failure diff confirms no new valid-name test failures; the only new failure (test_inject_blueprint_url_defaults) itself constructs a dotted name. Ad-hoc check confirms valid name 'app_ui' constructs fine."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "changes.files lists only CHANGES.rst, docs/blueprints.rst, src/flask/blueprints.py; no protected test/config paths appear, and protection status is unchanged."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Historical receipts: `python -m compileall -q src/flask` -> compileall_exit=0; `python -m flake8 src/flask/blueprints.py` -> flake8_exit=0 (after installing flake8). Patch lines are under 88 chars."
+          },
+          {
+            "id": "A5",
+            "status": "met",
+            "evidence": "CHANGES.rst under `Version 2.0.1` / `Unreleased` adds a bullet: \"A blueprint's name may not contain a dot `.` character ... A :exc:`ValueError` is raised when the name does contain a dot.\""
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "grep",
+          "path": "tests/test_basic.py"
+        },
+        {
+          "name": "read",
+          "path": "src/flask/blueprints.py"
+        },
+        {
+          "name": "grep",
+          "path": "src/flask/blueprints.py"
+        },
+        {
+          "name": "grep",
+          "path": "src/flask/app.py"
+        },
+        {
+          "name": "read",
+          "path": "CHANGES.rst"
+        }
+      ],
+      "modelTurns": 4,
+      "toolCalls": 5,
+      "requestTokens": 60167,
+      "usage": {
+        "input": 16233,
+        "output": 7390,
+        "cacheRead": 36544,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 82804,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "6a7c0d2348d17c32ec94598241d514a5a5e37a40535c9082b878cbd1832c2908"
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 1,
+      "position": 2,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds an early 1D validation in Axes3D.plot before any artist is created, and makes art3d.line_2d_to_3d revert the class on failure, so a 2D input raises a descriptive ValueError and no half-converted Line3D can persist. Valid 1D/scalar/empty/zdir paths are unchanged, the full existing mplot3d test file passes (136 passed, historical receipt), and the configured syntax check exits 0.",
+        "issues": [],
+        "notes": [
+          "The A1/A2 scratch outputs are historical, unattested receipts, but the code itself (validation before super().plot, class revert in line_2d_to_3d) independently establishes the reported behavior; the 1D + fig.canvas.draw() path is unaffected.",
+          "Minor compatibility observation: 2D ys of shape (n, k) with 1D xs/zs could previously create k separate Line3D artists via Axes.plot column splitting; the new check rejects all ndim>1 ys. This matches the Axes3D.plot docstring (xs/ys/zs documented as 1D) and the stated requirement, so it is not treated as a defect, but it is a behavior narrowing for undocumented input.",
+          "The filtered and unfiltered test receipts both report 136 passed; that does not reduce confidence in A3 since the full-file run is the broader result."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "axes3d.py:~1279 raises ValueError for any xs/ys/zs with np.ndim>1 before super().plot, so the 2D call creates no artist; historical receipt shows 'ValueError: 3D line plots require 1D ... shapes (1, 2)...', empty ax.lines, and a subsequent 1D plot + fig.canvas.draw() succeeding with no AttributeError."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Early validation prevents any Line3D from being created on bad input (receipt: 'ax.lines after failed call: []'), and art3d.line_2d_to_3d now wraps set_3d_properties in try/except restoring line.__class__ = lines.Line2D before re-raising; receipt confirms class reverted after a failed direct conversion."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Historical pytest receipts: 'python -m pytest lib/mpl_toolkits/tests/test_mplot3d.py -q' and the filtered -k run both report 136 passed; code inspection shows the guard only rejects ndim>1, leaving scalar x/y (ax.plot(1, 1, 'o')), empty data, zs broadcast for 1D input and zdir juggling untouched."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Configured visible check 'python /tmp/forge-visible.py' returned 'Changed Python syntax checked; hidden acceptance remains external.' with exit=0 in the historical receipt, and both changed files are syntactically consistent with the shown diff."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/matplotlib"
+        },
+        {
+          "name": "grep",
+          "path": "lib/matplotlib/axes/_base.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/matplotlib/axes/_base.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/matplotlib/axes/_base.py"
+        }
+      ],
+      "modelTurns": 9,
+      "toolCalls": 12,
+      "requestTokens": 162697,
+      "usage": {
+        "input": 23419,
+        "output": 11790,
+        "cacheRead": 127488,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 127447,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "31ca6acfdf661f185cb8a0e8ead5c060669935f6cec3d115497fc00ecb01689e"
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 1,
+      "position": 3,
+      "officialResolved": true,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch replaces the discarded chararray.replace call with an in-place assignment (`output_field[:] = output_field.replace(...)`) in FITS_rec._scale_back_ascii. Number formatting uses ASCII2STR['D']=='E', so D columns are formatted with E and then have the separator rewritten to D; the write path now actually emits D exponents (receipt raw field b'  1.25000000000000000D+00 -3.50000000000000000D+00 ...' for both explicit 'D25.17' and default float64), other ASCII format codes are byte-identical, and test_table.py passes 84/2 skipped. Only astropy/io/fits/fitsrec.py is modified.",
+        "issues": [],
+        "notes": [
+          "Pre-existing, unrelated limitation: zero-precision D (and E) ASCII columns are written with a trailing decimal point ('1D+00.'), which _convert_ascii's D->E rewrite turns into '1E+00.' and float parsing rejects (recorded failure in the earlier script run). Before this patch the same column was written as '1E+00.', so the read failure is not a regression of this change and lies outside the original request (which is about writing the D separator).",
+          "test_core.py shows 2 failures (TestFileFunctions.test_writeto_full_disk, test_flush_full_disk) with 'OSError: Fake error raised when writing file.'; the receipts reproduce them on the stashed baseline, so they are environment/pre-existing and unrelated to fitsrec.py.",
+          "The first pytest invocation failed with 'ERROR: -o/--override-ini expects option=value style.' because the environment injects PYTEST_ADDOPTS='-o cache_dir=...' that pytest 3.3.1 cannot parse; the same command with PYTEST_ADDOPTS='' passed (84 passed, 2 skipped). Test config was not modified.",
+          "git status additionally shows an untracked forge-agent.json (Forge harness file); the change set itself reports only astropy/io/fits/fitsrec.py modified, with no protected test/config changes."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "fitsrec.py:1263-1265 now assigns the replaced chararray back; verification receipt shows TFORM1='D25.17' and raw data field b'  1.25000000000000000D+00 -3.50000000000000000D+00  0.00000000000000000D+00  1.23456789012345665D-30' with no E exponents in that column."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Receipt: derived format for a float64 column is D25.17 and its raw field b'  1.25000000000000000D+00 -3.50000000000000000D+00  0.00000000000000000D+00  1.23456789012345665D-30' contains D exponents."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Standard-width D fields are readable: _convert_ascii (fitsrec.py:836) does np.char.replace(dummy, b'D', b'E') before numeric conversion, and the verification script's final run reported 'ALL CHECKS PASSED' after reopening written files; the precision-0 D/E trailing-decimal read limitation is pre-existing (see notes), not introduced here."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Raw bytes in the verification receipt: E0 b'                   1E+00.' (E preserved), E b'  1.5000000E+00 -2.5000000E+00', F b'   1.   2.', A b'abcdef', I b'    7   -8'; test_zero_precision_float_column's F5.0 assertion b'   1.   2.   3.' and test_ascii_table pass in the 84-passed run. Patch only alters the 'D' branch."
+          },
+          {
+            "id": "A5",
+            "status": "met",
+            "evidence": "Receipt: `cd /testbed && PYTEST_ADDOPTS='' python -m pytest astropy/io/fits/tests/test_table.py -q` -> '84 passed, 2 skipped'; -k 'ascii or zero_precision' -> '3 passed'. test_core.py's 2 failures reproduce on the stashed baseline (pre-existing)."
+          },
+          {
+            "id": "A6",
+            "status": "met",
+            "evidence": "Receipt `git status --porcelain && git diff --stat` -> ' M astropy/io/fits/fitsrec.py' and '1 file changed, 2 insertions(+), 1 deletion(-)'; the only other entry is the untracked harness file forge-agent.json. No changes under astropy/io/fits/tests, conftest.py or Forge config."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/tests/test_table.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/tests/test_table.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/tests/test_table.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/column.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/column.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/column.py"
+        }
+      ],
+      "modelTurns": 8,
+      "toolCalls": 13,
+      "requestTokens": 165074,
+      "usage": {
+        "input": 31252,
+        "output": 11454,
+        "cacheRead": 122368,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 129697,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "74b60a84e4570a9ff2bca6ed59894f8ad97d3a517ecedd6834eaaeca867ab1c6"
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 1,
+      "position": 4,
+      "officialResolved": true,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch applies the minimal, correct fix: the syms-reordering branch of diophantine() now forwards permute to the recursive call, so permutation solutions are generated in canonical variable order before being reordered into the requested syms orientation. The issue repro (n**4 + m**4 - 16 - 81) now yields the same complete 8-element signed-permutation set for syms=(m,n) and syms=(n,m), while non-permuted calls are unchanged. The full sympy/solvers/tests/test_diophantine.py module passes via bin/test (43 passed, 1 skipped, 2 expected-to-fail) and the visible syntax check passes.",
+        "issues": [],
+        "notes": [
+          "pytest is not installed in the environment and `bin/test ... -k 'not non_perfect_slow'` selected 0 tests (the -k filter was not applied as intended); the unfiltered `python bin/test sympy/solvers/tests/test_diophantine.py` run is the applicable module-level result and it passed with [OK].",
+          "No new regression test for syms+permute was added (tests directory is protected by the task constraints), so A1's support rests on the repro receipt plus the one-line code path; the existing module has permute coverage (test_diophantine_permute_sign and others) but not this exact syms-ordering case.",
+          "The forwarded permute also now takes effect when syms is a proper subset of the equation variables (previously dropped there); this is consistent with the requested fix rather than a regression, and subset semantics were declared out of scope."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "sympy/solvers/diophantine.py:185 now calls `diophantine(eq, param, permute=permute)` inside the `syms != var` reordering branch; because `var` is sorted canonically and reordered via `dict_sym_index` afterward, permute generation happens in canonical order and is then mapped to the requested syms order. The supplied repro receipt printed identical 8-element sets for syms=(m,n) and syms=(n,m) matching the expected set and asserted `diophantine(eq) == {(2, 3)}` and `diophantine(eq, syms=(n,m)) == {(3, 2)}`, confirming unchanged no-permute behavior."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Historical receipt `python bin/test sympy/solvers/tests/test_diophantine.py` finished with 43 passed, 1 skipped, 2 expected to fail, in 8.43 seconds ([OK]); this is the full module run including the slow test. The earlier pytest attempt failed only because pytest is not installed, and the `-k` bin/test attempt selected 0 tests, so the unfiltered run is the valid result."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Receipt for `python /tmp/forge-visible.py` exited successfully with output 'Changed Python syntax checked; hidden acceptance remains external.'; the patch touches only one line in sympy/solvers/diophantine.py with valid syntax, confirmed by reading the file at line 185."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "grep",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "grep",
+          "path": "sympy/solvers/tests/test_diophantine.py"
+        }
+      ],
+      "modelTurns": 3,
+      "toolCalls": 3,
+      "requestTokens": 27911,
+      "usage": {
+        "input": 10450,
+        "output": 1973,
+        "cacheRead": 15488,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 71793,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "d225b153bd12a3624b8203384b3a67a5f8e9d3474b574837362b0e2e9d7ff85d"
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 2,
+      "position": 1,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds a pre-artist validation in Axes3D.plot that rejects any non-1D xs/ys/zs with a clear ValueError (before zs broadcast and before super().plot creates artists), and makes art3d.line_2d_to_3d atomic by reverting the class to Line2D if set_3d_properties raises. This addresses the reported trigger (2D/nested array data caused a ValueError inside set_3d_properties after the class had already been switched, leaving a Line3D without _verts3d and breaking all later draws). All previously-working inputs remain scalar/1D paths (scalar coords, empty data, masked arrays, zs scalar-or-1D, zdir) and 2D data never produced a working 3D line before (zs broadcast of a 2D shape against per-line 1D data always failed), so the new rejection is not a regression of supported input. Supplied receipts show the failed 2D call leaving ax.lines empty, a subsequent 1D plot plus draw succeeding, direct non-atomic conversion reverting, and the mplot3d suite passing.",
+        "issues": [],
+        "notes": [
+          "Historical receipts are labeled freshness 'unconfirmed'; the configured visible check only validates changed-file syntax, so A3/A4 rest on the recorded pytest/syntax outputs rather than a current-workspace run.",
+          "No in-repo test was added (tests directory is protected per constraints); the repro/atomicity coverage exists only as the /tmp scratch script evidenced in the receipts.",
+          "Optional: the exact error wording ('3D line plots require 1D (one-dimensional) data; got xs, ys, zs with shapes ...') is an implementer choice; it satisfies the docstring-driven contract (xs/ys are 1D array-like) but is not prescribed by the user report.",
+          "errorbar3d calls line_2d_to_3d directly without the new 1D guard, but the atomic class revert also protects that path, and no valid 1D/scalar behavior changes there."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "lib/mpl_toolkits/mplot3d/axes3d.py:1284-1291 raises ValueError for any np.ndim(data) > 1 on (xs, ys, zs) before `zs = np.broadcast_to(...)` (line 1293) and before `super().plot(...)`, so no artist/state is created; scratch receipt output shows 'ValueError: 3D line plots require 1D (one-dimensional) data; got xs, ys, zs with shapes (2, 2), (2, 2), (2, 2)' followed by 'A1: 1D plot + fig.canvas.draw() succeeded' with no _verts3d AttributeError."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Guard runs before super().plot, so the failed call adds no line (receipt: 'ax.lines after failed call: []'); additionally art3d.py:225-231 reverts line.__class__ = lines.Line2D when set_3d_properties raises, with receipt 'line_2d_to_3d reverted the class after a failed conversion' and 'all lines are Line3D with _verts3d' after successful plots."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Recorded receipts: `python -m pytest lib/mpl_toolkits/tests/test_mplot3d.py -k 'lines3d or plot_scalar or lines or plot' -q` -> '136 passed in 16.58s' and full-file run -> '136 passed in 17.66s'; code reading confirms scalar x/y (ndim 0), empty 1D data and scalar/1D zs still take the unchanged path through np.broadcast_to and line_2d_to_3d."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Recorded receipt: `python /tmp/forge-visible.py` printed 'Changed Python syntax checked; hidden acceptance remains external.' with exit=0; changed hunks in axes3d.py (np already imported at line 19) and art3d.py (lines imported at line 15) are syntactically consistent."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        }
+      ],
+      "modelTurns": 6,
+      "toolCalls": 9,
+      "requestTokens": 104036,
+      "usage": {
+        "input": 13186,
+        "output": 10146,
+        "cacheRead": 80704,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 110649,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "0e6b1531ef684ebf0ac4baaafe764fc49ffb95a34ada709310a7f94284ef083d"
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 2,
+      "position": 2,
+      "officialResolved": true,
+      "decision": "abstained",
+      "coverage": false,
+      "reviewFailure": "budget_exhausted",
+      "error": "任务超过总时限 5 分钟",
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/tests/test_table.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/column.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/column.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/column.py"
+        }
+      ],
+      "modelTurns": 6,
+      "toolCalls": 7,
+      "requestTokens": 111414,
+      "usage": {
+        "input": 22630,
+        "output": 14224,
+        "cacheRead": 74560,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 300023,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "95de30c3070824fa1fc0ce25aa78bfc84227f198e64954fce290b9ffc0ae3700"
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 2,
+      "position": 3,
+      "officialResolved": true,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The one-line patch passes the caller's permute flag into the syms-reordering recursion, so permutation expansion happens in the equation's canonical variable order and is then remapped into the requested syms order. This fixes the issue repro without changing default (permute=False) behavior, and the existing diophantine test module and visible syntax check pass in the supplied receipts.",
+        "issues": [],
+        "notes": [
+          "A2 was validated with `python bin/test sympy/solvers/tests/test_diophantine.py` (43 passed, 1 skipped, 2 expected to fail) rather than pytest, which is not installed in the environment; the earlier `-k` bin/test invocation selected 0 tests, but the full-module run supersedes it.",
+          "The reorder branch returns early, so permuted solutions are generated once in canonical order and only reindexed into syms order; no double permutation is introduced.",
+          "For permute=False the recursive call now passes permute=False explicitly, identical to the previous default, so existing no-permute output orientation is preserved (receipt also asserted diophantine(eq)=={(2,3)} and diophantine(eq, syms=(n,m))=={(3,2)})."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "sympy/solvers/diophantine.py:185 now calls `diophantine(eq, param, permute=permute)` inside the `syms != var` reordering branch, generating all permutations before remapping to syms order. Historical receipt ran the exact repro assertion and printed both syms orders as the required 8-element set and 'A1 OK', while also asserting unchanged no-permute results."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Historical receipt `cd /testbed && python bin/test sympy/solvers/tests/test_diophantine.py` completed with 'tests finished: 43 passed, 1 skipped, 2 expected to fail, in 8.43 seconds' and [OK]; the earlier pytest attempt failed only because pytest is not installed, and the `-k` run selected 0 tests."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Historical receipt for `python /tmp/forge-visible.py` exited successfully with 'Changed Python syntax checked; hidden acceptance remains external.'; the patch alone touches only line 185 of sympy/solvers/diophantine.py and is syntactically consistent with its context."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "read",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "grep",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "read",
+          "path": "sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "read",
+          "path": "sympy/solvers/diophantine.py"
+        }
+      ],
+      "modelTurns": 4,
+      "toolCalls": 5,
+      "requestTokens": 42263,
+      "usage": {
+        "input": 6057,
+        "output": 3310,
+        "cacheRead": 32896,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 111473,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "f2f1003642590b3a475598ac1b79bbac7e7bfe543e86094683acfb6b31683b33"
+    },
+    {
+      "id": "pallets__flask-4045",
+      "run": 2,
+      "position": 4,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds the required dot check in Blueprint.__init__ after super().__init__ and before self.name assignment, with the upstream message \"'name' may not contain a dot '.' character.\", plus docstring/docs/changelog updates. Only src/flask/blueprints.py, CHANGES.rst and docs/blueprints.rst changed; protected tests/config are untouched. The only behavioral differences versus the stashed baseline in the supplied receipts are the intended ValueError for dotted blueprint names (test_dotted_names and test_basic.py::test_inject_blueprint_url_defaults, both constructs using literal dotted names) and unrelated pre-existing Werkzeug 2.3.7 incompatibilities that fail identically on the baseline.",
+        "issues": [],
+        "notes": [
+          "tests/test_basic.py::test_inject_blueprint_url_defaults constructs flask.Blueprint(\"foo.bar.baz\", __name__) and now fails with the intended ValueError; this is expected collateral of the requested behavior (same class of stale test as test_dotted_names) and needs the external acceptance test update, not a source fix.",
+          "tests/test_blueprints.py::test_nested_blueprint cannot execute in this environment due to a pre-existing Werkzeug 2.3.7 TypeError (unexpected keyword 'as_tuple'); the stash-baseline receipt shows the same failure, so it is not a regression from this patch. Focused code reading shows nested registration/name_prefix paths never construct Blueprints with dotted names, so they are unaffected.",
+          "flake8 was initially unavailable (No module named flake8) and later installed; the final receipt reports flake8_exit=0 and compileall_exit=0, and an independent AST parse/line-length check also passed. The repository's pinned lint versions were not used, so this is weaker than a project-toolchain lint receipt."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "Patch adds `if \".\" in name: raise ValueError(\"'name' may not contain a dot '.' character.\")` in Blueprint.__init__ after super().__init__ and before self.name. Historical receipt shows pytest.raises(ValueError) for flask.Blueprint('app.ui', __name__) with message containing 'dot', and Blueprint('app_ui') constructs successfully."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Check is confined to Blueprint.__init__ dotted-name rejection and does not touch register_blueprint, name_prefix, error handler, CLI or endpoint logic; nested blueprints use non-dotted names at construction. Baseline-vs-patch failure diff shows only the intended dotted-name ValueError changes plus pre-existing Werkzeug incompatibility failures present on both sides."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Changes list contains exactly CHANGES.rst, docs/blueprints.rst and src/flask/blueprints.py; no tests/, examples tests, or forge/pforge config files appear as modified. Patch diff confirms no test edits."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Receipts: `python -m compileall -q src/flask` exit 0, `python -m flake8 src/flask/blueprints.py` exit 0 (after installing flake8), plus independent ast.parse and >88-char line scan reported OK."
+          },
+          {
+            "id": "A5",
+            "status": "met",
+            "evidence": "CHANGES.rst under 'Version 2.0.1 / Unreleased' adds a bullet stating a blueprint's name may not contain a dot and that ValueError is raised; docs/blueprints.rst Nesting Blueprints section and the Blueprint docstring/versionchanged note document the restriction."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "grep",
+          "path": "tests/test_basic.py"
+        },
+        {
+          "name": "grep",
+          "path": "tests/test_blueprints.py"
+        },
+        {
+          "name": "read",
+          "path": "CHANGES.rst"
+        },
+        {
+          "name": "read",
+          "path": "src/flask/blueprints.py"
+        }
+      ],
+      "modelTurns": 3,
+      "toolCalls": 4,
+      "requestTokens": 39352,
+      "usage": {
+        "input": 4234,
+        "output": 3886,
+        "cacheRead": 31232,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 111640,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "cb5c83d5db9a57ce2c3de5d25c3dde6291e64dd850c1b4c90cda60e2132af524"
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "run": 3,
+      "position": 1,
+      "officialResolved": true,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch applies the minimal in-place fix in FITS_rec._scale_back_ascii by assigning the result of output_field.replace('E','D') back into the raw column buffer. Focused reading confirms output_field is the per-column raw field (raw_field passed from _scale_back), so the whole-field replace touches only the D-format column, preserves dtype/itemsize (equal-length replacement, slice assignment would raise on mismatch), and is undone on read by _convert_ascii's D->E replacement. Receipts show explicit D25.17 and default float64 columns written with D+/D- exponents and no E exponent, E/F/A/I raw output unchanged, and test_table.py passing 84/2 skipped; the two test_core failures reproduce with the fix reverted, so they are pre-existing/environmental rather than regressions. Only fitsrec.py is modified and no protected path is touched.",
+        "issues": [],
+        "notes": [
+          "The first pytest invocation failed only because the environment sets PYTEST_ADDOPTS='-o cache_dir=/tmp/forge-pytest-cache', which pytest 3.3.1 rejects; clearing PYTEST_ADDOPTS produced the 84 passed / 2 skipped run, so this is a harness/version artifact, not a code defect.",
+          "TestFileFunctions.test_writeto_full_disk and test_flush_full_disk fail in test_core.py, but the stashed (fix reverted) baseline receipt shows the same 2 failures, confirming they are pre-existing environment/monkeypatch issues unrelated to this change.",
+          "Pre-existing, unrelated behavior noted from the intermediate failed script run: zero-precision float columns (E0/D0) emit a trailing decimal point after the exponent (e.g. '1E+00.'), which float parsing rejects on read-back. This is identical before and after the patch (D0 was written as '1E+00.' pre-patch too) and stems from the intentional FITS-standard trailing-decimal logic, not from the D-separator change.",
+          "The exact contents of /tmp/check_d_exp.py are not in the evidence, so the 'ALL CHECKS PASSED' line is only an aggregate observation; the D-exponent raw bytes and unaffected E/F/A/I bytes are directly visible in the receipt output, and D round-trip is established by the _convert_ascii D->E replacement preceding numeric conversion."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "Receipt output shows explicit D format: b\"TFORM1  = 'D25.17  ' ...\" and raw field '  1.25000000000000000D+00 -3.50000000000000000D+00  0.00000000000000000D+00  1.23456789012345665D-30' with no E exponent; patch in fitsrec.py:1264-1265 now assigns replace() result back into output_field."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Receipt shows 'derived format: D25.17' for the default float64 column and 'default D raw field: b\\'  1.25000000000000000D+00 ... D-30\\'' containing D+/D- exponents."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "fitsrec.py _convert_ascii (lines ~838-841) already does dummy = np.char.replace(dummy, b'D', b'E') before numeric conversion, so values written with D exponents parse back to the same floats; receipt's final run ended with 'ALL CHECKS PASSED' and earlier visible D-field data matches inputs (1.25, -3.5, 0.0, 1.23456789012345665e-30). Zero-precision D/E columns remain non-readable due to the pre-existing trailing-decimal-after-exponent behavior, unchanged by this patch."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Receipt raw bytes: E raw b'  1.5000000E+00 -2.5000000E+00', E0 b'...1E+00.' (still E, trailing decimal preserved), F raw b'   1.   2.', A raw b'abcdef', I raw b'    7   -8'; guard is `if 'D' in format` and replace only maps E->D in the D column field. test_table.py -k 'ascii or zero_precision' = 3 passed, 83 deselected."
+          },
+          {
+            "id": "A5",
+            "status": "met",
+            "evidence": "PYTEST_ADDOPTS='' python -m pytest astropy/io/fits/tests/test_table.py -q -> '84 passed, 2 skipped'. test_core.py shows 2 failed, 69 passed, 1 skipped, but the stashed baseline (fix reverted) run shows '2 failed, 70 deselected' for the same two full-disk tests, so the failures are pre-existing, not caused by the patch."
+          },
+          {
+            "id": "A6",
+            "status": "met",
+            "evidence": "git status --porcelain shows only ' M astropy/io/fits/fitsrec.py' plus untracked harness file forge-agent.json; git diff --stat is 'astropy/io/fits/fitsrec.py | 3 ++-', so no protected test or config path was added or modified."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "grep",
+          "path": "astropy/io/fits/fitsrec.py"
+        },
+        {
+          "name": "read",
+          "path": "astropy/io/fits/fitsrec.py"
+        }
+      ],
+      "modelTurns": 4,
+      "toolCalls": 4,
+      "requestTokens": 57539,
+      "usage": {
+        "input": 4794,
+        "output": 4937,
+        "cacheRead": 47808,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 55035,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "bfce8b1fa912ec0830e5f7cd1663ba88d8f4e8c44eaa73fb374b63367361d123"
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "run": 3,
+      "position": 2,
+      "officialResolved": true,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The one-line patch in sympy/solvers/diophantine.py forwards permute=permute into the recursive call used when syms is supplied in a non-canonical order, so the permutation logic runs before results are reoriented to the syms order. The provided repro snippet shows both syms orders returning the full 8-element set and non-permute base calls unchanged, and the existing diophantine test module passed via bin/test (43 passed, 1 skipped, 2 expected to fail). The change is minimal and does not introduce a new guard or restriction.",
+        "issues": [],
+        "notes": [
+          "pytest is not installed in the environment, so the requested `python -m pytest` command could not run; the equivalent module was exercised with `python bin/test sympy/solvers/tests/test_diophantine.py` instead.",
+          "The `-k \"not non_perfect_slow\"` bin/test invocation collected 0 tests (bin/test does not apply that filter syntax), but a subsequent unfiltered run of the full module passed, so this is not blocking.",
+          "Subset-syms handling (syms strictly smaller than var) is untouched and remains pre-existing behavior, consistent with the stated out-of-scope assumption."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "Patch forwards permute=permute in the syms reordering recursive call; the supplied repro receipt printed 8-element sets for both syms=(m,n) and syms=(n,m) and asserted equality with the expected set plus unchanged diophantine(eq)=={(2,3)} and diophantine(eq, syms=(n,m))=={(3,2)}, ending with 'A1 OK'."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "`python bin/test sympy/solvers/tests/test_diophantine.py` receipt reports 'tests finished: 43 passed, 1 skipped, 2 expected to fail, in 8.43 seconds' with no failures."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "`python /tmp/forge-visible.py` exited 0 with 'Changed Python syntax checked; hidden acceptance remains external.', and the observed diff matches the supplied patch."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "<candidate>/sympy__sympy-18189/sympy/solvers/diophantine.py"
+        },
+        {
+          "name": "grep",
+          "path": "<candidate>/sympy__sympy-18189/sympy/solvers/tests/test_diophantine.py"
+        }
+      ],
+      "modelTurns": 2,
+      "toolCalls": 2,
+      "requestTokens": 16948,
+      "usage": {
+        "input": 1351,
+        "output": 1709,
+        "cacheRead": 13888,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 59216,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "6fe40c45413b3fab27a8cadbabecb695a8b8c9f3a7b200e647dd4689d7182ab3"
+    },
+    {
+      "id": "pallets__flask-4045",
+      "run": 3,
+      "position": 3,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds the required dot check in Blueprint.__init__ after super().__init__ and before self.name assignment, matching the upstream message, with docstring, docs, and changelog updates. Ad hoc receipt confirms ValueError for 'app.ui' with a dot-mentioning message and success for 'app_ui'. The baseline-vs-change failure diff shows the only newly introduced failures are tests that construct dotted blueprint names (test_dotted_names and test_inject_blueprint_url_defaults), which is exactly the behavior the user requested; all other failures are present on the unmodified baseline due to a Werkzeug 2.3.7 environment incompatibility. compileall and flake8 exit 0, and only the three intended files changed.",
+        "issues": [],
+        "notes": [
+          "The A2 evidence narrative claimed the full suite would show only test_dotted_names failing, but the supplied receipt also shows test_basic.py::test_inject_blueprint_url_defaults failing because it constructs Blueprint('foo.bar.baz', ...). That test is stale under the new contract (dotted names must raise) and is protected from modification; the baseline-vs-change FAILED diff confirms no other new failures, so this is not a regression of supported behavior.",
+          "Most tests/test_blueprints.py cases, including test_nested_blueprint, fail identically on the unmodified baseline due to the installed Werkzeug 2.3.7 using removed APIs (as_tuple/url_parse), so they cannot independently demonstrate nested registration in this environment; the narrow code change and the unchanged failure set support it, and nested registration builds the dot suffix via name_prefix at registration time rather than constructing dotted Blueprint objects.",
+          "flake8 was initially unavailable, then installed and reported exit 0; no style issues found on the changed source."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "src/flask/blueprints.py raises ValueError(\"'name' may not contain a dot '.' character.\") when '.' in name, before self.name is set; receipt call_00_DuMgEoiOJCrVTt7XbLq67280 shows 'A1 ok' for flask.Blueprint('app.ui', __name__) and no error for 'app_ui'."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Baseline-vs-change FAILED-list diff (call_00_kz9RndXM7b0DNMeCrGat4582) shows only test_dotted_names (ValueError by design) and test_inject_blueprint_url_defaults (constructs Blueprint('foo.bar.baz'), also a dotted name the user explicitly requires rejecting) as new failures; test_nested_blueprint fails identically at baseline due to Werkzeug 2.3.7's removed as_tuple/url_parse APIs, not the patch. Nested registration uses bp_options['name_prefix'] = ... + self.name + '.' at blueprint.py:359, so valid names and nested registration are unaffected."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Changes list contains only CHANGES.rst, docs/blueprints.rst, and src/flask/blueprints.py; tests/ and forge/pforge config paths are not modified and protection status is unchanged."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Receipt call_00_ET_1ptxdSoMVCkEl6GyrPw33037 reports flake8_exit=0 and compileall_exit=0; earlier ast/line-length check also passed."
+          },
+          {
+            "id": "A5",
+            "status": "met",
+            "evidence": "CHANGES.rst has a new bullet under 'Version 2.0.1 / Unreleased' stating a blueprint's name may not contain a dot and that ValueError is raised; docs/blueprints.rst nesting section and the Blueprint docstring/versionchanged note also document it."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "grep",
+          "path": "<candidate>/pallets__flask-4045/tests/test_basic.py"
+        },
+        {
+          "name": "read",
+          "path": "<candidate>/pallets__flask-4045/src/flask/blueprints.py"
+        },
+        {
+          "name": "grep",
+          "path": "<candidate>/pallets__flask-4045/tests/test_blueprints.py"
+        },
+        {
+          "name": "grep",
+          "path": "<candidate>/pallets__flask-4045/src/flask"
+        },
+        {
+          "name": "grep",
+          "path": "<candidate>/pallets__flask-4045/src/flask/blueprints.py"
+        },
+        {
+          "name": "grep",
+          "path": "<candidate>/pallets__flask-4045/src/flask/scaffold.py"
+        },
+        {
+          "name": "read",
+          "path": "<candidate>/pallets__flask-4045/src/flask/scaffold.py"
+        },
+        {
+          "name": "read",
+          "path": "<candidate>/pallets__flask-4045/src/flask/blueprints.py"
+        },
+        {
+          "name": "read",
+          "path": "<candidate>/pallets__flask-4045/CHANGES.rst"
+        },
+        {
+          "name": "read",
+          "path": "<candidate>/pallets__flask-4045/docs/blueprints.rst"
+        }
+      ],
+      "modelTurns": 6,
+      "toolCalls": 10,
+      "requestTokens": 89389,
+      "usage": {
+        "input": 8745,
+        "output": 4036,
+        "cacheRead": 76608,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 131165,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "2d88814309fa32bacb3f151a41d222af8559afab966a607b02d08d89c90776c0"
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "run": 3,
+      "position": 4,
+      "officialResolved": false,
+      "decision": "accepted",
+      "coverage": true,
+      "review": {
+        "verdict": "ready",
+        "summary": "The patch adds an up-front 1D check in Axes3D.plot before any artist is created, and makes line_2d_to_3d atomic by restoring Line2D on conversion failure. Both reported symptoms are covered: 2D input now raises a descriptive ValueError at plot time, and no Line3D without _verts3d can remain in the axes. Valid 1D/scalar/empty inputs and zdir paths are untouched, and the full mplot3d test suite receipt reports 136 passed.",
+        "issues": [],
+        "notes": [
+          "The historical receipts are marked freshness-unconfirmed; the full-suite receipt (136 passed) is the meaningful record. The -k filtered receipt reports the same 136 count as the unfiltered run, so the filter may not have narrowed collection; this does not indicate a failure.",
+          "No regression test was committed, which is consistent with the protected-tests constraint; the repro was exercised via the /tmp scratch script.",
+          "line_2d_to_3d atomicity also covers the Axes3D.errorbar path, which calls it before add_line; a failed conversion restores Line2D and propagates before the artist is added.",
+          "The up-front validation only inspects the primary xs/ys/zs; additional x/y pairs passed positionally after a format string remain handled by the atomic conversion fallback rather than the explicit ValueError, but they cannot cause the reported _verts3d corruption."
+        ],
+        "acceptance": [
+          {
+            "id": "A1",
+            "status": "met",
+            "evidence": "axes3d.py Axes3D.plot raises ValueError with the shapes before super().plot (lib/mpl_toolkits/mplot3d/axes3d.py:1279-1288). Historical scratch receipt shows 2D calls raising ValueError '3D line plots require 1D (one-dimensional) data...' followed by 'A1: 1D plot + fig.canvas.draw() succeeded' and no _verts3d AttributeError."
+          },
+          {
+            "id": "A2",
+            "status": "met",
+            "evidence": "Validation precedes artist creation, and line_2d_to_3d now reverts line.__class__ to lines.Line2D on any exception (art3d.py:221-232). Scratch receipt shows 'ax.lines after failed call: []', 'no half-converted Line3D left behind', and 'line_2d_to_3d reverted the class after a failed conversion'."
+          },
+          {
+            "id": "A3",
+            "status": "met",
+            "evidence": "Historical receipt for 'python -m pytest lib/mpl_toolkits/tests/test_mplot3d.py -q' reports '136 passed in 17.66s' with no failures. Code reading confirms 1D, scalar (test_plot_scalar), empty-data, masked-array, and zdir cases still pass ndim <= 1 and flow through the unchanged broadcast/super().plot path."
+          },
+          {
+            "id": "A4",
+            "status": "met",
+            "evidence": "Historical receipt for 'python /tmp/forge-visible.py' printed 'Changed Python syntax checked; hidden acceptance remains external.' and 'exit=0'; the patch changes are syntactically valid Python."
+          }
+        ]
+      },
+      "reviewFailure": null,
+      "error": null,
+      "formatRetries": 0,
+      "candidateUnchanged": true,
+      "readerPathsWithinProject": true,
+      "tools": [
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/axes3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/mplot3d/art3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "read",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        },
+        {
+          "name": "grep",
+          "path": "lib/mpl_toolkits/tests/test_mplot3d.py"
+        }
+      ],
+      "modelTurns": 10,
+      "toolCalls": 13,
+      "requestTokens": 166410,
+      "usage": {
+        "input": 13344,
+        "output": 7722,
+        "cacheRead": 145344,
+        "cacheWrite": 0
+      },
+      "elapsedMs": 110075,
+      "reviewerLimits": {
+        "maxDurationMs": 300000,
+        "maxModelTurns": 24,
+        "maxToolCalls": 120,
+        "maxTotalTokens": 0,
+        "maxOutputTokens": 32000,
+        "maxCostUsd": 4
+      },
+      "sourceResultSha256": "c88720dce099766af9948b53cf80fe458c0aebebe762026b255c2d8517bcf3dd"
+    }
+  ],
+  "publicationRedactions": "Local paths and public-issue reporter environment paths are redacted. Recorded raw handoff/result hashes bind the unredacted local evidence; model inputs were not redacted during review."
+}
