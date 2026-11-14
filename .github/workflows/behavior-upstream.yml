@@ -1,0 +1,110 @@
+name: behavior-upstream-replay
+on:
+  push:
+    branches: [codex/upstream-behavior-qualification]
+    paths:
+      - '.github/workflows/behavior-upstream.yml'
+      - 'scripts/swebench-behavior-*.mjs'
+      - 'scripts/behavior-replay-protocol.mjs'
+      - 'evals/swebench-lite/behavior-replay.json'
+      - 'src/**'
+  workflow_dispatch:
+    inputs:
+      case_ids:
+        description: Fixed original cases; comma-separated subset or all
+        required: true
+        default: all
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    outputs:
+      cases: ${{ steps.cases.outputs.cases }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: cases
+        env:
+          REQUESTED_CASES: ${{ inputs.case_ids || 'all' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const allowed=JSON.parse(readFileSync('evals/swebench-lite/behavior-replay.json')).cases.map(x=>x.id);
+          const selected=process.env.REQUESTED_CASES==='all'?allowed:process.env.REQUESTED_CASES.split(',');
+          if(!selected.length||new Set(selected).size!==selected.length||selected.some(x=>!allowed.includes(x)))throw new Error('Invalid frozen case selection');
+          appendFileSync(process.env.GITHUB_OUTPUT,'cases='+JSON.stringify(selected)+'\n');
+          NODE
+  replay:
+    needs: select
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        instance: ${{ fromJSON(needs.select.outputs.cases) }}
+    env:
+      BENCHMARK_API_KEY: ${{ secrets.FORGE_BENCHMARK_API_KEY }}
+      BENCHMARK_BASE_URL: ${{ secrets.FORGE_BENCHMARK_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install and build exact Forge sources
+        run: |
+          npm ci
+          npm run build
+          mkdir -p .forge-agent/behavior-package
+          npm pack --ignore-scripts --pack-destination .forge-agent/behavior-package
+      - name: Download immutable original evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: swebench-real-evidence-43184349339
+          path: .forge-agent/behavior-source
+          run-id: 43184349339
+          github-token: ${{ github.token }}
+      - name: Download separate unchanged-patch official grading
+        uses: actions/download-artifact@v4
+        with:
+          name: swebench-regrade-evidence-43196437456
+          path: .forge-agent/behavior-grade
+          run-id: 43196437456
+          github-token: ${{ github.token }}
+      - name: Create temporary model configuration
+        run: |
+          node --input-type=module <<'NODE'
+          import {mkdir,writeFile} from 'node:fs/promises';
+          if(!process.env.BENCHMARK_API_KEY||!process.env.BENCHMARK_BASE_URL)throw new Error('Existing benchmark secrets are required');
+          const config={providers:{benchmark:{api:'openai-completions',baseUrl:process.env.BENCHMARK_BASE_URL,apiKey:process.env.BENCHMARK_API_KEY,models:[{id:'deepseek-flash',reasoning:true,contextWindow:1000000,maxTokens:32768}]}}};
+          await mkdir('.forge-agent/behavior-model-config');
+          await writeFile('.forge-agent/behavior-model-config/models.json',JSON.stringify(config),{mode:0o600});
+          await writeFile('.forge-agent/behavior-model-config/auth.json','{}\n',{mode:0o600});
+          NODE
+      - name: Provider preflight before task images
+        run: node scripts/swebench-provider-preflight.mjs --config-home .forge-agent/behavior-model-config --model benchmark/deepseek-flash --timeout-ms 45000
+      - name: Execute fixed original candidate with native behavior gate
+        env:
+          CASE_ID: ${{ matrix.instance }}
+        run: |
+          node scripts/swebench-behavior-replay.mjs \
+            --case "$CASE_ID" \
+            --source-run .forge-agent/behavior-source/swebench-real-run \
+            --graded-run .forge-agent/behavior-grade/swebench-regraded \
+            --package .forge-agent/behavior-package/forge-agent-0.2.0.tgz \
+            --config-home .forge-agent/behavior-model-config \
+            --output .forge-agent/behavior-upstream-result
+      - name: Remove temporary model configuration
+        if: always()
+        run: rm -rf .forge-agent/behavior-model-config
+      - name: Retain every outcome and infrastructure failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavior-upstream-${{ matrix.instance }}-${{ github.run_id }}
+          path: .forge-agent/behavior-upstream-result
+          if-no-files-found: warn
+          retention-days: 14

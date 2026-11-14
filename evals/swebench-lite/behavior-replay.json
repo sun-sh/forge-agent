@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "protocol": "frozen-upstream-native-behavior-v1",
+  "sourceRunId": "43184349339",
+  "sourceArtifact": "swebench-real-evidence-43184349339",
+  "gradedRunId": "43196437456",
+  "gradedArtifact": "swebench-regrade-evidence-43196437456",
+  "sourceReportSha256": "a1792a3e12313809fd574f62f0539f67f71cd82ee4ddea5f99ba7aaf35070bff",
+  "gradedReportSha256": "26f74f0deb4ef4de37ceeff8e88c0aadce1801bed6afab1b6e6a94ccc293dd97",
+  "model": {
+    "provider": "benchmark",
+    "id": "deepseek-flash",
+    "api": "openai-completions",
+    "thinking": "medium"
+  },
+  "limits": {
+    "maxDurationMs": 1200000,
+    "maxModelTurns": 80,
+    "maxToolCalls": 200,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 100000,
+    "maxCostUsd": 20
+  },
+  "repeat": 1,
+  "selection": "First original Planned repetition of each of four preselected issues; no patch generation or candidate selection after new model decisions.",
+  "cases": [
+    {
+      "id": "pallets__flask-4045",
+      "sourceKey": "pallets__flask-4045.planned.r1",
+      "baseCommit": "d8c37f43724cd9fb0870f77877b7c4c7e38a19e0",
+      "effectiveHead": "277886950a064f3525e9eda7c47e22363343af61",
+      "patchSha256": "770690aee527cfcd6752d1ddc9d66866709be021b54e4dcc49f8affa1b859191",
+      "snapshotSha256": "376241542e109e5a7a631f54e345f03513d84d95509c1abea3e6c406c50fec8f",
+      "officialReportSha256": "8e7eeb60c63a4807dfe2bc194d400b1deee6f440ecca5af1eedbc94ffb418493",
+      "imageId": "sha256:459abea2907f6db45f2a50cea2929e3e0867665eab9b9c6feb80fa737b2f0426",
+      "image": "swebench/sweb.eval.x86_64.pallets_1776_flask-4045@sha256:431573fcf066022cec6e296bdb1105b5135283a3ebdf13b9ad1bd1859580a7c0",
+      "originalOfficialResolved": false,
+      "originalCompleted": true
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "sourceKey": "matplotlib__matplotlib-23563.planned.r1",
+      "baseCommit": "149a0398b391cfc4eddb5e659f50b3c66f32ea65",
+      "effectiveHead": "84620c55178a66fa19105e561e5ff461fc07f9e4",
+      "patchSha256": "4ca8be6d8883e43dc0de1b03fb0c04693267689874425d756b645c0077431cd7",
+      "snapshotSha256": "0d849310a98c3b387266367ebac982d35269bf424a6b505edcceb98d125a0896",
+      "officialReportSha256": "a816053557e1f5e3a03e89d67d8f1076dfe32c09a6bd1beab584d33719c03e4b",
+      "imageId": "sha256:93f13bec950adf1aa64132b4653af0503c6acdb49e8c3a771ae8efdf0813dac6",
+      "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23563@sha256:d868994deae1f816cb23b878db1e4c4cf371ef5f8d77d8bd2129c133ed0a4cbf",
+      "originalOfficialResolved": false,
+      "originalCompleted": true
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "sourceKey": "astropy__astropy-6938.planned.r1",
+      "baseCommit": "c76af9ed6bb89bfba45b9f5bc1e635188278e2fa",
+      "effectiveHead": "8784d2be8f7d89ee795e36e4fa751ea6a8ee3e0f",
+      "patchSha256": "f580d0ca660630f9a048e6dcf975f1d6d370a85fb2a9ea2defc0e7e8dc16e2e9",
+      "snapshotSha256": "7d84a12aca57b095145ee22d3b7d8ee25c95b159f27364248135096155d8925e",
+      "officialReportSha256": "1424c0b3621434e905557f55c3c9318987743e4ecade58760625f5b22d30f95c",
+      "imageId": "sha256:23df7aaa729e3a457bd0b6a83665178777019580c31c0b8a18069709167fb730",
+      "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938@sha256:e71ac0096dd19e742e2e70d088e970ee10471347847409c89cd40dbf32f4715e",
+      "originalOfficialResolved": true,
+      "originalCompleted": false
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "sourceKey": "sympy__sympy-18189.planned.r1",
+      "baseCommit": "1923822ddf8265199dbd9ef9ce09641d3fd042b9",
+      "effectiveHead": "32537e483e2c24352d01019e86ed5199a9350ae4",
+      "patchSha256": "10189ce6e8dfae864b295a89204755ba2bf71fa42ac4224230d45ebc012708a8",
+      "snapshotSha256": "e9087998fa38a2b3c1ad9667c99a2ebece005ebe39dceb642f5763e3a3d6513e",
+      "officialReportSha256": "762355f91a368a129fbfd8250150856ebb28c7e57e56982463f49cd509c2a15b",
+      "imageId": "sha256:576f6177b9b019c7eaaad1b546d6805007436b1a0cff5707d52236a741f37f47",
+      "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-18189@sha256:5d4dcec6309087223683586740b4fd96e27c0ef1678bccc872a0dd4eba1743b9",
+      "originalOfficialResolved": true,
+      "originalCompleted": false
+    }
+  ]
+}
