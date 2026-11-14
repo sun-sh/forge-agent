@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "codeRevision": "5d3b7949665b5ebda2938b912b84e5bf85c96dcf",
+  "scope": "Engineering validation only; model outcomes are in separate immutable aggregates.",
+  "sourceSha256": {
+    "src/web/subagents.ts": "ba2b8727496bd65389b16db9fa30a509e073e5eb39a9bbb570eb868972939ebc",
+    "src/task/behavior.ts": "7bdb919c7ea6403ed94b466ecf1222cd1cad112ed2acda652578d9a872cde924",
+    "tests/web-subagents.test.ts": "556dba7945fce48062a3b1ca95d28d7868fcf93cf60f34f63899a35ebb2964e0",
+    "scripts/swebench-behavior-agent.mjs": "5b4d39f03b9846328659dd0de47850259f804d1296446eb8cf0f088cdec74692",
+    "scripts/swebench-behavior-replay.mjs": "83b285e9f6c08cc9d7c9c749239be327e57d9c24e51d3b5dcbb0cec936fa072e",
+    "scripts/behavior-replay-protocol.mjs": "74159354a3dd253fe18c5419a3c419e3d15e551a47fecc3a06bcd0da10bc48fc",
+    ".github/workflows/behavior-upstream.yml": "35971a5616fa29c601407495a288e221607cb05fb29aa8f3b302955b6d58f156",
+    "evals/swebench-lite/behavior-replay.json": "8193bc1e8265dbe7a7037a391e041a3f9e9ceb7ab967cc5118882054d6c6bf19"
+  },
+  "ci": {
+    "runId": "43571025706",
+    "status": "passed",
+    "jobs": [
+      {
+        "name": "check (windows-latest, 22)",
+        "os": "windows-latest",
+        "node": 22,
+        "testFiles": 55,
+        "tests": 787,
+        "packageCheck": "passed"
+      },
+      {
+        "name": "check (windows-latest, 24)",
+        "os": "windows-latest",
+        "node": 24,
+        "testFiles": 55,
+        "tests": 787,
+        "packageCheck": "passed"
+      },
+      {
+        "name": "check (ubuntu-latest, 22)",
+        "os": "ubuntu-latest",
+        "node": 22,
+        "testFiles": 55,
+        "tests": 784,
+        "packageCheck": "passed"
+      },
+      {
+        "name": "check (ubuntu-latest, 24)",
+        "os": "ubuntu-latest",
+        "node": 24,
+        "testFiles": 55,
+        "tests": 784,
+        "packageCheck": "passed"
+      }
+    ]
+  },
+  "local": {
+    "beforeFinalFormatRetryAdjustment": {
+      "testFiles": 4,
+      "tests": 167,
+      "status": "passed"
+    },
+    "finalAdjustment": {
+      "nativePiReadWindowTests": 2,
+      "status": "passed",
+      "typecheck": "passed",
+      "build": "passed"
+    },
+    "fullCheck": {
+      "status": "interrupted",
+      "exitCode": 1,
+      "elapsedMinutes": 20.4,
+      "stoppedAt": "2026-11-14T07:46:21.1733582Z",
+      "reason": "Stopped the verified task-owned local Vitest process tree after a 20-minute wall-clock bound. The suite emitted no final test counts. No full-suite pass is claimed.",
+      "logSha256": "7108ee961ae5c4cdc29e82799fba64d8583ba6e02103bd61f1e75756c69230b0",
+      "testCounts": null,
+      "typecheck": "passed",
+      "build": "passed",
+      "cliVersionHelpAndBin": "passed"
+    }
+  },
+  "qualification": {
+    "initialRunId": "43569394614",
+    "revisedRunId": "43571025712",
+    "frozenCandidates": 4,
+    "unchangedPatchAndImageIdentities": true,
+    "unchangedHardBudgets": true,
+    "nativeCommandHashBindings": "passed",
+    "resolutionClaimed": false,
+    "defectDetectionClaimed": false
+  },
+  "limitations": [
+    "The remote four-matrix CI and local bounded full check are separate observations; remote passes do not relabel the local interrupted suite.",
+    "No new browser acceptance or model-quality claim is established by these engineering checks.",
+    "A finite read window does not guarantee output-token headroom or valid check expectations."
+  ]
+}
