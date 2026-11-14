@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "kind": "engineering-qualification-not-model-quality",
+  "status": "grouped-revalidation-with-retained-full-run-timeout",
+  "sourceFiles": [
+    {
+      "path": "src/task/behavior.ts",
+      "sha256": "b994c22c14d66e5843e13305ef2d821c7512d2eb756f3bd6cf60292a8d9a96ff"
+    },
+    {
+      "path": "src/task/behavior-runtime.ts",
+      "sha256": "799adab9ed7acbd11e424a7b0e6554dd727e10bdb231779cde850c21ae31b909"
+    },
+    {
+      "path": "src/task/controller.ts",
+      "sha256": "5dfa61bd005a79d9ccfed528dd5c8d50d9f18b51a582b01e4025329d5a346a29"
+    },
+    {
+      "path": "src/task/review.ts",
+      "sha256": "e1ffb59c5ac47300722e7c87bd739aa88816f523674f438fa4f591a2a0260fda"
+    },
+    {
+      "path": "src/task/review-handoff.ts",
+      "sha256": "7a5b1d21b301446b93a492e70881006ee76ceb046c5733bced633291b62cc855"
+    },
+    {
+      "path": "src/task/result.ts",
+      "sha256": "355bb5d70c976e7ab652044f47fa2172626559ba508d1cadebac0f3a541f6542"
+    },
+    {
+      "path": "src/task/review-evidence.ts",
+      "sha256": "ef18b1b0116f77a174c329178dc9380415c5fb380a2184d2915e1fdb1f22be47"
+    },
+    {
+      "path": "src/web/subagents.ts",
+      "sha256": "9b3b406fcdb35031e58418ad19cbb69c6ebbf284b30820e575e35d1a84b35a2a"
+    },
+    {
+      "path": "src/web/server.ts",
+      "sha256": "071d5eb322339526dc47dd3ba53528156ea310d7c5b94298f9c7d750cd9276e7"
+    },
+    {
+      "path": "src/web/ui/render.js",
+      "sha256": "d31f5bf0a2150ad3b8f54ff4f8d171bbc8333b091b0402e6f77af9567de802cf"
+    },
+    {
+      "path": "src/web/ui/app.js",
+      "sha256": "2c7e67acfc432d6a295add96ea33bbaa221f29a18496087f8dcb770caa07080e"
+    },
+    {
+      "path": "src/web/ui/style.css",
+      "sha256": "8e9ae67cac5857162ff19ca3f4aad3b186ce6259fb1fb7b29ea2e8156de36963"
+    }
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "build": "passed",
+    "activeTests": {
+      "fullRun": {
+        "passed": 775,
+        "failed": 1,
+        "total": 776,
+        "filesPassed": 53,
+        "filesFailed": 1,
+        "exitCode": 1,
+        "reason": "Planned reasoning-only output recovery reached the 45-second wait boundary in review phase",
+        "logSha256": "d7041592670b667d8e1fe81265e264432b0c788b7b82d914b6c0eecb47cd8f03"
+      },
+      "unchangedFileRerun": {
+        "file": "tests/web-output-guard.test.ts",
+        "passed": 5,
+        "failed": 0,
+        "plannedCaseDurationMs": 15876,
+        "logSha256": "5c7c0998ba396b1707219255c59899820b9bc2bb9085563be54c2423e979f2c4"
+      },
+      "notClaimed": "A single all-green full run or remote CI"
+    },
+    "cliAndBins": "passed",
+    "browser": {
+      "passed": true,
+      "kind": "isolated-Edge-with-scripted-Pi-provider",
+      "checkCount": 58,
+      "screenshotCount": 64,
+      "resultSha256": "4d1193ee9be8cda712f544c4d48d4a8852cdedc57a2cf0b5f8548b5584e6bca6"
+    },
+    "package": "passed locally; final package check recorded separately",
+    "smoke": {
+      "passed": 1,
+      "total": 1,
+      "kind": "scripted",
+      "reportSha256": "4c63842e42de9e65557ecef8a8e96d7567fcff6823e8248cf85063aa118e9018"
+    }
+  },
+  "retainedFailures": [
+    "Earlier full run: 764 passed, 10 failed while implementation/test fixtures were evolving. Completion-scope and integration fixture issues were fixed and rerun.",
+    "Affected integration recheck: 78 passed, 1 existing MCP hot-reload timeout; its isolated recheck passed without changing timeout or MCP product code.",
+    "Browser retries retained MCP timeout, old expected status label, old stage count and developer-role fixture parsing failures before the passing isolated Edge run.",
+    "Final full run remains failed at one wait timeout; the unchanged five-case file subsequently passed. No product budget or test wait bound was enlarged to erase it."
+  ],
+  "modelEvidence": "behavior-native-gate-2026-11-14.json"
+}

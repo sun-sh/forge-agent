@@ -4,9 +4,19 @@
 
 [Execution versus acceptance](task-results.md) now reports implemented-but-unverified results without a behavioral-attestation contract. Official resolution and finished-but-unacceptable metrics retain their original definitions; relabeling the six Direct failures does not improve 9/15 resolution or erase six unsuccessful finished outcomes. Explicit resolution claims are counted separately, with a null error rate when there are no assessed claims. Historical reports and missing claim fields remain untouched. This reporting change adds no model calls and has no new coding-quality score.
 
+## Native behavioral gate diagnostic — 2026-11-14
+
+The [three retained real-model attempts](evaluations/behavior-native-gate-2026-11-14.md) exercise a fixed correct/defective pair through actual independent check design, native parent Pi commands and final review. Attempts 1/2 block the correct candidate due to check-plan format errors. After specific schema feedback, attempt 3 uses one frozen plan: three checks pass for correct and fail for defective, with external assertions agreeing after saved decisions. This is one explicitly specified miniature task, not repair of the 12 upstream reviewer misses, a new SWE-bench score or a reliability estimate. Fingerprints, unknown prices and earlier failures remain separate.
+
+## Retained upstream review replay — 2026-11-14
+
+The [fixed upstream-candidate replay](evaluations/review-upstream-replay-2026-11-14.md) reviews four original Planned patches three times each, without regenerating implementations or revealing official labels. The current reviewer accepts all six reviews of the two officially failing Flask/Matplotlib patches, accepts five reviews of the two officially passing patches, and times out once on Astropy after six turns. There are no concrete defect blocks and no demonstrated qualification of the old misses. Exact source trees/patches, historical native receipts, all outcomes, a distinct model/service identity and six zero-review preparation failures are retained. This is not a new official resolution score or an end-to-end completion-gate run; it does not justify default independent review or scaling another coding ablation before addressing the mechanism.
+
 ## Reviewer outcome and counterexample qualification — 2026-11-13
 
 [Structured review outcomes](review-outcomes.md) distinguish budget exhaustion, insufficient evidence and concrete defects. The [paired real-model diagnostic](evaluations/review-counterexamples-2026-11-13.md) retains 24 reviews over two fixed synthetic mechanisms. Both prompts block 6/6 defective candidates and accept 6/6 correct candidates, with no demonstrated decision gain and at most four turns. It retains the pre-model oracle failure and does not qualify the historical upstream Flask/Matplotlib misses; code/suite fingerprints and all repetitions are in the allowlisted aggregate.
+
+The [single no-tests candidate probe](evaluations/review-no-tests-2026-11-13.md) injects a source change without executing the explicitly requested test suite. With a real syntax-only host check and real independent reviewer, the actual controller blocks it; tests run only after the saved decision pass 3/3. The report retains an inaccurate `code_defects/fix_code` recovery label for the missing execution step, the pre-model startup failure and exact fingerprints. This observation neither proves general safety nor qualifies upstream misses; no product policy changed.
 
 ## SWE-bench Lite adapter
 

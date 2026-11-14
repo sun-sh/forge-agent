@@ -1,3 +1,4 @@
+import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -22,7 +23,8 @@ async function fixture() {
   const upstream = createServer(async (request, response) => {
     let raw = ''; for await (const part of request) raw += part;
     const input = JSON.parse(raw); count++;
-    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+    if (respondBehaviorFixture(input, response)) return;
+    const phase = fixturePhase(input);
     const child = JSON.stringify(input.messages).includes("delegated worker");
     let call: { name: string; arguments: unknown } | undefined;
     if (child && input.messages.at(-1)?.role !== 'tool') call = { name: 'write', arguments: { path: 'sample.txt', content: 'worker proposal\n' } };

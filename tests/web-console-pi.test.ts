@@ -1,3 +1,4 @@
+import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -344,7 +345,8 @@ describe("pforge Pi web console", () => {
       for await (const chunk of request) raw += chunk;
       const payload = JSON.parse(raw || "{}") as { model?: string; messages?: Array<{ role?: string }> };
       const transcript = JSON.stringify(payload.messages || []);
-      const phase = [...transcript.matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1] || "implement";
+      if (respondBehaviorFixture(payload, response)) return;
+      const phase = fixturePhase(payload) || "implement";
       const last = payload.messages?.at(-1);
       let delta: Record<string, unknown>;
       let finish = "stop";

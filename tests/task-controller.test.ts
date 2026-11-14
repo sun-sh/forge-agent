@@ -41,7 +41,7 @@ describe('task workflow controller', () => {
   it('sends prior blocking findings to a fresh reviewer on repair without dropping original acceptance', async () => {
     const f = fixture(); let reviews = 0; const execute = f.adapter.execute;
     f.adapter.execute = async (...args) => args[0] === 'review' && reviews++ === 0
-      ? JSON.stringify({ verdict: 'changes_requested', summary: 'Missing boundary', issues: ['src/main.ts: negative retry input must use the default'], acceptance: [{ id: 'A1', status: 'unmet', evidence: 'negative input' }] }) : execute(...args);
+      ? JSON.stringify({ verdict: 'changes_requested', summary: 'Missing boundary', issues: ['src/main.ts: negative retry input must use the default'], issueKinds: ['code_defect'], acceptance: [{ id: 'A1', status: 'unmet', evidence: 'negative input' }] }) : execute(...args);
     const task = await f.controller.run('Fix the task', 1, f.adapter);
     expect(task.status).toBe('completed');
     expect(f.messages.at(-1)).toContain('REPAIR RECHECK');
@@ -237,7 +237,7 @@ describe('task workflow controller', () => {
   it('repairs concrete review defects, then verifies and reviews again using the same repair allowance', async () => {
     const f = fixture(); let reviews = 0, checks = 0;
     const execute = f.adapter.execute, verify = f.adapter.verify;
-    f.adapter.execute = async (...args) => { const original = await execute(...args); return args[0] === 'review' && ++reviews === 1 ? '{"verdict":"changes_requested","summary":"Missing required case","issues":["Handle empty input"]}' : original; };
+    f.adapter.execute = async (...args) => { const original = await execute(...args); return args[0] === 'review' && ++reviews === 1 ? '{"verdict":"changes_requested","summary":"Missing required case","issues":["Handle empty input"],"issueKinds":["code_defect"]}' : original; };
     f.adapter.verify = async (signal) => { checks++; return verify(signal); };
     const result = await f.controller.run('Fix the task', 1, f.adapter);
     expect(result).toMatchObject({ status: 'completed', repairs: 1, review: { verdict: 'ready', freshness: 'current' } });
@@ -422,7 +422,7 @@ describe('task workflow controller', () => {
   it('persists blocking findings through an interrupted repair and never clears them without a new review', async () => {
     const f = fixture(), execute = f.adapter.execute; let implementations = 0;
     f.adapter.execute = async (...args) => {
-      if (args[0] === 'review') return JSON.stringify({ verdict: 'changes_requested', summary: 'Defect', issues: ['src/main.ts: missing boundary case'], acceptance: handoff.acceptance });
+      if (args[0] === 'review') return JSON.stringify({ verdict: 'changes_requested', summary: 'Defect', issues: ['src/main.ts: missing boundary case'], issueKinds: ['code_defect'], acceptance: handoff.acceptance });
       if (args[0] === 'implement' && implementations++ > 0) { f.controller.cancel('User stopped repair'); throw new Error('interrupted'); }
       return execute(...args);
     };

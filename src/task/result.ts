@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { TaskState } from './controller.js';
 import { acceptanceSatisfied } from './plan.js';
 import { isVerified, isVerificationUnconfigured } from '../verification/pi-extension.js';
+import { behaviorCurrent, behaviorHash } from './behavior.js';
 import { reviewStop, reviewStopSchema } from './review.js';
 
 
@@ -13,6 +14,7 @@ export const taskResultSchema = z.object({
   resolutionClaimed: z.literal(false),
   checks: z.enum(['passed', 'not_configured', 'not_run', 'running', 'failed', 'unconfirmed']),
   modelReview: z.enum(['passed', 'not_applicable', 'not_run', 'unconfirmed', 'changes_requested', 'insufficient_evidence', 'budget_exhausted']),
+  behaviorChecks: z.enum(['not_run', 'running', 'passed', 'failed', 'unconfirmed']).optional(),
   reviewStop: reviewStopSchema.optional()
 }).strict();
 export type TaskResult = z.infer<typeof taskResultSchema>;
@@ -30,8 +32,9 @@ export function taskResult(task: TaskState) {
     : verification?.status === 'running' ? 'running' as const
     : verification?.status === 'passed' || verification?.evidence ? 'unconfirmed' as const : 'not_run' as const;
   const review = task.review;
-  const stop = task.reviewStop ?? (task.reviewFollowup || review ? reviewStop(task.reviewFollowup ?? review!, task.plan?.acceptance.map((item) => item.id)) : undefined);
-  const reviewed = review?.verdict === 'ready' && !review.issues.length && !task.reviewFollowup && !task.reviewStop
+  const behaviorPassed = (!task.behavior || task.behavior.requestSha256 === behaviorHash(task.prompt)) && behaviorCurrent(task.behavior, verification?.evidence?.workspace.digest);
+  const stop = task.reviewStop ?? (task.reviewFollowup || review ? reviewStop(task.reviewFollowup ?? review!, task.plan?.acceptance.map((item) => item.id)) : undefined) ?? (task.behavior && !behaviorPassed && task.status !== 'running' ? { reason: 'insufficient_evidence' as const, action: 'provide_evidence' as const, issueCount: 0, unconfirmedIds: [] } : undefined);
+  const reviewed = behaviorPassed && review?.verdict === 'ready' && !review.issues.length && !task.reviewFollowup && !task.reviewStop
     && review.freshness === 'current' && checks === 'passed' && Boolean(verification?.evidenceId)
     && review.evidenceId === verification?.evidenceId && acceptanceSatisfied(task.plan, review.acceptance);
   const modelReview = task.reviewRequired === false ? 'not_applicable' as const : reviewed ? 'passed' as const
@@ -42,7 +45,7 @@ export function taskResult(task: TaskState) {
   const running = task.status === 'running' || task.status === 'completed' && task.finalization === 'pending';
   const blocked = !running && (task.status !== 'completed' || Boolean(task.error) || task.finalization === 'failed'
     || verification?.protection && verification.protection.status !== 'unchanged'
-    || checks === 'failed' || checks === 'unconfirmed' || Boolean(stop) || modelReview === 'changes_requested'
+    || !behaviorPassed || checks === 'failed' || checks === 'unconfirmed' || Boolean(stop) || modelReview === 'changes_requested'
     || task.workflow === 'planned' && task.kind === 'change' && checks !== 'not_configured' && (checks !== 'passed' || task.reviewRequired !== false && !reviewed));
   return taskResultSchema.parse({
     version: 1,
@@ -53,6 +56,7 @@ export function taskResult(task: TaskState) {
     resolutionClaimed: false as const,
     checks,
     modelReview,
+    ...(task.behavior ? { behaviorChecks: task.behavior.status === 'pending' ? 'not_run' as const : task.behavior.status === 'passed' && !behaviorPassed ? 'unconfirmed' as const : task.behavior.status } : {}),
     ...(stop && !reviewed ? { reviewStop: stop } : {})
   });
 }

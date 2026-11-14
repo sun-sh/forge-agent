@@ -76,7 +76,7 @@ try {
     else {
       mock = createServer(async (req, res) => {
         for await (const _ of req) { /* fixed local fixture, no model judgment */ }
-        const review = { verdict: mockTask.candidate === 'defective' ? 'changes_requested' : 'ready', summary: 'Scripted fixture', issues: mockTask.candidate === 'defective' ? ['Fixture defect'] : [],
+        const review = { verdict: mockTask.candidate === 'defective' ? 'changes_requested' : 'ready', summary: 'Scripted fixture', issueKinds: mockTask.candidate === 'defective' ? ['code_defect'] : [], issues: mockTask.candidate === 'defective' ? ['Fixture defect'] : [],
           acceptance: mockTask.acceptance.map((item) => ({ id: item.id, status: mockTask.candidate === 'defective' ? 'unmet' : 'met', evidence: 'Scripted fixture evidence' })) };
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.end('data: ' + JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', content: JSON.stringify(review) }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');

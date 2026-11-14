@@ -1,3 +1,4 @@
+import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,7 +22,8 @@ async function fixture(alwaysTruncated = false, empty = false) {
   const upstream = createServer(async (request, response) => {
     let raw = ''; for await (const part of request) raw += part;
     const input = JSON.parse(raw); calls++;
-    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+    if (respondBehaviorFixture(input, response)) return;
+    const phase = fixturePhase(input);
     let delta: unknown, finish = 'stop';
     if (phase === 'inspect') delta = { content: JSON.stringify(handoff.brief) };
     else if (phase === 'plan') delta = { content: JSON.stringify(handoff.plan) };
@@ -83,6 +85,6 @@ describe('incomplete model output delivery boundary', () => {
     expect(done.task.phases.some((phase: any) => phase.phase === 'verify')).toBe(false);
     expect(done.verification.report).toBeUndefined();
     await expect(readFile(join(f.project, 'index.html'))).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(f.calls()).toBe(5); // inspect + plan + original output + two recoveries
+    expect(f.calls()).toBe(6); // inspect + plan + independent check design + original output + two recoveries
   }, 60000);
 });

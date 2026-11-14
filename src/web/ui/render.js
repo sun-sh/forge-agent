@@ -45,7 +45,9 @@ export function reviewStopView(task) {
   let stop = task?.result?.reviewStop ?? task?.reviewStop;
   if (!stop && task?.review) {
     const review = task.review, unconfirmedIds = (review.acceptance || []).filter((item) => item.status === 'unconfirmed').map((item) => item.id);
-    if (review.issues?.length || review.acceptance?.some((item) => item.status === 'unmet')) stop = { reason: 'code_defects', issueCount: review.issues?.length || review.acceptance.filter((item) => item.status === 'unmet').length, unconfirmedIds };
+    const nonCode = review.issues?.length && review.issueKinds?.length === review.issues.length && review.issueKinds.every((kind) => kind !== 'code_defect');
+    if (nonCode) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds: (review.acceptance || []).filter((item) => item.status !== 'met').map((item) => item.id) };
+    else if (review.issues?.length || review.acceptance?.some((item) => item.status === 'unmet')) stop = { reason: 'code_defects', issueCount: review.issues?.length || review.acceptance.filter((item) => item.status === 'unmet').length, unconfirmedIds };
     else if (review.verdict === 'insufficient_evidence' || unconfirmedIds.length) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds };
   }
   if (!stop) return null;
@@ -56,7 +58,7 @@ export function reviewStopView(task) {
 }
 export function sessionOutcome(data) {
   if (data.task) {
-    const labels = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '执行结束' };
+    const labels = { inspect: '调研', plan: '规划', implement: '实现', check: '行为检查', verify: '验证', review: '审阅', complete: '执行结束' };
     if (!data.running && (data.task.finalization === 'failed' || data.task.status === 'completed' && (data.error || data.task.error || data.outcome === 'failed'))) return { label: '任务失败 · 收尾或执行异常', kind: 'failed' };
     if (data.running && data.task.finalization === 'pending') return { label: '正在完成收尾', kind: 'running' };
     const readOnlyMode = ['ask', 'plan'].includes(data.runMode ?? data.task.mode);
@@ -86,8 +88,9 @@ export function sessionOutcome(data) {
       const productResult = data.task.result;
       if (productResult?.status === 'blocked') return { label: '需要检查 · 完成证据不完整', kind: 'failed' };
       if (productResult && ['implemented_unverified', 'finished_unverified'].includes(productResult.status)) {
+        const behaviorLabel = productResult.behaviorChecks ? ' · 行为检查' + ({ passed: '命令通过', failed: '命令失败', unconfirmed: '未确认', not_run: '未执行', running: '进行中' }[productResult.behaviorChecks] || '未确认') : '';
         const resultReview = productResult.modelReview === 'not_applicable' ? ' · 未启用审阅' : productResult.modelReview === 'passed' ? ' · 独立模型审阅通过' : productResult.modelReview === 'changes_requested' ? ' · 审阅发现待处理问题' : ' · 未进行模型审阅';
-        return { label: implementationResultLabel(data.task) + ' · ' + verificationLabel(verification) + resultReview, kind: 'unverified' };
+        return { label: implementationResultLabel(data.task) + ' · ' + verificationLabel(verification) + behaviorLabel + resultReview, kind: 'unverified' };
       }
       if (data.task.reviewFollowup || data.task.review && (data.task.review.verdict !== 'ready' || data.task.review.issues?.length || !acceptanceMet)) return { label: '审阅发现待处理问题 · 需要检查', kind: 'failed' };
       if (unconfigured) return { label: implementationResultLabel(data.task) + ' · 未配置自动验证', kind: 'unverified' };

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { respondBehaviorFixture, fixturePhase } from './test-behavior-protocol.mjs';
 // Real Chromium smoke check with an isolated profile, Pi home and local mock model.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -50,7 +51,8 @@ const modelServer = createServer(async (request, response) => {
   if (!request.url?.endsWith('/chat/completions')) { response.writeHead(404).end(); return; }
   modelRequests++;
   const input = JSON.parse(raw);
-  const phase = [...JSON.stringify(input.messages).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+  if (respondBehaviorFixture(input, response)) return;
+  const phase = fixturePhase(input);
   const content = phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Browser fixture review', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input.messages).includes('End inspection with exactly one JSON object') ? JSON.stringify(handoff.brief) : reply;
   observedEfforts.push(input.reasoning_effort);
   response.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -128,7 +130,7 @@ try {
     pending.set(id, { resolve: resolveCall, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression) => { const result = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails)); return result.result.value; };
-  const waitFor = async (expression) => { const deadline = Date.now() + 20000; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression); };
+  const waitFor = async (expression) => { const deadline = Date.now() + 20000; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression + (expression.includes('mcp-feedback') ? ' · feedback=' + await evaluate("document.getElementById('mcp-feedback')?.textContent || ''") : '')); };
   const waitHistoryIdle = () => waitFor("!document.getElementById('history-filter').disabled && document.getElementById('session-menu').classList.contains('hidden')");
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const pointerClick = async (selector) => {
@@ -535,8 +537,8 @@ try {
   await click('#mode-picker [data-choose-mode="agent:planned"]');
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划') && !document.getElementById('followup-send').disabled`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '已实现 · 需求未验收 · 配置检查通过 · 独立模型审阅通过'`);
-  assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 6);
+  await waitFor(`document.getElementById('run-status-label').textContent === '已实现 · 需求未验收 · 配置检查通过 · 行为检查命令通过 · 独立模型审阅通过'`);
+  assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 7);
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
   assert.equal(await evaluate(`document.getElementById('task-panel').open`), false);
@@ -545,8 +547,9 @@ try {
   await click('#task-panel > summary');
   assert.equal(await evaluate(`document.getElementById('task-panel').open`), true);
   await screenshot('planned-task-expanded');
+  assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('行为检查'));
   await click('#open-execution');
-  await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 6`);
+  await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 7`);
   assert.equal(await evaluate(`document.querySelector('[data-review-view="execution"]').getAttribute('aria-selected')`), 'true');
   assert.ok((await evaluate(`document.getElementById('task-plan').textContent`)).includes('A1'));
   assert.ok((await evaluate(`document.getElementById('execution-timeline').textContent`)).includes('独立交付审阅'));

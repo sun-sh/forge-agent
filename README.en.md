@@ -53,6 +53,9 @@ Public web search and URL text reading work out of the box without a search API 
 
 An evidence-only review gap can trigger one focused follow-up within the shared repair allowance, followed by fresh verification and review. Remaining gaps retain explicit reasons, and continuation/restart preserve consumption.
 
+Planned changes with configured `verify` commands now freeze 2–3 reproduction/boundary checks from the original request in a fresh read-only Pi session before implementation. The parent Pi session executes exact commands under Agent mode, project trust and the shared budget; the host records native exit codes, outputs and workspace fingerprints. Missing/failed/stale check evidence cannot be overridden by static `ready`. Continuation reuses the plan and obtains new receipts. Expectations remain model hypotheses, and passing commands do not certify resolution. See [behavioral checks](docs/behavior-checks.md). Adaptive/read-only/unconfigured-check paths do not add this workflow.
+
+
 The new [review-budget/evidence regression](docs/evaluations/review-budget-evidence-2026-11-13.md) retains both attempts: 2/2 resolved with 1/2 delivered, then 2/2 resolved and delivered after correcting an overly strict receipt rule. The subsequent automatic evidence follow-up has engineering regressions only and does not inherit those model scores.
 
 ## Configure verification and protected paths

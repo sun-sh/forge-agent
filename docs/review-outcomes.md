@@ -28,10 +28,15 @@ The [old ablation](evaluations/swebench-ablation-2026-11-12.md) retains Flask/Ma
 
 Two dependency-free paired candidates in `scripts/review-cases.mjs` cover endpoint validation lost while adding a new name check, and blanket 2D rejection breaking Nx1 support despite a misleading model ledger. Both defective candidates pass their visible checks and fail external assertions; correct variants pass both. These are **synthetic mechanism analogues**, not Flask/Matplotlib upstream patches or official SWE-bench results. `npm run eval:review -- --case endpoint-override-regression,column-vector-regression --validate-only` validates oracles without a model. Real mode measures reviewer decisions separately, retaining misses, false positives, abstentions, budgets and fingerprints. Scripted oracles/fixtures cannot establish reviewer quality.
 
-No claim is made that the historical Flask/Matplotlib failures are repaired, or that relaxing false blockers makes a trustworthy gate. Frozen upstream-patch review and repeated end-to-end grading remain separate necessary measurements. Adaptive remains the default workflow.
+No claim is made that the historical Flask/Matplotlib failures are repaired, or that relaxing false blockers makes a trustworthy gate. The [fixed upstream replay](evaluations/review-upstream-replay-2026-11-14.md) accepts all six reviews of the officially failing candidates; this failure is retained. The later [native behavioral check diagnostic](evaluations/behavior-native-gate-2026-11-14.md) qualifies one explicitly specified miniature pair, with two earlier format failures, not upstream quality. Repeated official end-to-end grading remains separate. Adaptive remains the default workflow.
 
 ## 中文
 
 旧实现确有预算异常类型、错误文案和 unconfirmed 验收项，但没有对用户统一表达三种原因；先前把它说成已完成三分类是不准确的。现在原因、恢复动作和验收 ID 同时进入持久化、API 和界面，证据不足有独立 verdict。标准预算恢复 24 回合/$4，40 回合/$6 由用户显式开启。原两轮 n=1 只验证路径，不证明扩大预算有效；漏检案例仍保留为未验证改善，新反例与实际上游成绩分别报告。
 
 The [24-review real-model diagnostic](evaluations/review-counterexamples-2026-11-13.md) detects both synthetic mechanisms under both prompts with no observed decision gain. It does not demonstrate repair of upstream misses or a need for extended budgets.
+
+
+## Independent behavioral execution
+
+[Behavioral checks](behavior-checks.md) adds a persisted original-request check plan, native Pi execution receipts and current workspace binding before final review for configured Planned changes. A ready model cannot bypass missing/failed receipts. New reviews supply a parallel `issueKinds` enum per finding; execution gaps/environment/ambiguous requirements normalize to evidence recovery, not code-defect counts. The original failing no-test classification report remains immutable; the new behavior requires new qualification.

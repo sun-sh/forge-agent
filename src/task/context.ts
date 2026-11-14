@@ -34,6 +34,7 @@ export function taskCheckpoint(task?: TaskState): string {
   // Add background only after complete constraints and acceptance fit. Never cut serialized JSON.
   const optional = {
     ...(previous ? { lastPhase: previous.phase, handoff: excerpt(previous.summary!, 800) } : {}),
+    ...(task.behavior ? { behavior: { status: task.behavior.status, checkIds: task.behavior.plan?.checks.map((check) => check.id), requestSha256: task.behavior.requestSha256, reason: task.behavior.reason } } : {}),
     issues: (task.review?.issues ?? []).slice(0, 5).map((issue) => excerpt(issue, 160)),
     ...(task.error ? { unresolved: excerpt(task.error, 400) } : {})
   };

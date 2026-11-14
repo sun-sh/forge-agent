@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { respondBehaviorFixture, fixturePhase } from './test-behavior-protocol.mjs';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
@@ -41,7 +42,7 @@ const execute = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'forge-evaluation-'));
 const output = resolve(option('--output', '.forge-agent/evals/' + new Date().toISOString().replaceAll(':', '-')));
 await mkdir(output, { recursive: true });
-const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', './evaluation-protocol.mjs', '../tests/fixtures/task-handoff.json', '../dist/config.js', '../dist/task/controller.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/review-handoff.js', '../dist/task/output-guard.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js', '../dist/web/conversations.js', '../dist/web/modes.js', '../dist/web/network.js', '../dist/task/shell-timeout.js', '../dist/identity.js', '../dist/project-identity.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
+const harnessFingerprint = await saveHarnessEvidence(output, [import.meta.url, ...['./eval-tasks.mjs', './evaluation-evidence.mjs', './evaluation-metrics.mjs', './evaluation-protocol.mjs', './test-behavior-protocol.mjs', '../tests/fixtures/task-handoff.json', '../dist/config.js', '../dist/task/controller.js', '../dist/task/behavior.js', '../dist/task/behavior-runtime.js', '../dist/task/git.js', '../dist/task/review.js', '../dist/task/review-handoff.js', '../dist/task/output-guard.js', '../dist/task/plan.js', '../dist/task/timeline.js', '../dist/task/lifecycle.js', '../dist/task/registry.js', '../dist/task/budget.js', '../dist/task/intent.js', '../dist/task/progress.js', '../dist/task/context.js', '../dist/task/queue.js', '../dist/verification/pi-extension.js', '../dist/verification/evidence.js', '../dist/verification/protected.js', '../dist/tools/command.js', '../dist/web/server.js', '../dist/web/subagents.js', '../dist/web/memory.js', '../dist/web/conversations.js', '../dist/web/modes.js', '../dist/web/network.js', '../dist/task/shell-timeout.js', '../dist/identity.js', '../dist/project-identity.js'].map((path) => new URL(path, import.meta.url))].map((source) => new URL(source)));
 const evalHome = resolve(option('--home', join(root, 'home')));
 await mkdir(evalHome, { recursive: true });
 await saveAgentSettings(evalHome, { budget: limits });
@@ -100,13 +101,14 @@ if (!real) {
   mock = createServer(async (request, response) => {
     let raw = ''; for await (const chunk of request) raw += chunk;
     const input = JSON.parse(raw), text = JSON.stringify(input.messages); requests++;
-    const matches = [...text.matchAll(/PFORGE TASK PHASE: (\w+)/g)], phase = matches.at(-1)?.[1] ?? 'implement';
+    if (respondBehaviorFixture(input, response)) return;
+    const phase = fixturePhase(input) ?? 'implement';
     const write = phase === 'implement' && input.messages.at(-1)?.role !== 'tool';
     const solutionFiles = activeTask.solutionFiles ?? { [activeTask.entry ?? 'solution.mjs']: activeTask.solution };
     const calls = Object.entries(solutionFiles).map(([path, content], index) => ({ index, id: 'eval-' + requests + '-' + index, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path, content }) } }));
     const handoff = JSON.parse(await readFile(new URL('../tests/fixtures/task-handoff.json', import.meta.url), 'utf8'));
     const review = phase === 'review' && reviewChallenge && activeWorkflow === 'planned' && challengeReviewCalls++ === 0
-      ? { verdict: 'changes_requested', summary: 'Synthetic challenge defect requires repair.', issues: [activeTask.reviewFault?.label ?? 'Injected hidden defect'], acceptance: handoff.acceptance }
+      ? { verdict: 'changes_requested', summary: 'Synthetic challenge defect requires repair.', issues: [activeTask.reviewFault?.label ?? 'Injected hidden defect'], issueKinds: ['code_defect'], acceptance: handoff.acceptance }
       : { verdict: 'ready', summary: 'Scripted fixture review; no real model judgment measured.', issues: [], acceptance: handoff.acceptance };
     const delta = write ? { role: 'assistant', tool_calls: calls } : { role: 'assistant', content: phase === 'review' ? JSON.stringify(review) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify({ ...handoff.brief, steps: handoff.plan.steps }) : phase + ' fixture response' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });

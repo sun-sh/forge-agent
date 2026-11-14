@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a manual four-case immutable upstream behavioral replay: original image/patch/snapshot/grading fingerprints, independent pre-patch design, native Pi checks, no repairs, hidden-label exclusion and retained failures. This prepares qualification of the new behavior gate without relabeling historical SWE-bench scores.
+
+- Add independent pre-implementation behavioral check design and frozen native-Pi execution for Planned changes with configured verification. Preserve original-request anchors, reproduction/boundary cases, run IDs, native exit codes/output, workspace binding and recovery; missing/failed/stale checks cannot be replaced by model-ready. Keep commands inside existing Pi mode/trust/budget policy and retain unverified acceptance. Add typed review issue kinds so missing execution/environment/ambiguous expectations request evidence instead of being counted as source defects. No historical SWE-bench score is inherited.
+
+- Retain 12 real read-only reviewer replays of four exact original SWE-bench candidates: all six reviews of officially failing Flask/Matplotlib patches are accepted, five officially passing-candidate reviews are accepted, and one Astropy review exceeds the five-minute limit after six turns. Preserve original labels, complete source/patch identities, native historical receipts, unknown pricing and six zero-review preparation failures; no product-policy or default-budget change and no new coding-resolution score.
+
+- Retain one controlled real-model reviewer probe: a correct source change with explicitly required tests not run is blocked by the actual controller/reviewer path. Keep the syntax-only check, zero pre-decision test executions, later 3/3 test result, original missing-step-to-code-defects classification, fingerprints and pre-model startup failure separate. No product-policy change or general safety claim.
+
 - Retain a 24-review real-model paired synthetic diagnostic: both prompts accept 6/6 correct and block 6/6 defective candidates, with no demonstrated decision gain and at most four turns. Preserve the pre-model oracle failure, unknown pricing, captured harness identity and distinction from unqualified upstream SWE-bench misses.
 
 

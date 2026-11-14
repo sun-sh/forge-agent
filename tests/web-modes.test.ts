@@ -1,3 +1,4 @@
+import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -18,7 +19,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean; skipBehavior?: boolean; failBehavior?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
@@ -32,7 +33,8 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
   const upstream = createServer(async (req, res) => {
     let raw = ''; for await (const part of req) raw += part;
     const input = JSON.parse(raw); requests.push(input);
-    const phase = [...JSON.stringify(input).matchAll(/PFORGE TASK PHASE: (\w+)/g)].at(-1)?.[1];
+    if (respondBehaviorFixture(input, res, { skip: options.skipBehavior, fail: options.failBehavior })) return;
+    const phase = fixturePhase(input);
     if (pause || pausePhase && phase === pausePhase) await new Promise<void>((resolve) => { release = resolve; });
     if (res.destroyed) return;
     let calls = nextCalls ?? queuedCalls.shift(); nextCalls = undefined;
@@ -95,9 +97,20 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
     const state = await f.settled(session.id);
     expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded', result: { status: 'implemented_unverified', acceptance: 'unverified', resolutionClaimed: false } });
-    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
     expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');
+  });
+  it.each([{ skipBehavior: true }, { failBehavior: true }])('blocks a static ready review when native behavior evidence is missing or failed: %j', async (options) => {
+    const f = await fixture({ ...options, implementationWrite: { path: 'implementation-result.txt', content: 'implementation preserved' } });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Implement the fixture behavior and preserve the boundary.', workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implementation preserved');
+    expect(state.task.status).toBe('needs_attention'); expect(state.task.review.verdict).toBe('ready');
+    expect(state.task.result).toMatchObject({ status: 'blocked', modelReview: 'insufficient_evidence', reviewStop: { action: 'provide_evidence', issueCount: 0 } });
+    if (options.skipBehavior) { expect(state.task.behavior.receipts).toHaveLength(0); expect(state.task.behavior.status).toBe('unconfirmed'); }
+    else { expect(state.task.behavior.status).toBe('failed'); expect(state.task.behavior.receipts.some((item: any) => item.exitCode === 1 && item.source === 'pi-builtin-shell')).toBe(true); }
   });
   it('passes a real Pi shell receipt to a fresh read-only reviewer without sending the parent transcript', async () => {
     const marker = 'REVIEW_RECEIPT_43_PASSED';
@@ -133,7 +146,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(JSON.stringify(requests[1].messages)).toContain('SUPPLEMENT_CHECK_PASSED');
     expect(JSON.stringify(requests[1].messages)).toContain('REPAIR RECHECK');
     expect(state.messages.filter((entry: any) => entry.role === 'user')).toHaveLength(1);
-    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'implement', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'implement', 'check', 'verify', 'review', 'complete']);
   });
   it('admits an unknown request resolved to verification once, without resetting its user turn', async () => {
     const f = await fixture({ briefIntent: 'verify' });
@@ -275,26 +288,27 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Inspect and finish the task', workflow: 'planned' })).status).toBe(202);
     const state = await f.settled(session.id);
     expect(state.task, JSON.stringify(state)).toMatchObject({ status: 'completed', phase: 'complete', repairs: 0 });
-    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'plan', 'implement', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(state.task.review.verdict).toBe('ready');
     expect(state.task.plan.acceptance[0].id).toBe('A1'); expect(state.task.review.acceptance[0].status).toBe('met');
     const timeline: any = await (await f.api('sessions/' + session.id + '/timeline?task=' + state.task.id)).json();
     expect(timeline.timeline).toMatchObject({ taskId: state.task.id, readOnly: true, truncated: false });
-    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(6);
+    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(7);
     const modelNodes = timeline.timeline.nodes.filter((node: any) => node.kind === 'model');
-    expect(modelNodes).toHaveLength(4);
+    expect(modelNodes).toHaveLength(7);
+    expect(state.task.behavior).toMatchObject({ status: 'passed', receipts: [{ exitCode: 0 }, { exitCode: 0 }] });
     expect(modelNodes.find((node: any) => node.label === 'independent reviewer')).toMatchObject({ source: 'pi', status: 'completed' });
     expect((await f.api('sessions/' + session.id + '/timeline?task=unknown')).status).toBe(404);
     expect(state.verification).toMatchObject({ status: 'passed', runId: state.task.id, evidenceId: expect.any(String) });
-    expect(f.requests).toHaveLength(4);
-    for (const index of [0, 1, 3]) expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('write');
-    expect(f.requests[2].tools.map((tool: any) => tool.function.name)).toContain('write');
+    expect(f.requests).toHaveLength(8);
+    for (const index of [0, 1, 2, 7]) expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+    expect(f.requests[3].tools.map((tool: any) => tool.function.name)).toContain('write');
     await f.restart();
     const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
     expect(restored.task.status).toBe('completed'); expect(restored.verification.evidenceId).toBe(state.verification.evidenceId);
     const restoredTimeline: any = await (await f.api('sessions/' + restored.id + '/timeline?task=' + state.task.id)).json();
     expect(restoredTimeline.timeline).toEqual(timeline.timeline);
-    expect(f.requests).toHaveLength(4);
+    expect(f.requests).toHaveLength(8);
   });
   it('answers a planned prompt after structured inspection without running the change pipeline', async () => {
     const f = await fixture({ briefIntent: 'answer' });
@@ -428,7 +442,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(resumed.task.status).toBe('completed');
     expect(resumed.task.resumeOf).toBe(stopped.task.id);
     expect(resumed.task.id).not.toBe(stopped.task.id);
-    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['plan', 'implement', 'verify', 'review', 'complete']);
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['plan', 'implement', 'check', 'verify', 'review', 'complete']);
     const resumedRequest = f.requests[2];
     const resumedUserMessages = resumedRequest.messages.filter((message: any) => message.role === 'user');
     expect(resumedUserMessages.filter((message: any) => JSON.stringify(message.content).includes('Implement a scoped change'))).toHaveLength(1);
@@ -440,7 +454,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     let session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     f.pauseAt('implement');
     await f.api('sessions/' + session.id + '/prompt', { message: 'Create index.html with the requested page.', workflow: 'planned' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(3), { timeout: 15000 });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(4), { timeout: 15000 });
     await f.api('sessions/' + session.id + '/abort', {});
     const stopped = await f.settled(session.id);
     expect(stopped.task).toMatchObject({ phase: 'implement', status: 'aborted', kind: 'change' });
@@ -455,11 +469,11 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     // Implementation, host verification, independent review and sealing all run after resume.
     const resumed = await f.settled(session.id, 30000);
     expect(resumed.task).toMatchObject({ status: 'completed', resumeOf: stopped.task.id, requirements: stopped.task.requirements, plan: stopped.task.plan });
-    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['implement', 'verify', 'review', 'complete']);
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['implement', 'check', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'index.html'), 'utf8')).toBe('<h1>Resumed implementation</h1>');
     const entries = resumed.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user');
     expect(entries).toHaveLength(1);
-    expect(f.requests[3].tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
+    expect(f.requests[4].tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
   }, 60000);
   it.each(['plan', 'ask'] as const)('allows reading in %s but blocks execution and verification, including after reopening', async (mode) => {
     const f = await fixture();

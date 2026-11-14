@@ -16,7 +16,7 @@ export interface ReviewCommandEvidence {
   summary: { receipts: number; retainedReceipts: number; testReceipts: number; failedReceipts: number; zeroTestReceipts: number; sourceTruncatedReceipts: number };
 }
 const MAX_SCAN = 5000, MAX_COMMANDS = 12, MAX_CHARACTERS = 24000;
-const sensitive = (value: string) => /\b(?:api[_-]?key|authorization|access[_-]?token|password|secret)\s*[:=]|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{12,}|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+)|https?:\/\/[^/\s]+:[^/\s]+@|(?:^|[\s/'"\\])(?:\.env(?:\.[\w-]+)?|auth\.json|credentials?\.json|secrets?\.json)(?=$|[\s/'"\\])/i.test(value);
+export const sensitiveCommandEvidence = (value: string) => /\b(?:api[_-]?key|authorization|access[_-]?token|password|secret)\s*[:=]|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{12,}|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+)|https?:\/\/[^/\s]+:[^/\s]+@|(?:^|[\s/'"\\])(?:\.env(?:\.[\w-]+)?|auth\.json|credentials?\.json|secrets?\.json)(?=$|[\s/'"\\])/i.test(value);
 function bounded(text: string, limit: number): BoundedText {
   const marker = '\n[historical output excerpt; not a complete check]\n';
   const head = Math.floor((limit - marker.length) / 2), tail = limit - marker.length - head;
@@ -24,12 +24,12 @@ function bounded(text: string, limit: number): BoundedText {
     characters: text.length, sha256: createHash('sha256').update(text).digest('hex'), truncated: text.length > limit };
 }
 
-function classify(command: string, output: string, toolError: boolean): { kind: 'test' | 'command'; outcome: ReceiptOutcome } {
+export function classifyCommandReceipt(command: string, output: string, toolError: boolean): { kind: 'test' | 'command'; outcome: ReceiptOutcome } {
   // Navigation hints only. Preserve the original output even when a runner's
   // summary is unfamiliar; an error word in a test name is not a failed test.
   const plain = output.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
   const test = /(?:\b(?:pytest|py\.test|unittest|vitest|jest|mocha|tox)\b|\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|\bnode\b[^\n]*\s--test\b|\bbin[\\/]test\b)/i.test(command)
-    || /\b[1-9]\d*\s+passed\b|^Ran\s+\d+\s+tests?\b|^# tests\s+\d+\b/im.test(plain);
+    || /\b\d+\s+passed\b|\bno tests? (?:ran|collected|found)\b|^Ran\s+\d+\s+tests?\b|^# tests\s+\d+\b/im.test(plain);
   const kind = test ? 'test' : 'command';
   // Test runners commonly report expected failures separately. They are
   // evidence about the suite, but not a failed command unless the runner
@@ -74,8 +74,8 @@ export function reviewCommandEvidence(entries: readonly Entry[], taskId: string,
       seen.add(id);
       // No assistant prose, thinking, image data, custom tools or MCP output enters the reviewer.
       const output = Array.isArray(message['content']) ? message['content'].filter((part: any) => part?.type === 'text' && typeof part.text === 'string').map((part: any) => part.text).join('\n') : '';
-      if (!output || sensitive(call.command) || sensitive(output)) { result.omitted++; continue; }
-      const toolError = message['isError'] === true, classification = classify(call.command, output, toolError), sourceTruncation = message['details']?.truncation?.truncated === true ? 'reported' as const : 'not-reported' as const;
+      if (!output || sensitiveCommandEvidence(call.command) || sensitiveCommandEvidence(output)) { result.omitted++; continue; }
+      const toolError = message['isError'] === true, classification = classifyCommandReceipt(call.command, output, toolError), sourceTruncation = message['details']?.truncation?.truncated === true ? 'reported' as const : 'not-reported' as const;
       result.commands.push({ toolCallId: id, tool: call.name, command: bounded(call.command, 1000), output: bounded(output, 3000), toolError, sourceTruncation, kind: classification.kind, outcome: classification.outcome,
         ...(typeof message['timestamp'] === 'number' && Number.isFinite(message['timestamp']) ? { recordedAt: message['timestamp'] } : {}) });
       result.summary.receipts++;

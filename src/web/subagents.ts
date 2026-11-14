@@ -9,6 +9,7 @@ import { BudgetRuntime, budgetSnapshotSchema } from '../task/budget.js';
 import { CheckpointStore, checkpointTarget } from '../task/checkpoints.js';
 import { WorkerWorktrees } from '../task/worktrees.js';
 import { parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, REVIEW_FORMAT_RETRY } from '../task/review.js';
+import { parseBehaviorPlan, behaviorPlanFeedback, BEHAVIOR_FORMAT } from '../task/behavior.js';
 import { REVIEW_BUDGETS, reviewBudgetProfileSchema, type ReviewBudgetProfile } from '../task/review-budget.js';
 
 const ENTRY = 'forge.subagent';
@@ -39,8 +40,8 @@ function bestEffortAbort(agent: AgentSession | undefined): Promise<void> {
 const recordSchema = z.object({
   version: z.literal(1), id: z.uuid(), parentId: z.uuid(), toolCallId: z.string().min(1).max(256),
   title: z.string().min(1).max(100), role: z.enum(['explorer', 'reviewer', 'worker']), prompt: z.string().min(1).max(200_000),
-  purpose: z.literal('review_gate').optional(),
-  formatRetries: z.number().int().min(0).max(1).optional(), errorCode: z.enum(['invalid_review', 'budget_exhausted']).optional(),
+  purpose: z.enum(['review_gate', 'behavior_plan']).optional(),
+  formatRetries: z.number().int().min(0).max(1).optional(), errorCode: z.enum(['invalid_review', 'invalid_behavior_plan', 'budget_exhausted']).optional(),
   reviewStop: reviewStopSchema.optional(), reviewBudget: reviewBudgetProfileSchema.optional(),
   status: z.enum(['starting', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   model: z.string().min(1).max(512), thinkingLevel: z.string().max(32),
@@ -60,6 +61,7 @@ interface Options {
   budget(): BudgetRuntime | undefined;
   allowed(): boolean;
   reviewAllowed?(): boolean;
+  behaviorAllowed?(): boolean;
   reviewBudget?(): ReviewBudgetProfile;
   onChange(agents: SubagentView[]): void;
 }
@@ -137,8 +139,8 @@ export class ForgeSubagents {
       return this.results(selected);
     } finally { if (timer) clearTimeout(timer); if (abort) signal?.removeEventListener('abort', abort); }
   }
-  private assertAllowed(reviewGate = false) {
-    if (this.closed || !(reviewGate ? this.options.reviewAllowed?.() : this.options.allowed())) throw new Error('当前模式或项目状态不允许委派子任务。');
+  private assertAllowed(reviewGate: boolean | 'behavior_plan' = false) {
+    if (this.closed || !(reviewGate === 'behavior_plan' ? this.options.behaviorAllowed?.() : reviewGate ? this.options.reviewAllowed?.() : this.options.allowed())) throw new Error('当前模式或项目状态不允许委派子任务。');
     const budget = this.options.budget();
     if (!budget || budget.snapshot().status !== 'running') throw new Error('子任务必须属于正在运行且预算有效的父任务。');
     budget.check();
@@ -163,15 +165,18 @@ export class ForgeSubagents {
     return this.startBatch(tasks, toolCallId, signal);
   }
   /** Host-only admission; the model-facing tool cannot request this capability. */
-  async reviewGate(prompt: string, signal: AbortSignal) {
-    const [started] = await this.startBatch([{ title: '独立交付审阅', role: 'reviewer', prompt }], 'host-review:' + randomUUID(), signal, true);
+  async reviewGate(prompt: string, signal: AbortSignal) { return this.structuredGate(prompt, signal, true); }
+  async behaviorPlan(prompt: string, signal: AbortSignal) { return this.structuredGate(prompt, signal, 'behavior_plan'); }
+  private async structuredGate(prompt: string, signal: AbortSignal, purpose: true | 'behavior_plan') {
+    const title = purpose === true ? '独立交付审阅' : '独立行为检查设计';
+    const [started] = await this.startBatch([{ title, role: 'reviewer', prompt }], 'host-' + (purpose === true ? 'review' : 'behavior') + ':' + randomUUID(), signal, purpose);
     const [finished] = await this.wait([started!.id], undefined, signal);
-    if (finished?.errorCode === 'invalid_review') throw new ReviewFormatError(finished.error ?? '独立审阅格式无效。');
-    if (finished?.budget?.status === 'exceeded') throw new ReviewBudgetExceededError(finished.error ?? finished.budget.exceededReason ?? '独立审阅达到审阅专用预算，需要人工检查或继续任务。', finished.id, finished.model);
-    if (finished?.status !== 'completed' || !finished.result) throw new Error(finished?.error ?? '独立审阅未完成。');
+    if (['invalid_review', 'invalid_behavior_plan'].includes(finished?.errorCode ?? '')) throw new ReviewFormatError(finished!.error ?? title + '格式无效。');
+    if (finished?.budget?.status === 'exceeded') throw new ReviewBudgetExceededError(finished.error ?? finished.budget.exceededReason ?? title + '预算耗尽。', finished.id, finished.model);
+    if (finished?.status !== 'completed' || !finished.result) throw new Error(finished?.error ?? title + '未完成。');
     return { text: finished.result, sessionId: finished.id, model: finished.model, formatRetries: finished.formatRetries ?? 0 };
   }
-  private async startBatch(tasks: TaskInput[], toolCallId: string, signal?: AbortSignal, reviewGate = false) {
+  private async startBatch(tasks: TaskInput[], toolCallId: string, signal?: AbortSignal, reviewGate: boolean | 'behavior_plan' = false) {
     const parentBudget = this.assertAllowed(reviewGate);
     signal?.throwIfAborted();
     // Validate the whole batch before reserving or starting any work.
@@ -183,7 +188,7 @@ export class ForgeSubagents {
     for (const task of parsed) if (task.id) {
       const existing = this.records.get(task.id);
       if (!existing || this.live.has(task.id)) throw new Error('只能继续当前父会话拥有且已经停止的子任务。');
-      if (existing.purpose === 'review_gate') throw new Error('交付审阅不能续问；每次门禁使用全新上下文。');
+      if (existing.purpose) throw new Error('交付审阅不能续问；每次门禁使用全新上下文。');
       if (existing.role !== task.role) throw new Error('续问不能改变子任务角色。');
       if (existing.role === 'worker') throw new Error('可写子任务请审阅原补丁后新建委派，不在旧 worktree 中重放。');
       if (task.scope && JSON.stringify(task.scope) !== JSON.stringify(existing.scope ?? { files: [], deliverables: [], acceptance: [], dependencies: [] })) throw new Error('续问不能改变已记录的结构化任务交接。');
@@ -195,7 +200,7 @@ export class ForgeSubagents {
       const now = new Date().toISOString();
       const record: ChildRecord = { version: 1, id: previous?.id ?? randomUUID(), parentId: this.options.manager.getSessionId(), toolCallId,
         title: task.title, prompt: task.prompt, role: task.role, ...(task.scope || previous?.scope ? { scope: task.scope ?? previous?.scope } : {}), status: 'starting', model: previous?.model ?? model.provider + '/' + model.id,
-        thinkingLevel: previous?.thinkingLevel ?? this.options.thinkingLevel(), createdAt: previous?.createdAt ?? now, startedAt: now, activation: (previous?.activation ?? 0) + 1, ...(reviewGate ? { purpose: 'review_gate' as const, reviewBudget: this.options.reviewBudget?.() ?? 'standard' } : {}) };
+        thinkingLevel: previous?.thinkingLevel ?? this.options.thinkingLevel(), createdAt: previous?.createdAt ?? now, startedAt: now, activation: (previous?.activation ?? 0) + 1, ...(reviewGate ? { purpose: reviewGate === 'behavior_plan' ? 'behavior_plan' as const : 'review_gate' as const, ...(reviewGate === true ? { reviewBudget: this.options.reviewBudget?.() ?? 'standard' } : {}) } : {}) };
       const run: LiveChild = { record, controller: new AbortController() };
       this.records.set(record.id, record); this.live.set(record.id, run); this.promptIds.add(record.id); if (!reviewGate) this.admitted++;
       return run;
@@ -228,6 +233,7 @@ export class ForgeSubagents {
     const { record, controller } = run;
     const parentLimits = parentBudget.limits;
     const gate = record.purpose === 'review_gate';
+    const design = record.purpose === 'behavior_plan', structured = gate || design;
     const limits = gate ? REVIEW_BUDGETS[record.reviewBudget ?? 'standard'] : { maxDurationMs: 180_000, maxModelTurns: 12, maxToolCalls: 60, maxOutputTokens: 16_000, maxCostUsd: 2 };
     const budget = new BudgetRuntime({ maxDurationMs: Math.min(limits.maxDurationMs, parentLimits.maxDurationMs), maxModelTurns: Math.min(limits.maxModelTurns, parentLimits.maxModelTurns), maxToolCalls: Math.min(limits.maxToolCalls, parentLimits.maxToolCalls), maxTotalTokens: 0, maxOutputTokens: Math.min(limits.maxOutputTokens, parentLimits.maxOutputTokens), maxCostUsd: Math.min(limits.maxCostUsd, parentLimits.maxCostUsd) }, (snapshot) => { record.budget = snapshot; this.publish(); });
     let unsubscribe: (() => void) | undefined;
@@ -256,7 +262,7 @@ export class ForgeSubagents {
       // noExtensions alone still lets Pi resolve/install configured resource packages.
       // Keep model/compaction settings, but give restricted workers no package sources.
       const settingsManager = SettingsManager.inMemory({ ...inheritedSettings, packages: [], extensions: [], skills: [], prompts: [], themes: [], cacheWarming: 'off' }, { projectTrusted: false });
-      const resultContract = gate
+      const resultContract = design ? 'Return the independent behavioral check plan JSON requested by the host. Do not implement changes or execute proposed commands. ' + BEHAVIOR_FORMAT : gate
         ? 'Return exactly the structured review JSON requested in the host task, with one evidence-based finding for every acceptance ID. Do not add prose, Markdown or a separate narrative result.'
         : 'Return a concise evidence-based result with explicit sections for completed work, unverified items, and what the parent must do next, including relevant paths and limitations.';
       const extension: ExtensionFactory = (pi) => {
@@ -324,26 +330,27 @@ export class ForgeSubagents {
         budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
         if (failure) throw new Error(failure);
         result = created.session.getLastAssistantText()?.trim();
-        if (gate && (!result || !parseReview(result))) {
+        const validResult = (value: string | undefined) => Boolean(value && (design ? parseBehaviorPlan(value) : parseReview(value!, { requireIssueKinds: true })));
+        if (structured && !validResult(result)) {
           // A formatting correction stays inside this one reviewer session and
           // both ledgers; it never replays implementation or resets budgets.
           record.formatRetries = 1; this.publish(record);
           budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
-          await created.session.prompt(REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });
+          await created.session.prompt(design ? 'HOST CHECK PLAN FORMAT CORRECTION. This is the only retry in the same session and budget. Preserve the original request. Correct these specific schema errors: ' + behaviorPlanFeedback(result ?? '') + '\n' + BEHAVIOR_FORMAT : REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });
           budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
           if (failure) throw new Error(failure);
           result = created.session.getLastAssistantText()?.trim();
-          if (!result || !parseReview(result)) throw new ReviewFormatError('独立审阅格式校正一次后仍无效，需要人工检查；未重跑整个任务。');
+          if (!validResult(result)) throw new ReviewFormatError('独立审阅格式校正一次后仍无效，需要人工检查；未重跑整个任务。');
         }
       } finally { controller.signal.removeEventListener('abort', abort); }
       if (!result) throw new Error('子任务没有返回结论。');
-      if (gate && result.length > 100_000) throw new Error('独立审阅结果超过完整解析上限，未截断为有效审阅。');
-      record.result = !gate && result.length > MAX_RESULT ? result.slice(0, MAX_RESULT - 40) + '\n[结果已截断；完整内容可在子任务详情查看]' : result;
+      if (structured && result.length > 100_000) throw new Error('独立审阅结果超过完整解析上限，未截断为有效审阅。');
+      record.result = !structured && result.length > MAX_RESULT ? result.slice(0, MAX_RESULT - 40) + '\n[结果已截断；完整内容可在子任务详情查看]' : result;
       if (gate) record.reviewStop = reviewStop(parseReview(result)!);
       record.status = 'completed';
     } catch (error) {
-      if (error instanceof ReviewFormatError) record.errorCode = 'invalid_review';
-      if (gate && (budget.exceededReason || parentBudget.exceededReason)) {
+      if (error instanceof ReviewFormatError) record.errorCode = design ? 'invalid_behavior_plan' : 'invalid_review';
+      if (structured && (budget.exceededReason || parentBudget.exceededReason)) {
         record.errorCode = 'budget_exhausted';
         record.reviewStop = { reason: 'budget_exhausted', action: 'adjust_budget', issueCount: 0, unconfirmedIds: [], budgetScope: parentBudget.exceededReason ? 'parent' : 'reviewer' };
       } else if (gate && error instanceof ReviewFormatError) record.reviewStop = { reason: 'invalid_review', action: 'retry_review', issueCount: 0, unconfirmedIds: [] };

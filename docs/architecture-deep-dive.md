@@ -221,3 +221,8 @@ The engineering priorities are an evidence-backed execution loop, unified execut
 
 
 Product acceptance is a derived result (`task/result.ts`), separate from legacy execution `completed`. Implementations remain `implemented_unverified`; generic configured checks and model review do not certify resolution. The [result protocol](task-results.md) covers task APIs/SSE, history recovery and unchanged quality denominators.
+
+
+## Independent check design and native execution
+
+The configured Planned path now separates independent original-request check design from implementation and final code review. `src/task/behavior.ts` owns the bounded schemas, frozen plan and workspace-bound receipt settlement; `src/task/behavior-runtime.ts` constrains the existing parent Pi tools and records native result metadata. `TaskController` schedules the check phase and preserves recovery state. `ForgeSubagents` reuses its restricted fresh Pi session for design; it does not gain shell access. Forge never dispatches model-proposed commands outside the parent Pi permission path, and Pi remains the loop/process authority. See [the contract and limits](behavior-checks.md). These checks are fallible model hypotheses, not a claim of complete acceptance or inherited SWE-bench quality gains.

@@ -48,7 +48,7 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
   manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'parent context' }], api: 'openai-completions', provider: 'mock', model: 'test', stopReason: 'stop', timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
   const budget = new BudgetRuntime({ ...DEFAULT_BUDGET_LIMITS }); budget.start();
   let allowed = true;
-  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, reviewBudget: () => reviewBudget, allowed: () => allowed, reviewAllowed: () => allowed, onChange: () => {} };
+  const options = { home, project, manager, modelRuntime: runtime, parentModel: () => runtime.getModel('mock', 'test'), thinkingLevel: () => 'off' as const, budget: () => budget, reviewBudget: () => reviewBudget, allowed: () => allowed, reviewAllowed: () => allowed, behaviorAllowed: () => allowed, onChange: () => {} };
   const agents = new ForgeSubagents(options); budget.setAbort(() => { void agents.cancelAll(); });
   closers.push(async () => { await agents.close(); budget.finish('aborted'); });
   return { home, project, runtime, manager, agents, budget, requests, options, setAllowed: (value: boolean) => { allowed = value; } };
@@ -87,6 +87,20 @@ describe('managed Pi subagents', () => {
     expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'review_gate', role: 'reviewer', status: 'completed', collectedAt: expect.any(String) });
     await expect(f.agents.delegate([{ title: 'continue gate', role: 'reviewer', prompt: 'continue', id: review.sessionId }], 'follow-up')).rejects.toThrow('交付审阅不能续问');
+  });
+  it('designs bounded checks in a fresh reader-only Pi context and repairs specific schema errors once', async () => {
+    let calls = 0;
+    const plan = { version: 1, status: 'ready', summary: 'Exercise trigger and boundary', assumptions: [], unresolved: [], checks: [
+      { id: 'B1', kind: 'reproduction', requestQuote: 'Fix behavior', expectation: 'Trigger works', command: 'node repro.cjs', shell: 'bash', timeoutSeconds: 60 },
+      { id: 'B2', kind: 'boundary', requestQuote: 'Fix behavior', expectation: 'Boundary works', command: 'node boundary.cjs', shell: 'bash', timeoutSeconds: 60 }
+    ] };
+    const f = await fixture((input, res) => answer(res, input, JSON.stringify(++calls === 1 ? { ...plan, assumptions: Array.from({ length: 6 }, () => 'out of scope') } : plan)));
+    const result = await f.agents.behaviorPlan('PFORGE TASK PHASE: behavior_plan\nOriginal request: Fix behavior.', new AbortController().signal);
+    expect(JSON.parse(result.text)).toEqual(plan); expect(f.requests).toHaveLength(2);
+    expect(text(f.requests[1])).toContain('assumptions'); expect(text(f.requests[1])).toContain('Too big');
+    expect(text(f.requests[0])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
+    expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'behavior_plan', formatRetries: 1, status: 'completed', budget: { limits: { maxModelTurns: 12 } } });
   });
   it('allows a real Pi reviewer to finish beyond the previous 24-turn ceiling', async () => {
     let turns = 0;

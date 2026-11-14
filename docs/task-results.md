@@ -66,3 +66,8 @@ SWE-bench retains official resolution, integrity and workflow-finished quality m
 A 9/15 resolution result with six unsuccessful patches remains 9/15 after changing labels. This change improves honesty of reporting, not measured coding quality. Deterministic regression/API tests are not a new real-model benchmark. A future behavioral-attestation contract would need explicit requirement coverage and workspace/test/evidence identities; no such contract is inferred from command keywords or generic model review here.
 
 See [review outcomes / 审阅结果](review-outcomes.md) for structured stop reasons, recovery actions, legacy records, budget opt-in and missed-defect evidence boundaries.
+
+
+## Behavioral receipt gate
+
+Configured Planned changes may carry `task.behavior` and `result.behaviorChecks=not_run|running|passed|failed|unconfirmed`. The plan, native command receipts, run IDs, original-request hash and workspace digest are durable. Incomplete/failed/stale behavior receipts keep `result.status=blocked` even if the static review says ready. A passing process result is still not complete behavioral acceptance; `resolutionClaimed=false` and `acceptance=unverified` remain. See [behavioral checks](behavior-checks.md) for permissions, current-version binding and recovery.

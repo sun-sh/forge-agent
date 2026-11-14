@@ -1290,7 +1290,7 @@ function renderVerification(verification) {
   const failures = { timeout: '超时', aborted: '已停止', spawn_error: '启动失败' };
   $('verification-output').textContent = [verification.reason, verification.evidence?.reason].filter(Boolean).join('\n\n') + (verification.reason || verification.evidence?.reason ? '\n\n' : '') + ((verification.report?.results || []).map((result) => (result.passed ? 'PASS ' : 'FAIL ') + result.command + ' · ' + (failures[result.failure] || 'exit ' + result.exitCode) + ' · ' + result.durationMs + 'ms\n' + (result.error ? result.error + '\n' : '') + (result.output || '(无输出)')).join('\n\n') || verification.error || '');
 }
-const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', verify: '验证', review: '审阅', complete: '执行结束' };
+const TASK_LABELS = { inspect: '调研', plan: '规划', implement: '实现', check: '行为检查', verify: '验证', review: '审阅', complete: '执行结束' };
 function setWorkflow(value) {
   state.workflow = value === 'planned' ? 'planned' : 'direct';
   ['workflow-select', 'followup-workflow-select'].forEach((id) => { if ($(id)) $(id).value = state.workflow; });
@@ -1345,7 +1345,7 @@ function renderTask(task) {
   const showTaskPanel = Boolean(task && (!['answer', 'explore'].includes(task.kind) || task.progress?.status === 'warned' || task.progress?.status === 'stalled'));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
   if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; $('task-summary-phase').textContent = '任务进度'; $('task-summary-note').textContent = ''; renderDelivery(null); renderBudget(null); renderComposerControl(); return; }
-  const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS), current = phases.indexOf(task.phase);
+  const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS).filter((phase) => phase !== 'check' || task.behavior), current = phases.indexOf(task.phase);
   const visited = new Set((task.phases || []).map((item) => item.phase));
   $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? 'skipped' : 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? '—' : '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
   const reviewStatus = reviewStopView(task);
@@ -1361,6 +1361,7 @@ function renderTask(task) {
     const finding = task.review?.acceptance?.find((entry) => entry.id === item.id), label = task.review?.freshness !== 'current' && finding ? '当前未确认' : ({ met: '已确认', unmet: '未满足', unconfirmed: '未确认' }[finding?.status] || (implementationWithoutChecks(task) ? '未自动审阅' : '待审阅'));
     return '<li><strong>' + esc(item.id) + ' · ' + esc(label) + '</strong><p>' + esc(item.criterion) + '</p><small>' + esc(finding?.evidence || item.evidence) + '</small></li>';
   }).join('') + '</ol></details>' : '';
+  if (task.behavior) $('task-review').textContent += '\n\n行为检查：' + ({ pending: '等待执行', running: '执行中', passed: '冻结检查命令已通过，需求仍未验收', failed: '命令未通过，需区分行为与环境', unconfirmed: '证据未确认' }[task.behavior.status] || '未确认') + (task.behavior.reason ? '\n' + task.behavior.reason : '') + (task.behavior.receipts || []).map((item) => '\n' + item.checkId + ' · ' + item.status + ' · exit=' + (item.exitCode ?? 'unknown') + '\n' + item.output).join('');
   renderDelivery(task);
   scheduleTimeline();
   renderBudget(task.budget || state.budget);
