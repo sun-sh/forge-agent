@@ -33,7 +33,7 @@ npm run build
 node scripts/swebench-behavior-replay.mjs --case pallets__flask-4045 --source-run ORIGINAL_RUN_ROOT --graded-run REGRADED_RUN_ROOT --calibrate-from FROZEN_DESIGN_ARTIFACT --output NEW_DIRECTORY --prepare-only
 ```
 
-On a Linux Docker host omit --prepare-only and supply --package with the freshly packed Forge tarball. Evidence retains image/package/harness/command identities, both controls, missing plans and all failures. Public reports require allowlisting/redaction; no private paths, endpoints or credential stores. No outcome is claimed before actual artifacts are inspected.
+On a Linux Docker host omit --prepare-only and supply --package with the freshly packed Forge tarball. Evidence retains image/package/harness/command identities, both controls, missing plans and all failures. Public reports require allowlisting/redaction; no private paths, endpoints or credential stores. The [first inspected execution report](evaluations/behavior-calibration-2026-11-15.md) retains all four outcomes, including the missing plan. It does not qualify the historical misses.
 
 ## 中文
 

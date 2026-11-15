@@ -8,6 +8,10 @@
 
 The [four frozen upstream candidates](evaluations/behavior-upstream-2026-11-14.md) retain an infrastructure attempt, a first four-stop run and a separate convergence revision. In the revised run, Astropy/SymPy each pass three native checks and deliver; Flask stops on invalid check expectations/environment compatibility, and Matplotlib stops before a plan on output-budget exhaustion. Neither stop demonstrates detection of the historical official defect. All four final reviewers return ready. Code/image/patch/harness fingerprints and all outcomes remain separate; no new SWE-bench resolution score or causal quality gain is claimed.
 
+## Frozen-check baseline calibration — 2026-11-15
+
+The [offline baseline/candidate report](evaluations/behavior-calibration-2026-11-15.md) retains 18 native Pi programmatic shell executions and zero new model calls. All three Flask checks fail with identical outputs before and after the patch; Astropy/SymPy reproductions distinguish their known source versions, and Matplotlib stays unavailable. No new resolution score or historical miss repair is claimed. Runtime output-headroom changes have separate fixture evidence.
+
 ## Native behavioral gate diagnostic — 2026-11-14
 
 The [three retained real-model attempts](evaluations/behavior-native-gate-2026-11-14.md) exercise a fixed correct/defective pair through actual independent check design, native parent Pi commands and final review. Attempts 1/2 block the correct candidate due to check-plan format errors. After specific schema feedback, attempt 3 uses one frozen plan: three checks pass for correct and fail for defective, with external assertions agreeing after saved decisions. This is one explicitly specified miniature task, not repair of the 12 upstream reviewer misses, a new SWE-bench score or a reliability estimate. Fingerprints, unknown prices and earlier failures remain separate.

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-15",
+  "runtimeCodeRevision": "3a6685fea0c91d4e099eaf4ac3b536b58b906882",
+  "calibrationCodeRevision": "f43482c6ae85b14527d9daaa7b478ce537117729",
+  "calibrationRunId": "43669953603",
+  "sourceSha256": {
+    "src/task/behavior-design-budget.ts": "cacb233ac65eb5011cf5a4a6d9d771f149b80009675d15f76f31014a90d75955",
+    "src/task/behavior.ts": "44d5aa63f27862529f1fba3e82db56da9cb825bb2a0a597c174750e631be925a",
+    "src/web/subagents.ts": "38b8a14d044226f649b9c33441c244f7a46cb25508690df6862dc5251a6ba7a3",
+    "scripts/behavior-calibration-protocol.mjs": "d6ed99e58efbadc5f8ac54bb85ea7e06fe8904f38d4c8c3eb95994ccc90f3925",
+    "scripts/swebench-behavior-calibration-agent.mjs": "9954c8147ae221caab2ba735caa67a57fdc94c0ed403089260ac85d9726d997f",
+    "scripts/swebench-behavior-replay.mjs": "dc45c7a27afab35ad026632aebe78b75a1f789d26758bc4121682378f05894be",
+    ".github/workflows/behavior-calibration.yml": "1ea1701f1244ef9fee77e9e4938fe1a4634d60795a2c3ebf925e03737f8eb017",
+    "evals/swebench-lite/behavior-calibration.json": "cfffb54780ada80762b4b9e82d89c29bbb4d0d44a20248e0d37c29264b5273e0"
+  },
+  "local": {
+    "typecheck": "passed",
+    "focused": {
+      "testFiles": 5,
+      "tests": 82,
+      "status": "passed",
+      "logSha256": "db313f6ae39e99f7f4de954c03b6d3515daf845ce711c4fceee4eee05f372e80"
+    },
+    "originalArtifactPreflight": {
+      "cases": 4,
+      "status": "passed"
+    },
+    "fullSuite": "not_run",
+    "browser": "not_run"
+  },
+  "developmentFindings": [
+    "The initial high-output native fixture exposed stale tool declarations at the Provider request boundary; fixed and retained in the final regression.",
+    "The first schema-correction regression showed the exploration cap was reused; finalization now selects the reserved response allowance.",
+    "One earlier grouped run failed loading dist during a concurrent rebuild; the protocol now receives the same plan parser from its caller and its tests do not import build output."
+  ],
+  "qualityClaims": {
+    "newModelCalls": 0,
+    "liveDesignerBenefitMeasured": false,
+    "historicalMissesQualified": false
+  },
+  "sourceHashEncoding": "Git blob bytes at runtimeCodeRevision, independent of working-copy line endings"
+}

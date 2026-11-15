@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Publish the first offline frozen-check calibration: 18 native executions, identical inherited Flask failures, known Astropy/SymPy separation and an unavailable Matplotlib plan. Keep runtime convergence fixture evidence distinct from live-model quality.
+
 - Treat the sole check-plan schema correction as finalization, using its reserved response allowance with tools closed. Scope wire-payload caps to Pi OpenAI Completions/Responses adapters, preserving other Providers and ordinary reviewer ceilings.
 
 - Add no-model baseline/candidate calibration for pinned frozen upstream checks. Use separate offline containers and native Pi programmatic shell receipts; retain inherited failures, unavailable plans and integrity errors without labeling them defect catches.
