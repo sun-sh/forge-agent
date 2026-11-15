@@ -62,9 +62,11 @@ describe('managed Pi subagents', () => {
       { id: 'B2', kind: 'expected_failure', requestQuote: 'Keep boundaries', reason: 'Existing boundary remains valid' }
     ] };
     let calls = 0;
-    const f = await fixture((input, res) => answer(res, input, ++calls === 1 ? 'invalid JSON' : JSON.stringify(correction)));
+    const f = await fixture((input, res) => answer(res, input, JSON.stringify(++calls === 1 ? { ...correction, findings: correction.findings.map(item => ({...item, command: 'unexpected command', expectation: 'unexpected expectation'})) } : correction)));
     const result = await f.agents.behaviorCorrection('PFORGE TASK PHASE: behavior_correction. Original request and baseline only.', new AbortController().signal);
     expect(JSON.parse(result.text)).toEqual(correction);
+    expect(text(f.requests[1])).toContain('findings.0');
+    expect(text(f.requests[1])).toContain('Unrecognized keys');
     expect(f.requests).toHaveLength(2);
     expect(text(f.requests[0])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
     expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);

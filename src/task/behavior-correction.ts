@@ -8,6 +8,12 @@ export const CORRECTION_FORMAT = "Return ONLY JSON matching this example shape: 
 export function parseBehaviorCorrection(output: string): BehaviorCorrection | undefined {
   try { return behaviorCorrectionSchema.parse(parseHandoffJson(output, 45000)); } catch { return undefined; }
 }
+export function behaviorCorrectionFeedback(output: string): string {
+  try {
+    const parsed = behaviorCorrectionSchema.safeParse(parseHandoffJson(output, 45000));
+    return parsed.success ? '' : parsed.error.issues.slice(0, 6).map(issue => (issue.path.join('.') || 'correction') + ': ' + issue.message).join(String.fromCharCode(10)).slice(0, 2000);
+  } catch { return 'Return one complete diagnosis JSON object without prose or Markdown.'; }
+}
 /** Retained checks keep host-frozen wording; no semantic equivalence is inferred. */
 export function preserveBehaviorExpectations(old: BehaviorPlan, proposed: BehaviorCorrection) {
   const result = structuredClone(proposed), preservedExpectations: Array<{checkId:string;proposed:string;retained:string}> = [];

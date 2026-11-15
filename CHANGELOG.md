@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Supply field-specific schema diagnostics to the sole baseline-diagnosis format retry, keeping tools closed and strict schemas, turn and cost ceilings unchanged.
+
 - Keep frozen expectations for explicitly retained checks with identical commands; audit ignored model rephrases instead of accepting them or adding model retries.
 
 - Bind candidate behavior comparisons to complete pre-run and settled workspace stamps; changed, missing or unsettled versions remain unconfirmed, including restored calibrated records.

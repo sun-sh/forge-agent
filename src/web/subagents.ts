@@ -11,7 +11,7 @@ import { WorkerWorktrees } from '../task/worktrees.js';
 import { parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, REVIEW_FORMAT_RETRY } from '../task/review.js';
 import { parseBehaviorPlan, behaviorPlanFeedback, BEHAVIOR_FORMAT } from '../task/behavior.js';
 import { capDesignPayload, designAllowance, DESIGN_READ_LIMIT, DESIGN_FINAL_OUTPUT } from '../task/behavior-design-budget.js';
-import { parseBehaviorCorrection, CORRECTION_FORMAT } from '../task/behavior-correction.js';
+import { parseBehaviorCorrection, behaviorCorrectionFeedback, CORRECTION_FORMAT } from '../task/behavior-correction.js';
 import { REVIEW_BUDGETS, reviewBudgetProfileSchema, type ReviewBudgetProfile } from '../task/review-budget.js';
 
 const ENTRY = 'forge.subagent';
@@ -366,11 +366,11 @@ export class ForgeSubagents {
           if (design) collectionClosed = true; // The sole correction is finalization, not another collection round.
           record.formatRetries = 1; this.publish(record);
           budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
-          await created.session.prompt(correcting ? 'HOST BASELINE DIAGNOSIS FORMAT CORRECTION. This is the only retry in the same session and budget. ' + CORRECTION_FORMAT : design ? 'HOST CHECK PLAN FORMAT CORRECTION. This is the only retry in the same session and budget. Preserve the original request. Correct these specific schema errors: ' + behaviorPlanFeedback(result ?? '') + '\n' + BEHAVIOR_FORMAT : REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });
+          await created.session.prompt(correcting ? 'HOST BASELINE DIAGNOSIS FORMAT CORRECTION. This is the only retry in the same session and budget. Correct these specific schema errors: ' + behaviorCorrectionFeedback(result ?? '') + String.fromCharCode(10) + CORRECTION_FORMAT : design ? 'HOST CHECK PLAN FORMAT CORRECTION. This is the only retry in the same session and budget. Preserve the original request. Correct these specific schema errors: ' + behaviorPlanFeedback(result ?? '') + '\n' + BEHAVIOR_FORMAT : REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });
           budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
           if (failure) throw new Error(failure);
           result = created.session.getLastAssistantText()?.trim();
-          if (!validResult(result)) throw new ReviewFormatError('独立审阅格式校正一次后仍无效，需要人工检查；未重跑整个任务。');
+          if (!validResult(result)) throw new ReviewFormatError((correcting ? '基线诊断' : design ? '行为检查设计' : '独立审阅') + '格式校正一次后仍无效，需要人工检查；未重跑整个任务。');
         }
       } finally { controller.signal.removeEventListener('abort', abort); }
       if (!result) throw new Error('子任务没有返回结论。');
