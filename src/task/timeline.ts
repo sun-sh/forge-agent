@@ -5,7 +5,7 @@ export interface ExecutionNode {
   id: string; parentId?: string; kind: 'task' | 'phase' | 'model' | 'tool' | 'check'; label: string;
   status: TaskStatus | 'unconfirmed'; source: 'host' | 'pi';
   startedAt?: string; endedAt?: string; durationMs?: number; timing?: 'host' | 'message_interval';
-  tokens?: number; attempt?: number; freshness?: string; evidenceId?: string;
+  tokens?: number; attempt?: number; freshness?: string; evidenceId?: string; checkRole?: 'baseline' | 'candidate';
 }
 export interface ExecutionTimeline {
   version: 1; taskId: string; nodes: ExecutionNode[];
@@ -47,10 +47,11 @@ export function executionTimeline(entries: readonly TimelineEntry[], options: { 
   const phaseId = (index: number) => task.id + ':phase:' + index;
   const attempts = new Map<string, number>();
   for (const [index, phase] of task.phases.entries()) {
-    const attempt = (attempts.get(phase.phase) ?? 0) + 1; attempts.set(phase.phase, attempt);
+    const attemptKey = phase.phase + (phase.checkRole ? ':' + phase.checkRole : '');
+    const attempt = (attempts.get(attemptKey) ?? 0) + 1; attempts.set(attemptKey, attempt);
     const last = index === task.phases.length - 1;
     const phaseStatus = phase.phase === 'complete' ? status : !last ? 'completed' : active ? 'running' : status;
-    add({ id: phaseId(index), parentId: task.id, kind: 'phase', label: phase.phase, status: phaseStatus, source: 'host', startedAt: phase.startedAt, endedAt: phase.endedAt, durationMs: duration(phase.startedAt, phase.endedAt), timing: 'host', attempt });
+    add({ id: phaseId(index), parentId: task.id, kind: 'phase', label: phase.phase, ...(phase.checkRole ? { checkRole: phase.checkRole } : {}), status: phaseStatus, source: 'host', startedAt: phase.startedAt, endedAt: phase.endedAt, durationMs: duration(phase.startedAt, phase.endedAt), timing: 'host', attempt });
     if (index) result.edges.push({ from: phaseId(index - 1), to: phaseId(index), kind: phase.phase === 'implement' && attempt > 1 ? 'retry' : 'next' });
   }
   // The delivery reviewer runs in a fresh Pi sub-session, so it has no

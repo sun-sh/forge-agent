@@ -71,3 +71,20 @@ See [review outcomes / 审阅结果](review-outcomes.md) for structured stop rea
 ## Behavioral receipt gate
 
 Configured Planned changes may carry `task.behavior` and `result.behaviorChecks=not_run|running|passed|failed|unconfirmed`. The plan, native command receipts, run IDs, original-request hash and workspace digest are durable. Incomplete/failed/stale behavior receipts keep `result.status=blocked` even if the static review says ready. A passing process result is still not complete behavioral acceptance; `resolutionClaimed=false` and `acceptance=unverified` remain. See [behavioral checks](behavior-checks.md) for permissions, current-version binding and recovery.
+
+New production-calibrated tasks also expose optional `task.result.behaviorCalibration`, derived and strictly validated by `src/task/result.ts`. It is omitted when the saved task has no calibration state; legacy history is not assigned a new baseline. This is an API projection, separate from the persistent source evidence under `task.behavior.calibration`.
+
+| Field under `behaviorCalibration` | Values / meaning |
+| --- | --- |
+| `baseline.status` | `pending`, `running`, `observed`, `unavailable`, `unconfirmed`. Derived for the current frozen plan and admissible baseline; an apparently observed run with invalid correction evidence is unconfirmed. `observed` can include expected nonzero reproduction results; it does not mean all checks passed. |
+| `baseline.runCount` | Integer 0–4, counting all retained baseline admissions, including original, replacement and interrupted/recovery runs. Not a pass count or remaining repair budget. |
+| `implementationStarted` | Boolean; once set, no new check design or baseline rebuild is admitted. Candidate executions can still be refreshed. |
+| `correction.status` | `not_run`, `running`, `kept`, `replaced`, `unavailable`. Describes the single fresh reader-only diagnosis, distinct from code review. |
+| `correction.consumed` | Boolean derived from the presence of a diagnosis record. Running, failed and interrupted attempts consume the opportunity too; continuation does not reset it. |
+| `comparisons` | At most three rows `{checkId, outcome, sameOutput}`; empty while the active run purpose is baseline. Recomputed from native receipts rather than trusting stored comparison flags. |
+
+Comparison outcomes are `changed_to_pass`, `unchanged_pass`, `pre_existing_failure`, `candidate_regression` and `unconfirmed`. The first four describe the failed/passed transitions of an admitted baseline and a usable candidate receipt; they do not prove a code defect or full requirement coverage. `sameOutput` is output-hash equality only. Missing/invalid baseline or diagnosis evidence remains blocking even if candidate/configured checks pass and a static review says ready. Product results do not expose or infer an external defect verdict from these observation labels.
+
+Durable details include `task.behavior.runPurpose=baseline|candidate`, plan snapshots and native receipts in `task.behavior.calibration.runs`, and the diagnosis/source-quote hash evidence in `calibration.correction`. Do not confuse this baseline with the existing top-level Git/protection baseline. Raw saved comparison labels and an old passing flag cannot upgrade the derived result. The [calibration contract](behavior-calibration.md#production-calibration) defines correction admission and same-workspace recovery. No result field certifies acceptance or changes `resolutionClaimed=false`.
+
+中文：新生产任务可在派生结果中提供 `behaviorCalibration`，分别展示基线状态/累计准入次数、实现是否开始、一次诊断的状态/是否消耗及逐项前后比较。`observed` 允许预期复现失败，`sameOutput` 只表示输出哈希一致；它们都不是具体缺陷或需求验收证明。缺少/无效基线不能由静态 ready 或候选通过豁免；历史无校准记录不补造此字段。四次为全部基线准入上限，继续不重置一次诊断机会。

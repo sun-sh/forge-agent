@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { readFile } from 'node:fs/promises';
-import { safeMarkdown, sessionOutcome, verificationLabel, reviewStopView } from '../src/web/ui/render.js';
+import { safeMarkdown, sessionOutcome, verificationLabel, reviewStopView, taskPhaseLabel, taskPhaseSteps, behaviorCheckView } from '../src/web/ui/render.js';
 import { createSseParser, readEventStream, StreamError } from '../src/web/ui/stream.js';
 import { mountCustomProviders } from '../src/web/ui/providers.js';
 import { mountMcp } from '../src/web/ui/mcp.js';
@@ -74,6 +74,49 @@ it('uses a warning color for unverified status instead of the success green', as
   });
 
 describe('safe agent output', () => {
+  it('shows baseline checks before implementation and candidate checks after it inside the compact UI', async () => {
+    const { window, app } = await client(); app.state.sessionId = 'calibration';
+    const at = new Date().toISOString(), baselineOutput = 'BASELINE_FAILURE <img src=x onerror=alert(1)>';
+    const behavior = { status: 'pending', runPurpose: 'baseline', receipts: [], calibration: { implementationStarted: false, comparisons: [{ checkId: 'B1', outcome: 'changed_to_pass' }], runs: [{ status: 'observed', receipts: [{ checkId: 'B1', status: 'failed', exitCode: 1, output: baselineOutput }] }], correction: { status: 'unavailable', error: 'Diagnosis interrupted' } } };
+    const calibration = { baseline: { status: 'unconfirmed', runCount: 1 }, implementationStarted: false, correction: { status: 'unavailable', consumed: true }, comparisons: [] };
+    const task = { id: 'task', kind: 'change', workflow: 'planned', phase: 'check', status: 'running', repairs: 0, phases: [{ phase: 'plan', startedAt: at }, { phase: 'check', checkRole: 'baseline', startedAt: at }], behavior, result: { behaviorChecks: 'not_run', behaviorCalibration: calibration } };
+    app.applySnapshot({ id: 'calibration', running: true, task, messages: [] });
+    const doc = window.document, steps = [...doc.querySelectorAll('#task-steps li')].map(node => node.textContent);
+    expect(steps.findIndex(text => text.includes('基线检查'))).toBeLessThan(steps.findIndex(text => text.includes('实现')));
+    expect(steps.findIndex(text => text.includes('候选检查'))).toBeGreaterThan(steps.findIndex(text => text.includes('实现')));
+    expect(doc.querySelector('#task-steps [aria-current=step]').textContent).toContain('基线检查');
+    expect(doc.getElementById('task-summary-phase').textContent).toBe('基线检查');
+    expect(doc.getElementById('run-status-label').textContent).toBe('正在基线检查');
+    expect(doc.getElementById('task-panel').open).toBe(false);
+    expect(doc.querySelector('#task-review details.behavior-checks').open).toBe(false);
+    expect(doc.getElementById('task-review').textContent).toContain(baselineOutput);
+    expect(doc.getElementById('task-review').textContent).toContain('单次机会已消耗');
+    expect(doc.getElementById('task-review').textContent).not.toContain('失败转通过');
+    expect(doc.querySelector('#task-review summary').textContent).not.toContain('BASELINE_FAILURE');
+    expect(doc.querySelector('#task-review img')).toBeNull();
+    behavior.runPurpose = 'candidate'; behavior.status = 'failed'; behavior.receipts = [{ checkId: 'B1', status: 'failed', exitCode: 1, output: 'CANDIDATE_FAILURE' }];
+    calibration.implementationStarted = true; calibration.comparisons = [{ checkId: 'B1', outcome: 'pre_existing_failure', sameOutput: false }];
+    task.phases.push({ phase: 'implement', startedAt: at }, { phase: 'check', checkRole: 'candidate', startedAt: at });
+    task.result.behaviorChecks = 'failed';
+    app.applySnapshot({ id: 'calibration', running: true, task, messages: [] });
+    expect(doc.querySelector('#task-steps [aria-current=step]').textContent).toContain('候选检查');
+    expect(doc.getElementById('task-summary-phase').textContent).toBe('候选检查');
+    expect(doc.getElementById('task-phase-history').textContent).toMatch(/基线检查[\s\S]*实现[\s\S]*候选检查/);
+    expect(doc.getElementById('task-review').textContent).toContain('基线已有失败');
+    expect(doc.getElementById('task-review').textContent).toContain('CANDIDATE_FAILURE');
+    expect(doc.getElementById('task-review').textContent).not.toContain('失败转通过');
+  });
+  it('keeps legacy checks generic and does not invent calibrated outcomes from cached comparisons', () => {
+    const task = { workflow: 'planned', kind: 'change', phase: 'check', behavior: { status: 'failed', receipts: [], reason: 'Native failure' } };
+    expect(taskPhaseSteps(task).map(item => taskPhaseLabel(item.phase, item.checkRole))).toEqual(['调研', '规划', '实现', '行为检查', '验证', '审阅', '执行结束']);
+    expect(sessionOutcome({ running: true, task }).label).toBe('正在行为检查');
+    expect(behaviorCheckView(task).detail).toContain('Native failure');
+    task.behavior.calibration = { status: 'observed', runs: [], comparisons: [{ checkId: 'B1', outcome: 'changed_to_pass' }] };
+    const view = behaviorCheckView(task);
+    expect(view.summary).toContain('基线未确认');
+    expect(view.detail).not.toContain('失败转通过');
+    expect(taskPhaseSteps({ ...task, workflow: 'direct' }).map(item => item.phase)).toEqual(['implement', 'complete']);
+  });
   it('keeps subagent navigation compact and displays child output safely in a separate panel', async () => {
     const { window, app, requests, reviewMedia } = await client();
     const doc = window.document;
@@ -264,7 +307,7 @@ async function client(initial = {}) {
     matchMedia: () => reviewMedia,
     marked, DOMPurify: createDOMPurify(window), StreamError, mountCustomProviders, mountMcp, mountSkills, lifecycleUI,
     builtinCommands, filterCommands, parseCommand,
-    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome, verificationLabel, reviewStopView,
+    safeMarkdown, textContent: (content) => typeof content === 'string' ? content : (content || []).filter((part) => part.type === 'text').map((part) => part.text).join('\n'), sessionOutcome, verificationLabel, reviewStopView, taskPhaseLabel, taskPhaseSteps, behaviorCheckView,
     readEventStream: (_url, _token, options) => { streams.push(options); return new Promise((resolve) => options.signal.addEventListener('abort', resolve)); },
     fetch: async (url, init = {}) => {
       requests.push({ url, ...init });
@@ -1439,7 +1482,9 @@ describe('Web client integration', () => {
   it('opens acceptance and tool history in the right execution tab and preserves expanded phases on refresh', async () => {
     const { window, app } = await client(); app.state.sessionId = 'run';
     const nodes = [
-      { id: 'task', kind: 'task' }, { id: 'phase', parentId: 'task', kind: 'phase', label: 'implement', status: 'completed', durationMs: 1000, attempt: 2 },
+      { id: 'task', kind: 'task' }, { id: 'baseline', parentId: 'task', kind: 'phase', label: 'check', checkRole: 'baseline', status: 'completed', attempt: 1 },
+      { id: 'phase', parentId: 'task', kind: 'phase', label: 'implement', status: 'completed', durationMs: 1000, attempt: 2 },
+      { id: 'candidate', parentId: 'task', kind: 'phase', label: 'check', checkRole: 'candidate', status: 'completed', attempt: 1 },
       { id: 'model', parentId: 'phase', kind: 'model', status: 'completed', tokens: 42 },
       { id: 'reviewer', parentId: 'phase', kind: 'model', label: 'independent reviewer', status: 'completed' },
       { id: 'tool', parentId: 'model', kind: 'tool', label: '<img src=x>', status: 'interrupted', durationMs: 500, timing: 'message_interval' }
@@ -1453,6 +1498,8 @@ describe('Web client integration', () => {
     await vi.waitFor(() => expect(timeline.textContent).toContain('第 2 次'));
     expect(app.state.changes.reviewView).toBe('execution'); expect(timeline.textContent).toContain('42 tokens');
     expect(timeline.textContent).toContain('独立交付审阅');
+    expect([...timeline.querySelectorAll('details > summary span')].map(node => node.textContent)).toEqual(['基线检查', '实现 · 第 2 次', '候选检查']);
+    expect([...timeline.querySelectorAll('details')].every(node => !node.open)).toBe(true);
     expect(timeline.textContent).toContain('已中断 · 约 0.5s'); expect(timeline.querySelector('img')).toBeNull();
     expect(window.document.getElementById('task-plan').textContent).toContain('A1'); expect(window.document.getElementById('task-plan').querySelector('img')).toBeNull();
     timeline.querySelector('details').open = true;

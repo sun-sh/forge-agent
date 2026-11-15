@@ -8,6 +8,22 @@ const call = (id: string, time = 1000): TimelineEntry => ({ type: 'message', id,
 const output = (time = 1050): TimelineEntry => ({ type: 'message', message: { role: 'toolResult', toolCallId: 'same-tool-id', timestamp: time, content: [{ type: 'text', text: 'PRIVATE_OUTPUT' }], isError: false } });
 
 describe('Pi-backed read-only execution projection', () => {
+  it('preserves actual baseline and candidate check phases with independent attempt counts', () => {
+    const task = createExecutionState('Fix task', { workflow: 'planned' });
+    const at = task.startedAt; task.phase = 'check';
+    task.phases = [{ phase: 'plan', startedAt: at, endedAt: at }, { phase: 'check', checkRole: 'baseline', startedAt: at, endedAt: at }, { phase: 'implement', startedAt: at, endedAt: at }, { phase: 'check', checkRole: 'candidate', startedAt: at, endedAt: at }, { phase: 'implement', startedAt: at, endedAt: at }, { phase: 'check', checkRole: 'candidate', startedAt: at }];
+    const entries = [snapshot(task)], saved = structuredClone(entries);
+    const result = executionTimeline(entries, { activeTaskId: task.id })!;
+    expect(result.nodes.filter(node => node.kind === 'phase').map(node => ({ label: node.label, checkRole: node.checkRole, attempt: node.attempt }))).toEqual([
+      { label: 'plan', checkRole: undefined, attempt: 1 }, { label: 'check', checkRole: 'baseline', attempt: 1 }, { label: 'implement', checkRole: undefined, attempt: 1 }, { label: 'check', checkRole: 'candidate', attempt: 1 }, { label: 'implement', checkRole: undefined, attempt: 2 }, { label: 'check', checkRole: 'candidate', attempt: 2 }
+    ]);
+    expect(result).toEqual(executionTimeline(JSON.parse(JSON.stringify(entries)), { activeTaskId: task.id }));
+    expect(entries).toEqual(saved);
+    task.phases = [{ phase: 'check', startedAt: at }];
+    const legacy = executionTimeline([snapshot(task)])!.nodes.find(node => node.kind === 'phase')!;
+    expect(legacy).toMatchObject({ label: 'check', attempt: 1 });
+    expect(legacy).not.toHaveProperty('checkRole');
+  });
   it('retains each independent reviewer under its own attempt and does not attach the previous result to a running retry', () => {
     const task = createExecutionState('Fix task', { workflow: 'planned' });
     task.phase = 'review'; task.phases = [{ phase: 'review', startedAt: task.startedAt, endedAt: task.updatedAt }];

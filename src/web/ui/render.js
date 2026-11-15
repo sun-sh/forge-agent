@@ -41,6 +41,44 @@ function implementationResultLabel(task) {
   const modified = task.kind === 'change' || task.artifacts?.length || task.changes?.files?.some((file) => file.observed);
   return (modified ? '已实现' : '执行结束') + ' · 需求未验收';
 }
+export function taskPhaseLabel(phase, checkRole) {
+  if (phase === 'check' && checkRole === 'baseline') return '基线检查';
+  if (phase === 'check' && checkRole === 'candidate') return '候选检查';
+  return ({ inspect: '调研', plan: '规划', implement: '实现', check: '行为检查', verify: '验证', review: '审阅', complete: '执行结束' })[phase] || phase;
+}
+export function taskPhaseSteps(task) {
+  const phases = task.kind === 'verify' ? ['verify', 'complete'] : task.workflow === 'direct' ? ['implement', 'complete'] : ['inspect', 'plan', 'implement', ...(task.behavior ? ['check'] : []), 'verify', 'review', 'complete'];
+  return phases.flatMap((phase) => {
+    if (!task.behavior?.calibration || task.workflow === 'direct') return [{ phase }];
+    if (phase === 'implement') return [{ phase: 'check', checkRole: 'baseline' }, { phase }];
+    return [{ phase, ...(phase === 'check' ? { checkRole: 'candidate' } : {}) }];
+  });
+}
+export function behaviorCheckView(task) {
+  const behavior = task.behavior;
+  if (!behavior) return null;
+  const calibration = task.result?.behaviorCalibration;
+  const status = task.result?.behaviorChecks ?? (behavior.calibration && behavior.status === 'passed' ? 'unconfirmed' : behavior.status);
+  const statusLabel = ({ pending: '等待执行', not_run: '等待执行', running: '执行中', passed: '冻结检查命令已通过，需求仍未验收', failed: '命令未通过，需区分行为与环境', unconfirmed: '证据未确认' })[status] || '未确认';
+  const baselineLabel = ({ pending: '等待执行', running: '执行中', observed: '已观测', unavailable: '不可用', unconfirmed: '未确认' })[calibration?.baseline.status] || '未确认';
+  const comparisons = { changed_to_pass: '失败转通过', unchanged_pass: '持续通过', pre_existing_failure: '基线已有失败', candidate_regression: '候选回归', unconfirmed: '对照未确认' };
+  const receiptText = (receipts) => (receipts || []).map((item) => item.checkId + ' · ' + item.status + ' · exit=' + (item.exitCode ?? 'unknown') + '\n' + item.output).join('\n');
+  const lines = [];
+  if (behavior.calibration) {
+    lines.push('基线：' + baselineLabel);
+    if (calibration) {
+      lines.push('实现：' + (calibration.implementationStarted ? '已开始' : '尚未开始'));
+      lines.push('基线诊断：' + ({ not_run: '未使用', running: '进行中', kept: '保留原检查', replaced: '已校正检查', unavailable: '不可用' })[calibration.correction.status] + (calibration.correction.consumed ? ' · 单次机会已消耗' : ''));
+      for (const row of calibration.comparisons) lines.push(row.checkId + ' · ' + comparisons[row.outcome] + (row.sameOutput ? ' · 输出相同' : ''));
+    }
+    if (behavior.calibration.correction?.result?.summary) lines.push(behavior.calibration.correction.result.summary);
+    if (behavior.calibration.correction?.error) lines.push(behavior.calibration.correction.error);
+    for (const [index, run] of (behavior.calibration.runs || []).entries()) lines.push('基线记录 ' + (index + 1) + ' · ' + run.status, receiptText(run.receipts), run.reason || '');
+  }
+  if (behavior.runPurpose !== 'baseline') lines.push((behavior.calibration ? '候选检查：' : '行为检查：') + statusLabel, receiptText(behavior.receipts));
+  if (behavior.reason) lines.push(behavior.reason);
+  return { summary: '行为检查 · ' + (behavior.calibration ? '基线' + baselineLabel + (behavior.runPurpose === 'baseline' ? '' : ' · 候选' + statusLabel) : statusLabel), detail: lines.filter(Boolean).join('\n') };
+}
 export function reviewStopView(task) {
   let stop = task?.result?.reviewStop ?? task?.reviewStop;
   if (!stop && task?.review) {
@@ -58,7 +96,6 @@ export function reviewStopView(task) {
 }
 export function sessionOutcome(data) {
   if (data.task) {
-    const labels = { inspect: '调研', plan: '规划', implement: '实现', check: '行为检查', verify: '验证', review: '审阅', complete: '执行结束' };
     if (!data.running && (data.task.finalization === 'failed' || data.task.status === 'completed' && (data.error || data.task.error || data.outcome === 'failed'))) return { label: '任务失败 · 收尾或执行异常', kind: 'failed' };
     if (data.running && data.task.finalization === 'pending') return { label: '正在完成收尾', kind: 'running' };
     const readOnlyMode = ['ask', 'plan'].includes(data.runMode ?? data.task.mode);
@@ -68,7 +105,7 @@ export function sessionOutcome(data) {
       if (data.error || data.outcome === 'failed' || data.task.status === 'failed' || data.task.status === 'needs_attention') return { label: '回答失败 · 需要检查', kind: 'failed' };
       if (data.task.status === 'completed') return { label: data.task.workflow === 'planned' || readOnlyMode ? '回答结束 · 未执行修改' : '回答结束', kind: 'done' };
     }
-    if (data.running) return { label: '正在' + (labels[data.task.phase] || '运行'), kind: 'running' };
+    if (data.running) return { label: '正在' + (taskPhaseLabel(data.task.phase, data.task.phases?.at(-1)?.checkRole ?? data.task.behavior?.runPurpose) || '运行'), kind: 'running' };
     const reviewStop = reviewStopView(data.task);
     if (reviewStop && data.task.phase === 'review' && ['needs_attention', 'failed', 'budget_exceeded'].includes(data.task.status)) return { label: reviewStop.label, kind: reviewStop.kind };
     if (data.task.status === 'budget_exceeded') return { label: '执行预算已用尽 · 可继续', kind: 'failed' };

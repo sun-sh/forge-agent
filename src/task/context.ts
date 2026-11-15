@@ -1,4 +1,5 @@
 import type { TaskState } from './controller.js';
+import { behaviorCalibrationSummary } from './result.js';
 
 /** Keep both ends of unstructured requests; structured requirements are never sliced. */
 function excerpt(text: string, limit = 1600): string {
@@ -16,6 +17,11 @@ export function taskCheckpoint(task?: TaskState): string {
   const value: Record<string, unknown> = {
     ...(!requirements ? { goal: excerpt(task.prompt) } : {}), workflow: task.workflow ?? 'planned', phase: task.phase,
     originalRequest: { taskId: task.id, characters: task.prompt.length, excerptOnly: !requirements && task.prompt.length > 1600 },
+    ...(task.behavior ? { behavior: {
+      status: task.behavior.status, checkIds: task.behavior.plan?.checks.map((check) => check.id), requestSha256: task.behavior.requestSha256,
+      runPurpose: task.behavior.runPurpose, calibration: behaviorCalibrationSummary(task.behavior),
+      ...(task.behavior.reason ? { reason: excerpt(task.behavior.reason, 400) } : {})
+    } } : {}),
     ...(requirements ? { requirements }
       : task.plan ? { requirements: { constraints: task.plan.constraints, acceptance: task.plan.acceptance } } : {}),
     ...(task.resumeOf ? { resumedFrom: task.resumeOf, reminder: 'Reinspect current files; do not replay old operations.' } : {}),
@@ -34,7 +40,6 @@ export function taskCheckpoint(task?: TaskState): string {
   // Add background only after complete constraints and acceptance fit. Never cut serialized JSON.
   const optional = {
     ...(previous ? { lastPhase: previous.phase, handoff: excerpt(previous.summary!, 800) } : {}),
-    ...(task.behavior ? { behavior: { status: task.behavior.status, checkIds: task.behavior.plan?.checks.map((check) => check.id), requestSha256: task.behavior.requestSha256, reason: task.behavior.reason } } : {}),
     issues: (task.review?.issues ?? []).slice(0, 5).map((issue) => excerpt(issue, 160)),
     ...(task.error ? { unresolved: excerpt(task.error, 400) } : {})
   };

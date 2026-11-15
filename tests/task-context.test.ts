@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { taskCheckpoint } from '../src/task/context.js';
 import type { TaskState } from '../src/task/controller.js';
 import { taskRequirementsSchema } from '../src/task/plan.js';
+import { newBehaviorState } from '../src/task/behavior.js';
 
 const requirements = {
   goal: 'Fix the login response without changing the public contract.',
@@ -21,6 +22,21 @@ function task(overrides: Partial<TaskState> = {}): TaskState {
 }
 
 describe('task context checkpoint', () => {
+  it('preserves the implementation boundary and consumed diagnosis ahead of optional background', () => {
+    const behavior = newBehaviorState('long request');
+    behavior.runPurpose = 'candidate'; behavior.calibration!.implementationStarted = true;
+    behavior.calibration!.correction = { status: 'unavailable', error: 'PRIVATE_DIAGNOSIS_OUTPUT'.repeat(60) };
+    const requirements = taskRequirementsSchema.parse({ goal: 'g'.repeat(4000), constraints: Array.from({ length: 7 }, (_, index) => String(index) + 'c'.repeat(999)), affectedPaths: ['p'.repeat(500)], acceptance: [], unresolved: [] });
+    const checkpoint = taskCheckpoint(task({ behavior, requirements, phases: [{ phase: 'check', checkRole: 'candidate', startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), summary: 'OPTIONAL_BACKGROUND'.repeat(100) }] }));
+    const json = checkpoint.slice(checkpoint.indexOf('\n') + 1), value = JSON.parse(json);
+    expect(json.length).toBeLessThanOrEqual(16000);
+    expect(value.requirements).toEqual(requirements);
+    expect(value.behavior).toMatchObject({ runPurpose: 'candidate', calibration: { implementationStarted: true, correction: { status: 'unavailable', consumed: true } } });
+    expect(json).not.toContain('PRIVATE_DIAGNOSIS_OUTPUT');
+    behavior.calibration!.implementationStarted = false; behavior.runPurpose = 'baseline';
+    const before = JSON.parse(taskCheckpoint(task({ behavior })).split('\n')[1]!);
+    expect(before.behavior).toMatchObject({ runPurpose: 'baseline', calibration: { implementationStarted: false, correction: { consumed: true }, comparisons: [] } });
+  });
   it('keeps the host-owned goal, constraints and acceptance complete', () => {
     const checkpoint = taskCheckpoint(task({ prompt: 'background '.repeat(10_000) + 'TAIL USER REQUEST' }));
     expect(checkpoint).toContain('Do not delete the production database.');

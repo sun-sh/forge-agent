@@ -2,9 +2,28 @@ import { z } from 'zod';
 import type { TaskState } from './controller.js';
 import { acceptanceSatisfied } from './plan.js';
 import { isVerified, isVerificationUnconfigured } from '../verification/pi-extension.js';
-import { behaviorCurrent, behaviorHash } from './behavior.js';
+import { behaviorBaseline, behaviorBaselineCurrent, behaviorComparisonSchema, behaviorCurrent, behaviorHash, compareBehaviorBaseline, type BehaviorState } from './behavior.js';
 import { reviewStop, reviewStopSchema } from './review.js';
 
+
+export const behaviorCalibrationSchema = z.object({
+  baseline: z.object({ status: z.enum(['pending', 'running', 'observed', 'unavailable', 'unconfirmed']), runCount: z.number().int().min(0).max(4) }).strict(),
+  implementationStarted: z.boolean(),
+  correction: z.object({ status: z.enum(['not_run', 'running', 'kept', 'replaced', 'unavailable']), consumed: z.boolean() }).strict(),
+  comparisons: z.array(behaviorComparisonSchema).max(3)
+}).strict();
+
+/** Compact read projection; persisted comparison flags are never evidence. */
+export function behaviorCalibrationSummary(state: BehaviorState) {
+  if (!state.calibration) return undefined;
+  const calibration = state.calibration, baseline = behaviorBaseline(state);
+  return behaviorCalibrationSchema.parse({
+    baseline: { status: behaviorBaselineCurrent(state) ? 'observed' : baseline?.status === 'observed' ? 'unconfirmed' : baseline?.status ?? (calibration.status === 'unavailable' ? 'unavailable' : 'pending'), runCount: calibration.runs.length },
+    implementationStarted: calibration.implementationStarted,
+    correction: { status: calibration.correction?.status ?? 'not_run', consumed: Boolean(calibration.correction) },
+    comparisons: state.runPurpose === 'baseline' ? [] : compareBehaviorBaseline(state)
+  });
+}
 
 export const taskResultSchema = z.object({
   version: z.literal(1),
@@ -15,6 +34,7 @@ export const taskResultSchema = z.object({
   checks: z.enum(['passed', 'not_configured', 'not_run', 'running', 'failed', 'unconfirmed']),
   modelReview: z.enum(['passed', 'not_applicable', 'not_run', 'unconfirmed', 'changes_requested', 'insufficient_evidence', 'budget_exhausted']),
   behaviorChecks: z.enum(['not_run', 'running', 'passed', 'failed', 'unconfirmed']).optional(),
+  behaviorCalibration: behaviorCalibrationSchema.optional(),
   reviewStop: reviewStopSchema.optional()
 }).strict();
 export type TaskResult = z.infer<typeof taskResultSchema>;
@@ -56,6 +76,7 @@ export function taskResult(task: TaskState) {
     resolutionClaimed: false as const,
     checks,
     modelReview,
+    ...(task.behavior?.calibration ? { behaviorCalibration: behaviorCalibrationSummary(task.behavior) } : {}),
     ...(task.behavior ? { behaviorChecks: task.behavior.status === 'pending' ? 'not_run' as const : task.behavior.status === 'passed' && !behaviorPassed ? 'unconfirmed' as const : task.behavior.status } : {}),
     ...(stop && !reviewed ? { reviewStop: stop } : {})
   });

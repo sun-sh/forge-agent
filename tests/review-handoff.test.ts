@@ -5,8 +5,35 @@ import { parseTaskBrief, planFromBrief, taskRequirements } from '../src/task/pla
 import handoff from './fixtures/task-handoff.json' with { type: 'json' };
 import { reviewCommandEvidence } from '../src/task/review-evidence.js';
 import { isVerificationUnconfigured } from '../src/verification/pi-extension.js';
+import { randomUUID } from 'node:crypto';
+import { behaviorHash, newBehaviorState, type BehaviorPlan } from '../src/task/behavior.js';
 
 describe('focused independent review handoff', () => {
+  it('includes the selected baseline and correction while deriving comparisons from receipts', () => {
+    const task = createExecutionState('Fix trigger', { workflow: 'planned' });
+    const state = newBehaviorState(task.prompt), runId = randomUUID(), baselineId = randomUUID();
+    const plan: BehaviorPlan = { version: 1, status: 'ready', summary: 'UNIQUE_FROZEN_PLAN', checks: [
+      { id: 'B1', kind: 'reproduction', requestQuote: task.prompt, expectation: 'Trigger works', command: 'node trigger.js', shell: 'bash', timeoutSeconds: 60 },
+      { id: 'B2', kind: 'boundary', requestQuote: task.prompt, expectation: 'Boundary works', command: 'node boundary.js', shell: 'bash', timeoutSeconds: 60 }
+    ], assumptions: [], unresolved: [] };
+    const stamp = { version: 1 as const, scope: 'git' as const, files: 1, digest: 'b'.repeat(64) };
+    const receipts = (id: string, failure: boolean) => plan.checks.map((check, index) => {
+      const failed = failure && index === 0, output = failed ? 'BASELINE_NATIVE_FAILURE' : 'CANDIDATE_NATIVE_OUTPUT';
+      return { version: 1 as const, runId: id, checkId: check.id, toolCallId: randomUUID(), tool: check.shell, commandSha256: behaviorHash(check.command), source: 'pi-builtin-shell' as const, exitCode: failed ? 1 : 0, status: failed ? 'failed' as const : 'passed' as const, output, outputSha256: behaviorHash(output), outputCharacters: output.length, truncated: false, recordedAt: task.updatedAt };
+    });
+    state.plan = plan; state.runId = runId; state.runPurpose = 'candidate'; state.receipts = receipts(runId, false);
+    state.calibration = { version: 1, status: 'observed', implementationStarted: true, runs: [{ runId: baselineId, plan, status: 'observed', before: stamp, after: stamp, receipts: receipts(baselineId, true) }], comparisons: [{ checkId: 'B1', outcome: 'pre_existing_failure', sameOutput: true }], correction: { status: 'kept', result: { version: 1, action: 'keep', summary: 'Preserve the frozen checks', findings: plan.checks.map(check => ({ id: check.id, kind: 'expected_failure', reason: 'Original contract retained', requestQuote: task.prompt })) } } };
+    task.behavior = state; const saved = structuredClone(state);
+    const result = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 });
+    const evidence = JSON.parse(result.prompt.split('\n\nEVIDENCE:\n')[1]!.split('\n')[0]!).independentBehaviorChecks;
+    expect(evidence).toMatchObject({ runPurpose: 'candidate', baseline: { runId: baselineId, receipts: [{ output: 'BASELINE_NATIVE_FAILURE' }, { exitCode: 0 }] }, correction: { status: 'kept', result: { action: 'keep' } }, calibration: { implementationStarted: true, correction: { consumed: true }, comparisons: [{ checkId: 'B1', outcome: 'changed_to_pass', sameOutput: false }, { checkId: 'B2', outcome: 'unchanged_pass' }] } });
+    expect(result.prompt.match(/UNIQUE_FROZEN_PLAN/g)).toHaveLength(1);
+    expect(task.behavior).toEqual(saved);
+    delete state.calibration;
+    const legacy = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 });
+    expect(legacy.prompt).not.toContain('BASELINE_NATIVE_FAILURE');
+    expect(legacy.prompt).not.toContain('implementationStarted');
+  });
   it('keeps a single complete requirement ledger and the actual patch', () => {
     const task = createExecutionState('background '.repeat(3000) + 'TAIL_REQUIREMENT', { workflow: 'planned' });
     task.brief = parseTaskBrief(JSON.stringify({ ...handoff.brief, constraints: ['UNIQUE_CONSTRAINT'], steps: ['Implement the requested behavior'] }))!;

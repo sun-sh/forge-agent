@@ -1,6 +1,6 @@
 import { marked } from '/vendor/marked.js';
 import DOMPurify from '/vendor/purify.js';
-import { safeMarkdown, textContent, sessionOutcome, verificationLabel, reviewStopView } from './render.js';
+import { safeMarkdown, textContent, sessionOutcome, verificationLabel, reviewStopView, taskPhaseLabel, taskPhaseSteps, behaviorCheckView } from './render.js';
 import { readEventStream, StreamError } from './stream.js';
 import { mountCustomProviders } from './providers.js';
 import { mountMcp } from './mcp.js';
@@ -1345,23 +1345,30 @@ function renderTask(task) {
   const showTaskPanel = Boolean(task && (!['answer', 'explore'].includes(task.kind) || task.progress?.status === 'warned' || task.progress?.status === 'stalled'));
   $('task-panel').classList.toggle('hidden', !showTaskPanel);
   if (!task) { $('task-plan').textContent = ''; $('task-review').textContent = '本会话尚无执行记录。'; $('task-phase-history').textContent = ''; $('task-summary-phase').textContent = '任务进度'; $('task-summary-note').textContent = ''; renderDelivery(null); renderBudget(null); renderComposerControl(); return; }
-  const phases = task.workflow === 'direct' ? (task.kind === 'verify' ? ['verify', 'complete'] : ['implement', 'complete']) : task.kind === 'verify' ? ['verify', 'complete'] : Object.keys(TASK_LABELS).filter((phase) => phase !== 'check' || task.behavior), current = phases.indexOf(task.phase);
+  const phases = taskPhaseSteps(task), checkRole = task.phases?.at(-1)?.checkRole ?? task.behavior?.runPurpose;
+  const current = phases.findIndex((item) => item.phase === task.phase && (!item.checkRole || item.checkRole === checkRole));
+  const phaseLabel = taskPhaseLabel(task.phase, checkRole);
   const visited = new Set((task.phases || []).map((item) => item.phase));
-  $('task-steps').innerHTML = phases.map((phase, i) => '<li class="' + (i === current ? 'current' : i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? 'skipped' : 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? task.status === 'completed' && phase === 'review' && !visited.has('review') ? '—' : '✓' : i + 1) + '</span>' + TASK_LABELS[phase] + '</li>').join('');
+  $('task-steps').innerHTML = phases.map((item, i) => '<li class="' + (i === current ? 'current' : i < current ? task.status === 'completed' && item.phase === 'review' && !visited.has('review') ? 'skipped' : 'finished' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span>' + (i < current ? task.status === 'completed' && item.phase === 'review' && !visited.has('review') ? '—' : '✓' : i + 1) + '</span>' + taskPhaseLabel(item.phase, item.checkRole) + '</li>').join('');
   const reviewStatus = reviewStopView(task);
-  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + TASK_LABELS[task.phase]) : reviewStatus && task.phase === 'review' ? reviewStatus.label : task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || '需要检查';
-  $('task-summary-phase').textContent = TASK_LABELS[task.phase] || '任务进度';
+  const compactStatus = task.status === 'running' ? (task.workflow === 'direct' ? '自适应执行中' : '正在' + phaseLabel) : reviewStatus && task.phase === 'review' ? reviewStatus.label : task.status === 'completed' ? sessionOutcome({ task }).label : TASK_STATUS_LABELS[task.status] || '需要检查';
+  $('task-summary-phase').textContent = phaseLabel || '任务进度';
   $('task-summary-note').textContent = compactStatus + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '');
   $('task-note').textContent = task.status === 'running' ? (task.progress?.status === 'warned' ? task.progress.reason : compactStatus) + (task.repairs ? ' · 修复 ' + task.repairs + ' 次' : '') : reviewStatus && task.phase === 'review' ? reviewStatus.detail + (task.error ? '\n' + task.error : '') : task.error || sessionOutcome({ task }).label;
   $('task-review').textContent = (reviewStatus ? reviewStatus.label + '\n' + reviewStatus.detail + '\n' : '') + (task.review ? (task.reviewer?.context === 'independent' ? '独立审阅' : '模型审阅') + (task.review.freshness === 'stale' ? '（已过期）' : task.review.freshness !== 'current' ? '（当前版本未确认）' : '') + '：' + task.review.summary + (task.review.issues?.length ? '\n待处理问题：\n' + task.review.issues.map((issue) => '• ' + issue).join('\n') : '')
     + (task.review.notes?.length ? '\n审阅备注（非阻断）：\n' + task.review.notes.map((note) => '• ' + note).join('\n') : '') : task.workflow === 'direct' || task.kind === 'verify' ? '本次未进行模型审阅。' : implementationWithoutChecks(task) ? '未配置自动验证，本次未启用独立审阅。' : '审阅尚未完成。');
-  $('task-phase-history').textContent = (task.phases || []).map((item) => TASK_LABELS[item.phase] + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
+  $('task-phase-history').textContent = (task.phases || []).map((item) => taskPhaseLabel(item.phase, item.checkRole) + ' · ' + formatTime(item.startedAt) + (item.endedAt ? ' → ' + formatTime(item.endedAt) : '')).join('\n');
   const criteria = task.plan?.acceptance || [];
   $('task-plan').innerHTML = criteria.length ? '<details class="acceptance-plan"><summary>目标与验收 · ' + criteria.length + ' 项</summary><p>' + esc(task.plan.summary) + '</p><ol>' + criteria.map((item) => {
     const finding = task.review?.acceptance?.find((entry) => entry.id === item.id), label = task.review?.freshness !== 'current' && finding ? '当前未确认' : ({ met: '已确认', unmet: '未满足', unconfirmed: '未确认' }[finding?.status] || (implementationWithoutChecks(task) ? '未自动审阅' : '待审阅'));
     return '<li><strong>' + esc(item.id) + ' · ' + esc(label) + '</strong><p>' + esc(item.criterion) + '</p><small>' + esc(finding?.evidence || item.evidence) + '</small></li>';
   }).join('') + '</ol></details>' : '';
-  if (task.behavior) $('task-review').textContent += '\n\n行为检查：' + ({ pending: '等待执行', running: '执行中', passed: '冻结检查命令已通过，需求仍未验收', failed: '命令未通过，需区分行为与环境', unconfirmed: '证据未确认' }[task.behavior.status] || '未确认') + (task.behavior.reason ? '\n' + task.behavior.reason : '') + (task.behavior.receipts || []).map((item) => '\n' + item.checkId + ' · ' + item.status + ' · exit=' + (item.exitCode ?? 'unknown') + '\n' + item.output).join('');
+  const behaviorView = behaviorCheckView(task);
+  if (behaviorView) {
+    const details = document.createElement('details'), summary = document.createElement('summary'), content = document.createElement('pre');
+    details.className = 'behavior-checks'; summary.textContent = behaviorView.summary; content.textContent = behaviorView.detail;
+    details.append(summary, content); $('task-review').append(details);
+  }
   renderDelivery(task);
   scheduleTimeline();
   renderBudget(task.budget || state.budget);
@@ -1384,7 +1391,7 @@ async function loadExecutionTimeline() {
     const belongs = (node, phaseId) => { let id = node.parentId; for (let depth = 0; id && depth < 4; depth++) { if (id === phaseId) return true; id = parents.get(id); } return false; };
     const opened = new Set([...container.querySelectorAll('details[open]')].map((node) => node.dataset.phase));
     const nodeLabel = (node) => node.kind === 'model' ? node.label === 'independent reviewer' ? '独立交付审阅' : '模型响应' : node.kind === 'check' ? '验证 · ' + node.label : node.label;
-    container.innerHTML = '<p class="settings-note">只读历史。工具时长按消息间隔估算，包含等待；没有结果的调用保持中断或进行中。</p>' + timeline.nodes.filter((node) => node.kind === 'phase').map((phase) => '<details class="execution-phase" data-phase="' + esc(phase.id) + '"' + (opened.has(phase.id) ? ' open' : '') + '><summary><span>' + esc(TASK_LABELS[phase.label] || phase.label) + (phase.attempt > 1 ? ' · 第 ' + phase.attempt + ' 次' : '') + '</span><small>' + esc(meta(phase)) + '</small></summary><ol>' + timeline.nodes.filter((node) => belongs(node, phase.id)).map((node) => '<li class="execution-node ' + esc(node.kind) + '"><span>' + esc(nodeLabel(node)) + '</span><small>' + esc(meta(node)) + '</small></li>').join('') + '</ol></details>').join('') + (timeline.truncated ? '<p class="settings-note">记录超过展示上限，请在会话导出中查看原始事件。</p>' : '');
+    container.innerHTML = '<p class="settings-note">只读历史。工具时长按消息间隔估算，包含等待；没有结果的调用保持中断或进行中。</p>' + timeline.nodes.filter((node) => node.kind === 'phase').map((phase) => '<details class="execution-phase" data-phase="' + esc(phase.id) + '"' + (opened.has(phase.id) ? ' open' : '') + '><summary><span>' + esc(taskPhaseLabel(phase.label, phase.checkRole)) + (phase.attempt > 1 ? ' · 第 ' + phase.attempt + ' 次' : '') + '</span><small>' + esc(meta(phase)) + '</small></summary><ol>' + timeline.nodes.filter((node) => belongs(node, phase.id)).map((node) => '<li class="execution-node ' + esc(node.kind) + '"><span>' + esc(nodeLabel(node)) + '</span><small>' + esc(meta(node)) + '</small></li>').join('') + '</ol></details>').join('') + (timeline.truncated ? '<p class="settings-note">记录超过展示上限，请在会话导出中查看原始事件。</p>' : '');
     $('task-phase-history').classList.add('hidden');
   } catch (error) { if (request === timelineRequest && session === state.sessionId && taskId === state.task?.id) container.textContent = '执行记录暂不可用：' + error.message; }
 }

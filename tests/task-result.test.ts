@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createExecutionState, restoreTask, type TaskState } from '../src/task/controller.js';
 import { publicTask, taskResult, taskResultSchema } from '../src/task/result.js';
 import { TaskRegistry } from '../src/task/registry.js';
+import { beginBehaviorRun, behaviorHash, newBehaviorState, settleBehaviorRun, type BehaviorPlan, type BehaviorReceipt } from '../src/task/behavior.js';
 
 const verification = () => ({
   status: 'passed' as const, attempts: 0, evidenceId: randomUUID(),
@@ -27,6 +28,60 @@ function implemented(workflow: 'direct' | 'planned' = 'direct'): TaskState {
     expect(() => taskResultSchema.parse({ ...result, resolutionClaimed: true })).toThrow();
     expect(publicTask({ ...task, result: { status: 'future' } } as any).result).toEqual(result);
   });
+
+function calibrated() {
+  const task = implemented('planned'); task.reviewRequired = false;
+  const plan: BehaviorPlan = { version: 1, status: 'ready', summary: 'Focused checks', assumptions: [], unresolved: [], checks: [
+    { id: 'B1', kind: 'reproduction', requestQuote: task.prompt, expectation: 'Trigger works', command: 'node trigger.js', shell: 'bash', timeoutSeconds: 60 },
+    { id: 'B2', kind: 'boundary', requestQuote: task.prompt, expectation: 'Boundary works', command: 'node boundary.js', shell: 'bash', timeoutSeconds: 60 }
+  ] };
+  const stamp = task.verification!.evidence!.workspace;
+  const receipt = (runId: string, index: number, exitCode: number): BehaviorReceipt => {
+    const check = plan.checks[index]!, output = exitCode ? 'original failure' : 'native success';
+    return { version: 1, runId, checkId: check.id, toolCallId: randomUUID(), tool: check.shell, commandSha256: behaviorHash(check.command), source: 'pi-builtin-shell', exitCode, status: exitCode ? 'failed' : 'passed', output, outputSha256: behaviorHash(output), outputCharacters: output.length, truncated: false, recordedAt: task.updatedAt };
+  };
+  let state = beginBehaviorRun({ ...newBehaviorState(task.prompt), plan }, stamp, 'baseline');
+  state.receipts = [receipt(state.runId!, 0, 1), receipt(state.runId!, 1, 0)];
+  state = settleBehaviorRun(state, stamp); state.calibration!.implementationStarted = true;
+  state = beginBehaviorRun(state, stamp, 'candidate');
+  state.receipts = [receipt(state.runId!, 0, 0), receipt(state.runId!, 1, 0)];
+  task.behavior = settleBehaviorRun(state, stamp);
+  return task;
+}
+
+describe('behavior calibration result projection', () => {
+  it('derives comparisons from native receipts instead of cached flags without upgrading acceptance', () => {
+    const task = calibrated();
+    task.behavior!.calibration!.comparisons = [{ checkId: 'B1', outcome: 'pre_existing_failure', sameOutput: true }];
+    const saved = structuredClone(task), result = taskResult(task);
+    expect(result).toMatchObject({ behaviorChecks: 'passed', acceptance: 'unverified', resolutionClaimed: false, behaviorCalibration: {
+      baseline: { status: 'observed', runCount: 1 }, implementationStarted: true, correction: { status: 'not_run', consumed: false },
+      comparisons: [{ checkId: 'B1', outcome: 'changed_to_pass', sameOutput: false }, { checkId: 'B2', outcome: 'unchanged_pass', sameOutput: true }]
+    } });
+    expect(task).toEqual(saved);
+    expect(() => taskResultSchema.parse({ ...result, behaviorCalibration: { ...result.behaviorCalibration, comparisons: [{ checkId: 'B1', outcome: 'fixed', sameOutput: false }] } })).toThrow();
+  });
+  it.each(['running', 'unavailable'] as const)('retains a consumed %s diagnosis without claiming a valid baseline', (status) => {
+    const task = calibrated(); task.behavior!.calibration!.correction = { status };
+    expect(taskResult(task)).toMatchObject({ behaviorChecks: 'unconfirmed', behaviorCalibration: { baseline: { status: 'unconfirmed' }, correction: { status, consumed: true }, comparisons: [{ outcome: 'unconfirmed' }, { outcome: 'unconfirmed' }] } });
+  });
+  it('does not compare a baseline run against itself or invent calibration for legacy tasks', () => {
+    const task = calibrated(), state = task.behavior!;
+    state.runPurpose = 'baseline'; state.status = 'pending'; state.calibration!.implementationStarted = false;
+    expect(taskResult(task)).toMatchObject({ behaviorChecks: 'not_run', behaviorCalibration: { implementationStarted: false, comparisons: [] } });
+    delete state.calibration; state.runPurpose = 'candidate'; state.status = 'passed';
+    expect(taskResult(task).behaviorCalibration).toBeUndefined();
+    expect(taskResult(task).behaviorChecks).toBe('passed');
+    expect(taskResult(implemented()).behaviorCalibration).toBeUndefined();
+  });
+  it('does not accept a cached observed baseline when its digest or candidate receipts are invalid', () => {
+    const task = calibrated(), state = task.behavior!;
+    delete state.calibration!.runs[0]!.before.digest;
+    expect(taskResult(task)).toMatchObject({ behaviorChecks: 'unconfirmed', behaviorCalibration: { baseline: { status: 'unconfirmed' }, comparisons: [{ outcome: 'unconfirmed' }, { outcome: 'unconfirmed' }] } });
+    const candidate = calibrated(); candidate.behavior!.receipts[0]!.tool = 'powershell';
+    expect(taskResult(candidate).behaviorCalibration!.comparisons[0]!.outcome).toBe('unconfirmed');
+  });
+});
 
 describe('execution results without unsupported resolution claims', () => {
   it('does not promote configured checks, their names, or model review into behavioral acceptance', () => {
