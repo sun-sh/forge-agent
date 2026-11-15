@@ -51,7 +51,7 @@ const baselineRunSchema = z.object({
 const calibrationSchema = z.object({
   version: z.literal(1), status: z.enum(['pending', 'running', 'observed', 'unavailable']), implementationStarted: z.boolean(),
   runs: z.array(baselineRunSchema).max(4), comparisons: z.array(behaviorComparisonSchema).max(3),
-  correction: z.object({ status: z.enum(['running', 'kept', 'replaced', 'unavailable']), result: behaviorCorrectionSchema.optional(), reviewer: z.object({sessionId: z.uuid(), model: text(512)}).strict().optional(), evidence: z.array(z.object({checkId:text(2),path:text(1000),sha256:z.string().regex(/^[a-f0-9]{64}$/),quoteSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).max(3).optional(), error: z.string().max(2000).optional() }).strict().optional()
+  correction: z.object({ status: z.enum(['running', 'kept', 'replaced', 'unavailable']), preservedExpectations: z.array(z.object({checkId:z.string().regex(/^B[1-3]$/),proposed:text(2000),retained:text(2000)}).strict()).max(3).optional(), result: behaviorCorrectionSchema.optional(), reviewer: z.object({sessionId: z.uuid(), model: text(512)}).strict().optional(), evidence: z.array(z.object({checkId:text(2),path:text(1000),sha256:z.string().regex(/^[a-f0-9]{64}$/),quoteSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).max(3).optional(), error: z.string().max(2000).optional() }).strict().optional()
 }).strict();
 export const behaviorStateSchema = z.object({
   version: z.literal(1), required: z.literal(true), status: z.enum(['pending', 'running', 'passed', 'failed', 'unconfirmed']),

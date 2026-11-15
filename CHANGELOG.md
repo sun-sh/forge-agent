@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep frozen expectations for explicitly retained checks with identical commands; audit ignored model rephrases instead of accepting them or adding model retries.
+
 - Bind candidate behavior comparisons to complete pre-run and settled workspace stamps; changed, missing or unsettled versions remain unconfirmed, including restored calibrated records.
 
 - Add diagnosis finding `valid_check` for passing, contract-supported boundary/regression checks; keep uncertain semantics `unconfirmed` and blocking. Persist implementation-start marker/phase and accepted correction/replacement-plan pairs as atomic task-state transitions, and prevent continued legacy postimplementation tasks from inventing a baseline. Fresh real-model evidence is reported separately under its own fingerprint; no new scores are asserted here.

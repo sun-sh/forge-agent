@@ -13,7 +13,7 @@ import { buildReviewHandoff } from './review-handoff.js';
 import { behaviorStateSchema, behaviorReceiptSchema, behaviorBaseline, baselineNeedsDiagnosis, behaviorNeedsEvidence, behaviorCurrent, behaviorHash, newBehaviorState, beginBehaviorRun, settleBehaviorRun, parseBehaviorPlan, behaviorDesignPrompt, behaviorExecutionPrompt, type BehaviorState, type BehaviorReceipt, type BehaviorCorrection } from './behavior.js';
 import type { WorkspaceStamp } from '../verification/evidence.js';
 import type { ReviewCommandEvidence } from './review-evidence.js';
-import { parseBehaviorCorrection, behaviorCorrectionPrompt } from './behavior-correction.js';
+import { parseBehaviorCorrection, behaviorCorrectionPrompt, preserveBehaviorExpectations } from './behavior-correction.js';
 export { parseReview, type TaskReview } from './review.js';
 
 export const TASK_PHASES = ['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete'] as const;
@@ -422,11 +422,12 @@ export class TaskController {
             try {
               if (!adapter.behaviorCorrection || !adapter.behaviorCorrectionEvidence) throw new Error('只读基线诊断不可用；保留原方案和失败，不豁免检查。');
               const response = await adapter.behaviorCorrection(behaviorCorrectionPrompt(prompt, task.behavior), signal); check();
-              const result = parseBehaviorCorrection(response.text); if (!result) throw new Error('基线诊断格式无效，未替换任何检查。');
+              const proposed = parseBehaviorCorrection(response.text); if (!proposed) throw new Error('基线诊断格式无效，未替换任何检查。');
+              const {result,preservedExpectations} = preserveBehaviorExpectations(task.behavior.plan!, proposed);
               const evidence = await adapter.behaviorCorrectionEvidence(task.behavior.plan!, result, prompt, signal); check();
               const observed = await adapter.behaviorWorkspace(signal);
               if (run?.after && (run.after.digest !== observed.digest || run.after.scope !== observed.scope)) { calibration.status = 'unavailable'; throw new InvalidTaskPlanError('只读基线诊断期间工作区变化，未采纳替换检查。'); }
-              calibration.correction = { status: result.action === 'replace' ? 'replaced' : result.action === 'keep' ? 'kept' : 'unavailable', result, reviewer: {sessionId:z.uuid().parse(response.sessionId),model:z.string().min(1).max(512).parse(response.model)}, evidence };
+              calibration.correction = { status: result.action === 'replace' ? 'replaced' : result.action === 'keep' ? 'kept' : 'unavailable', result, reviewer: {sessionId:z.uuid().parse(response.sessionId),model:z.string().min(1).max(512).parse(response.model)}, evidence, ...(preservedExpectations.length ? {preservedExpectations} : {}) };
               if (result.action === 'replace') { task.behavior.plan = result.plan!; calibration.status = 'pending'; }
               this.commit();
             } catch (error) {

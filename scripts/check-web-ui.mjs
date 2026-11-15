@@ -130,7 +130,7 @@ try {
     pending.set(id, { resolve: resolveCall, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression) => { const result = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails)); return result.result.value; };
-  const waitFor = async (expression) => { const deadline = Date.now() + 20000; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression + (expression.includes('mcp-feedback') ? ' · feedback=' + await evaluate("document.getElementById('mcp-feedback')?.textContent || ''") : '')); };
+  const waitFor = async (expression, timeoutMs = 20000) => { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolveDelay) => setTimeout(resolveDelay, 100)); } throw new Error('Page condition timed out: ' + expression + (expression.includes('mcp-feedback') ? ' · feedback=' + await evaluate("document.getElementById('mcp-feedback')?.textContent || ''") : '')); };
   const waitHistoryIdle = () => waitFor("!document.getElementById('history-filter').disabled && document.getElementById('session-menu').classList.contains('hidden')");
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const pointerClick = async (selector) => {
@@ -537,8 +537,11 @@ try {
   await click('#mode-picker [data-choose-mode="agent:planned"]');
   await waitFor(`document.getElementById('followup-mode-select').value === 'agent:planned' && document.getElementById('followup-mode-description').textContent.includes('复杂修改先规划') && !document.getElementById('followup-send').disabled`);
   await evaluate(`document.getElementById('followup-prompt').value = 'Implement the planned workflow smoke change'; document.getElementById('followup-form').requestSubmit()`);
-  await waitFor(`document.getElementById('run-status-label').textContent === '已实现 · 需求未验收 · 配置检查通过 · 行为检查命令通过 · 独立模型审阅通过'`);
-  assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 7);
+  await waitFor(`document.getElementById('run-status-label').textContent === '已实现 · 需求未验收 · 配置检查通过 · 行为检查命令通过 · 独立模型审阅通过'`, 45000);
+  assert.equal(await evaluate(`document.querySelectorAll('#task-steps li').length`), 8);
+  assert.equal(await evaluate("document.querySelector('#task-review .behavior-checks').open"), false);
+  assert.ok((await evaluate("document.getElementById('task-steps').textContent")).includes('基线检查'));
+  assert.ok((await evaluate("document.getElementById('task-steps').textContent")).includes('候选检查'));
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('Browser fixture review'));
   assert.equal(await evaluate(`document.getElementById('resume-task-button').classList.contains('hidden')`), true);
   assert.equal(await evaluate(`document.getElementById('task-panel').open`), false);
@@ -549,7 +552,7 @@ try {
   await screenshot('planned-task-expanded');
   assert.ok((await evaluate(`document.getElementById('task-review').textContent`)).includes('行为检查'));
   await click('#open-execution');
-  await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 7`);
+  await waitFor(`document.querySelectorAll('#execution-timeline .execution-phase').length === 8`);
   assert.equal(await evaluate(`document.querySelector('[data-review-view="execution"]').getAttribute('aria-selected')`), 'true');
   assert.ok((await evaluate(`document.getElementById('task-plan').textContent`)).includes('A1'));
   assert.ok((await evaluate(`document.getElementById('execution-timeline').textContent`)).includes('独立交付审阅'));

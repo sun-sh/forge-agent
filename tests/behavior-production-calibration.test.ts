@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { baselineNeedsDiagnosis, behaviorBaselineCurrent, behaviorCurrent, behaviorHash, behaviorNeedsEvidence, behaviorReceiptSchema, behaviorStateSchema, beginBehaviorRun, compareBehaviorBaseline, newBehaviorState, settleBehaviorRun, type BehaviorCorrection, type BehaviorPlan, type BehaviorReceipt, type BehaviorState } from '../src/task/behavior.js';
-import { parseBehaviorCorrection, validateBehaviorCorrection } from '../src/task/behavior-correction.js';
+import { parseBehaviorCorrection, preserveBehaviorExpectations, validateBehaviorCorrection } from '../src/task/behavior-correction.js';
 import { restoreTask, TaskController, taskStateSchema, type TaskAdapter, type TaskState } from '../src/task/controller.js';
 import type { WorkspaceStamp } from '../src/verification/evidence.js';
 import { respondBehaviorFixture } from '../scripts/test-behavior-protocol.mjs';
@@ -214,6 +214,70 @@ describe('candidate workspace comparison integrity', () => {
   });
 });
 
+describe('frozen correction expectation preservation', () => {
+  it.each(['expected_failure', 'valid_check'] as const)('purely retains the frozen expectation even for opposing prose on an unchanged %s command', kind => {
+    const old = structuredClone(plan), proposed = diagnosis('replace');
+    proposed.findings[0]!.kind = kind;
+    proposed.plan!.checks[0]!.expectation = 'Reject all mixed-case tags instead of normalizing them';
+    const originalOld = structuredClone(old), originalProposed = structuredClone(proposed);
+    Object.freeze(old.checks[0]); Object.freeze(proposed.plan!.checks[0]);
+    const { result, preservedExpectations } = preserveBehaviorExpectations(old, proposed);
+    expect(result).not.toBe(proposed);
+    expect(result.plan!.checks[0]!.expectation).toBe(old.checks[0]!.expectation);
+    expect(result.plan!.checks[0]!.command).toBe(old.checks[0]!.command);
+    expect(result.plan!.checks[1]).toEqual(proposed.plan!.checks[1]);
+    expect(result.findings).toEqual(proposed.findings);
+    expect(preservedExpectations).toEqual([{ checkId: 'B1', proposed: originalProposed.plan!.checks[0]!.expectation, retained: old.checks[0]!.expectation }]);
+    expect(old).toEqual(originalOld);
+    expect(proposed).toEqual(originalProposed);
+  });
+
+  it('leaves nonreplacement actions and already frozen expectations unchanged without an audit entry', () => {
+    const values: BehaviorCorrection[] = [diagnosis(), { ...diagnosis(), action: 'unavailable' }, diagnosis('replace')];
+    for (const proposed of values) {
+      const original = structuredClone(proposed);
+      expect(preserveBehaviorExpectations(plan, proposed)).toEqual({ result: original, preservedExpectations: [] });
+      expect(proposed).toEqual(original);
+    }
+  });
+
+  it.each(['expected_failure', 'valid_check'] as const)('does not normalize or bypass source validation for a changed %s command', async kind => {
+    const root = await project(); await writeFile(join(root, 'contract.ts'), source);
+    const proposed = diagnosis('replace');
+    proposed.findings[0]!.kind = kind;
+    proposed.plan!.checks[0]!.command = 'node changed-repro.cjs';
+    proposed.plan!.checks[0]!.expectation = 'Ignore the originally requested normalization behavior';
+    const { result, preservedExpectations } = preserveBehaviorExpectations(plan, proposed);
+    expect(result.plan!.checks[0]).toEqual(proposed.plan!.checks[0]);
+    expect(preservedExpectations).toEqual([]);
+    await expect(validateBehaviorCorrection(root, plan, result, request, signal())).rejects.toThrow(/source-backed diagnosis/);
+  });
+
+  it('requires the same original check ID before preserving a matching command', async () => {
+    const root = await project(), proposed = diagnosis('replace');
+    proposed.plan!.checks[0]!.id = 'B3';
+    proposed.plan!.checks[0]!.expectation = 'Opposing proposed expectation under a different check ID';
+    const { result, preservedExpectations } = preserveBehaviorExpectations(plan, proposed);
+    expect(result.plan!.checks[0]).toEqual(proposed.plan!.checks[0]);
+    expect(preservedExpectations).toEqual([]);
+    await expect(validateBehaviorCorrection(root, plan, result, request, signal())).rejects.toThrow();
+  });
+
+  it('accepts source-backed B2 correction with canonical B1 while the raw reworded proposal still fails validation', async () => {
+    const root = await project(); await writeFile(join(root, 'contract.ts'), source);
+    const proposed = diagnosis('replace');
+    proposed.plan!.checks[0]!.expectation = 'Mixed-case normalization should produce the requested public result';
+    await expect(validateBehaviorCorrection(root, plan, proposed, request, signal())).rejects.toThrow(/source-backed diagnosis/);
+    const { result, preservedExpectations } = preserveBehaviorExpectations(plan, proposed);
+    await expect(validateBehaviorCorrection(root, plan, result, request, signal())).resolves.toEqual([{
+      checkId: 'B2', path: 'contract.ts', sha256: behaviorHash(source), quoteSha256: behaviorHash(proposed.findings[1]!.contract!.quote)
+    }]);
+    expect(result.plan!.checks[0]).toEqual(plan.checks[0]);
+    expect(result.plan!.checks[1]).toEqual(proposed.plan!.checks[1]);
+    expect(preservedExpectations).toEqual([{ checkId: 'B1', proposed: proposed.plan!.checks[0]!.expectation, retained: plan.checks[0]!.expectation }]);
+  });
+});
+
 describe('source-backed production check correction', () => {
   it('retains frozen coverage and records exact source and normalized quotation hashes', async () => {
     const root = await project(); await writeFile(join(root, 'contract.ts'), source);
@@ -323,6 +387,32 @@ function restored(state: TaskState): TaskState {
 }
 
 describe('production calibration orchestration and persistence', () => {
+  it('persists the canonical correction and expectation audit while retaining the raw child proposal', async () => {
+    const root = await project(); await writeFile(join(root, 'contract.ts'), source);
+    const proposed = diagnosis('replace');
+    proposed.plan!.checks[0]!.expectation = 'Reject the mixed-case input instead of normalizing it';
+    const raw = JSON.stringify(proposed), canonical = preserveBehaviorExpectations(plan, proposed);
+    const f = controllerFixture({ root, correction: proposed, baseline: [1, 1], replacementBaseline: [1, 0] });
+    const task = await f.run(), correction = task.behavior!.calibration!.correction!;
+    expect(task.status).toBe('completed');
+    expect(correction.status).toBe('replaced');
+    expect(correction.result).toEqual(canonical.result);
+    expect(correction.preservedExpectations).toEqual(canonical.preservedExpectations);
+    expect(task.behavior!.plan).toEqual(canonical.result.plan);
+    expect(f.adapter.behaviorCorrectionEvidence.mock.calls[0]![1]).toEqual(canonical.result);
+    expect(task.behavior!.calibration!.runs.map(run => run.plan.checks[0]!.expectation)).toEqual([plan.checks[0]!.expectation, plan.checks[0]!.expectation]);
+    expect(task.behavior!.calibration!.runs.map(run => run.plan.checks[0]!.command)).toEqual([plan.checks[0]!.command, plan.checks[0]!.command]);
+    const firstAccepted = f.saved.find(state => state.behavior?.calibration?.correction?.status === 'replaced')!;
+    expect(firstAccepted.behavior!.plan).toEqual(canonical.result.plan);
+    expect(firstAccepted.behavior!.calibration!.correction!.preservedExpectations).toEqual(canonical.preservedExpectations);
+    expect(restored(firstAccepted).behavior!.calibration!.correction!.preservedExpectations).toEqual(canonical.preservedExpectations);
+    expect(restored(task).behavior!.calibration!.correction).toEqual(correction);
+    const childResponse = await f.adapter.behaviorCorrection.mock.results[0]!.value;
+    expect(childResponse.text).toBe(raw);
+    expect(JSON.parse(childResponse.text).plan.checks[0].expectation).toBe(proposed.plan!.checks[0]!.expectation);
+    expect(JSON.stringify(proposed)).toBe(raw);
+  });
+
   it.each(['implement', 'check', 'verify', 'review', 'complete'] as const)('never creates a preimplementation baseline when resuming legacy %s without behavior state', async phase => {
     const seed = controllerFixture(), previous = restored(await seed.run());
     delete previous.behavior; previous.status = 'interrupted'; previous.phase = phase;
