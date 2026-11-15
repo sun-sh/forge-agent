@@ -23,12 +23,12 @@ export function respondBehaviorFixture(input, response, options = {}) {
   } else {
     const index = messages.findLastIndex((message) => text(message).includes('PFORGE TASK PHASE: check'));
     const line = messages.slice(index).map(text).join('\n').split('\n').findLast((line) => line.startsWith('{"runId":'));
-    const { plan } = JSON.parse(line);
+    const { plan, target } = JSON.parse(line);
     const calls = messages.slice(index).flatMap((message) => message.tool_calls ?? []);
     const completed = new Set(messages.slice(index).filter((message) => message.role === 'tool').map((message) => message.tool_call_id));
     const done = new Set(calls.filter((call) => completed.has(call.id)).map((call) => JSON.parse(call.function.arguments).command));
     const next = plan.checks.find((check) => !done.has(check.command));
-    delta = next && !options.skip ? { role: 'assistant', tool_calls: [{ index: 0, id: 'behavior-fixture-' + randomUUID(), type: 'function', function: { name: next.shell, arguments: JSON.stringify({ command: next.command, timeout: next.timeoutSeconds }) } }] } : { role: 'assistant', content: 'Native fixture check commands finished; no model quality measured.' };
+    delta = next && (!options.skip || target === 'baseline') ? { role: 'assistant', tool_calls: [{ index: 0, id: 'behavior-fixture-' + randomUUID(), type: 'function', function: { name: next.shell, arguments: JSON.stringify({ command: next.command, timeout: next.timeoutSeconds }) } }] } : { role: 'assistant', content: 'Native fixture check commands finished; no model quality measured.' };
   }
   response.writeHead(200, { 'content-type': 'text/event-stream' });
   response.write('data: ' + JSON.stringify({ id: 'behavior-fixture', object: 'chat.completion.chunk', model: input.model, choices: [{ index: 0, delta, finish_reason: delta.tool_calls ? 'tool_calls' : 'stop' }] }) + '\n\n');

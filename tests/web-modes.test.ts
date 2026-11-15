@@ -97,7 +97,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     await f.api('sessions/' + session.id + '/prompt', { message, workflow: 'planned' });
     const state = await f.settled(session.id);
     expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded', result: { status: 'implemented_unverified', acceptance: 'unverified', resolutionClaimed: false } });
-    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'check', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
     expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');
   });
@@ -146,7 +146,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(JSON.stringify(requests[1].messages)).toContain('SUPPLEMENT_CHECK_PASSED');
     expect(JSON.stringify(requests[1].messages)).toContain('REPAIR RECHECK');
     expect(state.messages.filter((entry: any) => entry.role === 'user')).toHaveLength(1);
-    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'implement', 'check', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'check', 'implement', 'check', 'verify', 'review', 'implement', 'check', 'verify', 'review', 'complete']);
   });
   it('admits an unknown request resolved to verification once, without resetting its user turn', async () => {
     const f = await fixture({ briefIntent: 'verify' });
@@ -288,7 +288,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect((await f.api('sessions/' + session.id + '/prompt', { message: 'Inspect and finish the task', workflow: 'planned' })).status).toBe(202);
     const state = await f.settled(session.id);
     expect(state.task, JSON.stringify(state)).toMatchObject({ status: 'completed', phase: 'complete', repairs: 0 });
-    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete']);
+    expect(state.task.phases.map((item: any) => item.phase)).toEqual(['inspect', 'plan', 'check', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(state.task.review.verdict).toBe('ready');
     expect(state.task.plan.acceptance[0].id).toBe('A1'); expect(state.task.review.acceptance[0].status).toBe('met');
     const timeline: any = await (await f.api('sessions/' + session.id + '/timeline?task=' + state.task.id)).json();
@@ -442,7 +442,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(resumed.task.status).toBe('completed');
     expect(resumed.task.resumeOf).toBe(stopped.task.id);
     expect(resumed.task.id).not.toBe(stopped.task.id);
-    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['plan', 'implement', 'check', 'verify', 'review', 'complete']);
+    expect(resumed.task.phases.map((phase: any) => phase.phase)).toEqual(['plan', 'check', 'implement', 'check', 'verify', 'review', 'complete']);
     const resumedRequest = f.requests[2];
     const resumedUserMessages = resumedRequest.messages.filter((message: any) => message.role === 'user');
     expect(resumedUserMessages.filter((message: any) => JSON.stringify(message.content).includes('Implement a scoped change'))).toHaveLength(1);
@@ -454,7 +454,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     let session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
     f.pauseAt('implement');
     await f.api('sessions/' + session.id + '/prompt', { message: 'Create index.html with the requested page.', workflow: 'planned' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(4), { timeout: 15000 });
+    await vi.waitFor(() => expect(f.requests.some((input) => fixturePhase(input) === 'implement')).toBe(true), { timeout: 15000 });
     await f.api('sessions/' + session.id + '/abort', {});
     const stopped = await f.settled(session.id);
     expect(stopped.task).toMatchObject({ phase: 'implement', status: 'aborted', kind: 'change' });
@@ -473,7 +473,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(await readFile(join(f.root, 'index.html'), 'utf8')).toBe('<h1>Resumed implementation</h1>');
     const entries = resumed.entries.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'user');
     expect(entries).toHaveLength(1);
-    expect(f.requests[4].tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
+    expect([...f.requests].reverse().find((input) => fixturePhase(input) === 'implement').tools.some((tool: any) => tool.function.name === 'write')).toBe(true);
   }, 60000);
   it.each(['plan', 'ask'] as const)('allows reading in %s but blocks execution and verification, including after reopening', async (mode) => {
     const f = await fixture();

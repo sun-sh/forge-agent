@@ -56,6 +56,29 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('runs baseline diagnosis in a fresh read-only child with one bounded JSON retry', async () => {
+    const correction = { version: 1, action: 'keep', summary: 'Retain the original failure', findings: [
+      { id: 'B1', kind: 'expected_failure', requestQuote: 'Fix behavior', reason: 'Reproduction fails on the original version' },
+      { id: 'B2', kind: 'expected_failure', requestQuote: 'Keep boundaries', reason: 'Existing boundary remains valid' }
+    ] };
+    let calls = 0;
+    const f = await fixture((input, res) => answer(res, input, ++calls === 1 ? 'invalid JSON' : JSON.stringify(correction)));
+    const result = await f.agents.behaviorCorrection('PFORGE TASK PHASE: behavior_correction. Original request and baseline only.', new AbortController().signal);
+    expect(JSON.parse(result.text)).toEqual(correction);
+    expect(f.requests).toHaveLength(2);
+    expect(text(f.requests[0])).not.toContain('PARENT-SECRET-NOT-FOR-CHILD');
+    expect(f.requests[0].tools.map((tool: any) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
+    expect(f.requests[1].tools ?? []).toEqual([]);
+    expect(f.agents.snapshot()[0]).toMatchObject({ purpose: 'behavior_correction', status: 'completed', formatRetries: 1, budget: { limits: { maxModelTurns: 12, maxOutputTokens: 16000 } } });
+    await expect(f.agents.delegate([{ title: 'repeat diagnosis', role: 'reviewer', prompt: 'continue', id: result.sessionId }], 'repeat')).rejects.toThrow();
+  });
+  it('does not grant model-facing delegation access to the baseline correction purpose', async () => {
+    const f = await fixture((input, res) => answer(res, input, 'unused'));
+    await expect(f.agents.delegate([{ title: 'diagnose', role: 'reviewer', prompt: 'try', purpose: 'behavior_correction' }] as any, 'model-call')).rejects.toThrow();
+    expect(f.requests).toHaveLength(0);
+    f.setAllowed(false);
+    await expect(f.agents.behaviorCorrection('diagnose', new AbortController().signal)).rejects.toThrow('不允许');
+  });
   it('persists an explicit reviewer budget choice through HTTP settings and rejects unknown profiles', async () => {
     const f = await fixture((input, res) => answer(res, input, 'unused'));
     const server = await startWebConsole({ cwd: f.project, port: 0 }); closers.push(server.close);

@@ -10,9 +10,10 @@ import { progressSnapshotSchema, TaskStalledError, type ProgressSnapshot } from 
 import { acceptanceSatisfied, BRIEF_OUTPUT_CONTRACT, parseTaskBrief, parseTaskPlan, planFromBrief, preserveTaskBrief, PLAN_OUTPUT_CONTRACT, planReference, taskBriefSchema, taskPlanSchema, taskRequirements, taskRequirementsSchema, type TaskBrief, type TaskPlan, type TaskRequirements } from './plan.js';
 import { normalizeReview, parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, reviewSchema, type ReviewStop, type TaskReview } from './review.js';
 import { buildReviewHandoff } from './review-handoff.js';
-import { behaviorStateSchema, behaviorReceiptSchema, behaviorCurrent, behaviorHash, newBehaviorState, beginBehaviorRun, settleBehaviorRun, parseBehaviorPlan, behaviorDesignPrompt, behaviorExecutionPrompt, type BehaviorState, type BehaviorReceipt } from './behavior.js';
+import { behaviorStateSchema, behaviorReceiptSchema, behaviorBaseline, baselineNeedsDiagnosis, behaviorNeedsEvidence, behaviorCurrent, behaviorHash, newBehaviorState, beginBehaviorRun, settleBehaviorRun, parseBehaviorPlan, behaviorDesignPrompt, behaviorExecutionPrompt, type BehaviorState, type BehaviorReceipt, type BehaviorCorrection } from './behavior.js';
 import type { WorkspaceStamp } from '../verification/evidence.js';
 import type { ReviewCommandEvidence } from './review-evidence.js';
+import { parseBehaviorCorrection, behaviorCorrectionPrompt } from './behavior-correction.js';
 export { parseReview, type TaskReview } from './review.js';
 
 export const TASK_PHASES = ['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete'] as const;
@@ -52,7 +53,7 @@ export interface TaskState {
   repairs: number;
   /** One evidence-only follow-up at most; it also consumes the shared repair allowance. */
   reviewEvidenceRepairs?: number;
-  phases: Array<{ phase: TaskPhase; startedAt: string; endedAt?: string; summary?: string }>;
+  phases: Array<{ phase: TaskPhase; startedAt: string; endedAt?: string; summary?: string; checkRole?: 'baseline' | 'candidate' }>;
   baseline?: GitBaseline;
   changes?: GitChanges;
   verification?: PforgeVerificationOutcome;
@@ -86,7 +87,7 @@ export const taskStateSchema = z.object({
   phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
   workflow: z.enum(['direct', 'planned']).optional(), reviewRequired: z.boolean().optional(), mode: z.string().max(64).optional(), model: z.string().max(512).optional(),
   resumeOf: z.uuid().optional(), repairs: z.number().int().min(0).max(20), reviewEvidenceRepairs: z.number().int().min(0).max(1).optional(),
-  phases: z.array(z.object({ phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(), summary: z.string().max(12000).optional() })).max(100),
+  phases: z.array(z.object({ phase: z.enum(TASK_PHASES), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(), summary: z.string().max(12000).optional(), checkRole: z.enum(['baseline','candidate']).optional() })).max(100),
   // Typed checkpoint context can resume a phase; it never grants tool permissions or trust.
   baseline: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), truncated: z.boolean().optional(), files: z.array(fileSchema).max(200) }).optional(),
   changes: z.object({ available: z.boolean(), reason: z.string().optional(), head: z.string().optional(), headChanged: z.boolean().optional(), truncated: z.boolean(), files: z.array(fileSchema.extend({ preexisting: z.boolean(), observed: z.boolean() })).max(200) }).optional(),
@@ -100,6 +101,11 @@ export function restoreTask(entries: ReadonlyArray<{ type: string; customType?: 
   if (!result.success) return undefined;
   const task = result.data;
   if (task.behavior?.status === 'running') { task.behavior.status = 'unconfirmed'; task.behavior.reason = '行为检查已中断；继续时需要当前工作区的新执行回执。'; }
+  const calibration = task.behavior?.calibration;
+  if (calibration) {
+    for (const run of calibration.runs) if (run.status === 'running') { run.status = 'unconfirmed'; run.receipts = structuredClone(task.behavior?.runId === run.runId ? task.behavior.receipts : run.receipts); run.reason = '基线执行中断；需要在同一实现前版本重新取得回执。'; calibration.status = 'unavailable'; }
+    if (calibration.correction?.status === 'running') { calibration.correction.status = 'unavailable'; calibration.correction.error = '诊断已中断；单次机会已消耗，继续不会重置。'; }
+  }
   if (task.review) task.review = normalizeReview(task.review);
   if (task.reviewFollowup) task.reviewFollowup = normalizeReview(task.reviewFollowup);
   if (!task.reviewStop && task.review && task.status !== 'completed') task.reviewStop = reviewStop(task.review, task.plan?.acceptance.map((item) => item.id));
@@ -123,6 +129,8 @@ export interface TaskAdapter {
   /** A fresh read-only Pi session, supplied evidence only; no implementation transcript. */
   review?(message: string, signal: AbortSignal): Promise<{ text: string; sessionId: string; model: string; formatRetries?: number }>;
   behaviorPlan?(message: string, signal: AbortSignal): Promise<{ text: string; sessionId: string; model: string }>;
+  behaviorCorrection?(message: string, signal: AbortSignal): Promise<{ text: string; sessionId: string; model: string }>;
+  behaviorCorrectionEvidence?(plan: import('./behavior.js').BehaviorPlan, correction: BehaviorCorrection, request: string, signal: AbortSignal): Promise<Array<{checkId:string;path:string;sha256:string;quoteSha256:string}>>;
   behaviorWorkspace?(signal: AbortSignal): Promise<WorkspaceStamp>;
   behaviorShell?: 'bash' | 'powershell';
   verify(signal: AbortSignal): Promise<PforgeVerificationOutcome>;
@@ -151,6 +159,8 @@ function continuationPhase(previous?: TaskState): TaskPhase {
   if (previous.kind === 'verify') return 'verify';
   if (previous.kind !== 'change' || !previous.brief || previous.brief.unresolved.length) return 'inspect';
   if (!previous.plan) return 'plan';
+  if (previous.behavior?.calibration && !previous.behavior.calibration.implementationStarted) return 'plan';
+  if (previous.phase === 'check' && previous.behavior?.calibration?.implementationStarted && (previous.phases.at(-1)?.checkRole === 'baseline' || previous.behavior.runPurpose === 'baseline')) return 'implement';
   if (previous.phase === 'implement') return 'implement';
   if (previous.phase === 'check') return 'check';
   // Revalidate before repeating review. Never reuse a historical pass to skip
@@ -216,7 +226,9 @@ export class TaskController {
     const receipt = behaviorReceiptSchema.parse(value);
     const check = state.plan?.checks.find((item) => item.id === receipt.checkId && item.shell === receipt.tool && behaviorHash(item.command) === receipt.commandSha256);
     if (!check || state.receipts.some((item) => item.checkId === receipt.checkId)) return;
-    state.receipts.push(receipt); this.commit();
+    state.receipts.push(receipt);
+    if (state.runPurpose === 'baseline') { const run = state.calibration?.runs.find(item => item.runId === state.runId); if (run) run.receipts = structuredClone(state.receipts); }
+    this.commit();
   }
   recordArtifacts(artifacts: ReadonlyArray<TaskArtifact>) {
     if (!this.state || !artifacts.length) return;
@@ -287,6 +299,20 @@ export class TaskController {
       check();
       task.phases.at(-1)!.summary = text.slice(0, 12000); this.commit(); return text;
     };
+    const behaviorChecks = async (purpose: 'baseline' | 'candidate') => {
+      if (!task.behavior || !adapter.behaviorWorkspace) throw new InvalidTaskPlanError('行为检查缺少工作区观测能力。');
+      check(); const before = await adapter.behaviorWorkspace(signal);
+      this.phase('check'); task.phases.at(-1)!.checkRole = purpose;
+      task.behavior = beginBehaviorRun(task.behavior, before, purpose); this.commit();
+      try {
+        await execute('check', behaviorExecutionPrompt(task.behavior), false, false);
+        const after = await adapter.behaviorWorkspace(signal); task.behavior = settleBehaviorRun(task.behavior, after); this.commit();
+        if (purpose === 'baseline' && (before.digest !== after.digest || before.scope !== after.scope)) throw new InvalidTaskPlanError('基线检查改变了工作区；实现尚未开始，请检查原生命令输出及文件变更。');
+      } catch (error) {
+        if (task.behavior.status === 'running') { task.behavior.status = 'unconfirmed'; const run = task.behavior.calibration?.runs.find(item => item.runId === task.behavior!.runId); if (purpose === 'baseline' && run) { run.status = 'unconfirmed'; run.receipts = structuredClone(task.behavior.receipts); task.behavior.calibration!.status = 'unavailable'; } this.commit(); }
+        throw error;
+      }
+    };
     try {
       this.phase(kind === 'verify' ? 'verify' : startingPhase);
       if (kind === 'answer' || kind === 'explore') {
@@ -340,7 +366,13 @@ export class TaskController {
         }
         }
         if (task.status === 'running') {
-        if (metadata.behaviorRequired && !task.behavior) task.behavior = newBehaviorState(prompt);
+        if (metadata.behaviorRequired && !task.behavior) {
+          task.behavior = newBehaviorState(prompt);
+          if (previous && (['implement', 'check', 'verify', 'review', 'complete'].includes(previous.phase) || previous.phases.some(item => item.phase === 'implement'))) {
+            task.behavior.calibration!.implementationStarted = true; task.behavior.calibration!.status = 'unavailable';
+            task.behavior.status = 'unconfirmed'; task.behavior.reason = '旧任务没有实现前基线；继续不会在已修改的文件上补造对照。';
+          }
+        }
         // Do not snapshot a workspace for a question or a read-only
         // understanding. The baseline belongs to the implementation branch,
         // after the structured handoff has established that a change is needed.
@@ -360,7 +392,7 @@ export class TaskController {
         // Planning can organize work but cannot drop inspection's preserved requirements.
         task.plan.acceptance = structuredClone(task.requirements?.acceptance ?? task.brief!.acceptance); task.plan.constraints = [...(task.requirements?.constraints ?? task.brief!.constraints)]; this.commit();
         }
-        if (task.behavior && task.behavior.plan?.status !== 'ready') {
+        if (task.behavior && task.behavior.plan?.status !== 'ready' && !task.behavior.calibration?.implementationStarted) {
           try {
             if (!adapter.behaviorPlan) throw new Error('独立行为检查设计不可用。');
             const shell = adapter.behaviorShell ?? (process.platform === 'win32' ? 'powershell' : 'bash');
@@ -376,15 +408,44 @@ export class TaskController {
           }
           this.commit();
         }
-        if (!['verify', 'check'].includes(startingPhase)) await execute('implement', (previous ? 'Continue the unfinished implementation from the current workspace and the saved plan. Inspect existing results, preserve completed work, and do not replay successful operations. ' : 'Implement the plan for the original user task. ') + 'Preserve unrelated changes. Use the available tools, then describe the implementation against each acceptance ID. The host will independently run configured verification after this phase; do not invent passing results.\n\n' + planReference(task.plan!), false, !(previous && startingPhase === 'implement'));
+        const calibration = task.behavior?.calibration;
+        if (calibration && !calibration.implementationStarted && task.behavior?.plan?.status === 'ready' && adapter.behaviorWorkspace) {
+          let run = behaviorBaseline(task.behavior);
+          const current = await adapter.behaviorWorkspace(signal), original = calibration.runs[0]?.before;
+          if (original && (!original.digest || !current.digest || original.digest !== current.digest || original.scope !== current.scope)) throw new InvalidTaskPlanError('实现前版本已改变或无法确认，未重建或冒用旧基线；请核对当前文件后启动新任务。');
+          if (run?.status !== 'observed') {
+            if (calibration.runs.length >= 4) throw new InvalidTaskPlanError('基线恢复的有界执行次数已耗尽，未自动重放。');
+            await behaviorChecks('baseline'); run = behaviorBaseline(task.behavior!);
+          }
+          if (baselineNeedsDiagnosis(task.behavior) && !calibration.correction) {
+            calibration.correction = { status: 'running' }; this.commit();
+            try {
+              if (!adapter.behaviorCorrection || !adapter.behaviorCorrectionEvidence) throw new Error('只读基线诊断不可用；保留原方案和失败，不豁免检查。');
+              const response = await adapter.behaviorCorrection(behaviorCorrectionPrompt(prompt, task.behavior), signal); check();
+              const result = parseBehaviorCorrection(response.text); if (!result) throw new Error('基线诊断格式无效，未替换任何检查。');
+              const evidence = await adapter.behaviorCorrectionEvidence(task.behavior.plan!, result, prompt, signal); check();
+              const observed = await adapter.behaviorWorkspace(signal);
+              if (run?.after && (run.after.digest !== observed.digest || run.after.scope !== observed.scope)) { calibration.status = 'unavailable'; throw new InvalidTaskPlanError('只读基线诊断期间工作区变化，未采纳替换检查。'); }
+              calibration.correction = { status: result.action === 'replace' ? 'replaced' : result.action === 'keep' ? 'kept' : 'unavailable', result, reviewer: {sessionId:z.uuid().parse(response.sessionId),model:z.string().min(1).max(512).parse(response.model)}, evidence };
+              if (result.action === 'replace') { task.behavior.plan = result.plan!; calibration.status = 'pending'; }
+              this.commit();
+            } catch (error) {
+              calibration.correction = { ...calibration.correction, status: 'unavailable', error: (error instanceof Error ? error.message : String(error)).slice(0,2000) }; this.commit();
+              check(); if (error instanceof InvalidTaskPlanError) throw error;
+            }
+            if (calibration.correction?.status === 'replaced') await behaviorChecks('baseline');
+          }
+        }
+        if (!['verify', 'check'].includes(startingPhase)) {
+          if (calibration) calibration.implementationStarted = true;
+          if (task.phase !== 'implement') this.phase('implement'); else this.commit();
+        }
+        if (!['verify', 'check'].includes(startingPhase)) await execute('implement', (previous ? 'Continue the unfinished implementation from the current workspace and the saved plan. Inspect existing results, preserve completed work, and do not replay successful operations. ' : 'Implement the plan for the original user task. ') + 'Preserve unrelated changes. Use the available tools, then describe the implementation against each acceptance ID. The host will independently run configured verification after this phase; do not invent passing results.\n\n' + planReference(task.plan!), false, false);
         let verificationPhaseStarted = previous && startingPhase === 'verify';
         for (;;) {
           check();
           if (task.behavior?.plan?.status === 'ready' && adapter.behaviorWorkspace) {
-            this.phase('check');
-            task.behavior = beginBehaviorRun(task.behavior, await adapter.behaviorWorkspace(signal)); this.commit();
-            await execute('check', behaviorExecutionPrompt(task.behavior), false, false);
-            task.behavior = settleBehaviorRun(task.behavior, await adapter.behaviorWorkspace(signal)); this.commit();
+            await behaviorChecks('candidate');
             verificationPhaseStarted = false;
           } else if (task.behavior) { task.behavior.status = 'unconfirmed'; task.behavior.reason ??= '缺少独立冻结检查或工作区观测能力。'; this.commit(); }
           check(); task.verification = undefined; if (!verificationPhaseStarted) { this.phase('verify'); verificationPhaseStarted = true; } task.verification = structuredClone(await adapter.verify(signal)); check(); this.commit();
@@ -413,8 +474,8 @@ export class TaskController {
           if (task.reviewRequired === false) {
             task.verification = structuredClone(await adapter.refreshVerification(signal)); check();
             task.validation = isVerified(task.verification) ? 'verified' : isVerificationUnconfigured(task.verification) ? 'unconfigured' : task.verification.status === 'failed' ? 'failed' : 'unconfirmed';
-            if (isVerified(task.verification) || isVerificationUnconfigured(task.verification)) { this.phase('complete'); task.status = 'completed'; task.error = undefined; }
-            else { task.status = 'needs_attention'; task.error = task.verification.error ?? task.verification.evidence?.reason ?? '评测消融仍需通过当前版本的自动验证。'; }
+            if ((isVerified(task.verification) || isVerificationUnconfigured(task.verification)) && behaviorCurrent(task.behavior, task.verification.evidence?.workspace.digest)) { this.phase('complete'); task.status = 'completed'; task.error = undefined; }
+            else { task.status = 'needs_attention'; task.error = task.behavior?.reason ?? task.verification.error ?? task.verification.evidence?.reason ?? '评测消融仍需通过当前版本的自动验证和行为检查。'; }
             break;
           }
           if (!isVerified(task.verification)) {
@@ -438,6 +499,8 @@ export class TaskController {
           task.changes = reviewedChanges;
           const passed = isVerified(task.verification);
           const behaviorPassed = behaviorCurrent(task.behavior, task.verification.evidence?.workspace.digest);
+          const checkDiagnosisNeeded = behaviorNeedsEvidence(task.behavior);
+          if (checkDiagnosisNeeded) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (!behaviorPassed && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (task.review) { task.review.freshness = stale ? 'stale' : passed ? 'current' : 'unconfirmed'; task.review.evidenceId = task.verification.evidenceId; }
           // Only a complete, consistent acceptance ledger may ask the parent
@@ -450,7 +513,7 @@ export class TaskController {
             && acceptance.every((item) => item.status !== 'unmet')
             ? acceptance.filter((item) => item.status === 'unconfirmed') : [];
           const collectEvidence = evidenceGaps.length > 0 && (task.reviewEvidenceRepairs ?? 0) < 1;
-          if (!stale && passed && task.review && (task.review.verdict === 'changes_requested' && task.review.issues.length || collectEvidence) && task.repairs < retries) {
+          if (!checkDiagnosisNeeded && !stale && passed && task.review && (task.review.verdict === 'changes_requested' && task.review.issues.length || collectEvidence) && task.repairs < retries) {
             task.reviewFollowup = structuredClone(task.review); previousFindings = task.reviewFollowup;
             if (collectEvidence) task.reviewEvidenceRepairs = (task.reviewEvidenceRepairs ?? 0) + 1;
             task.repairs++; this.commit();

@@ -14,7 +14,9 @@ const plan: BehaviorPlan = { version: 1, status: 'ready', summary: 'Exercise the
   { id: 'B2', kind: 'boundary', requestQuote: 'preserve valid empty inputs', expectation: 'Empty inputs remain valid', command: 'node boundary.cjs', shell: 'bash', timeoutSeconds: 60 }
 ] };
 const receipt = (runId: string, index: number, exitCode = 0): BehaviorReceipt => ({ version: 1, runId, checkId: plan.checks[index]!.id, toolCallId: 'call-' + index, tool: 'bash', commandSha256: behaviorHash(plan.checks[index]!.command), source: 'pi-builtin-shell', exitCode, status: exitCode ? 'failed' : 'passed', output: 'actual process output', outputSha256: behaviorHash('actual process output'), outputCharacters: 21, truncated: false, recordedAt: new Date().toISOString() });
-const initial = () => beginBehaviorRun({ ...newBehaviorState(request), plan }, workspace);
+// These receipt-policy tests intentionally exercise legacy evidence without calibration.
+// Production baseline admission is covered in behavior-production-calibration.test.ts.
+const initial = () => beginBehaviorRun({ ...newBehaviorState(request), calibration: undefined, plan }, workspace);
 function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean } = {}) {
   let designs = 0, checks = 0;
   const controller = new TaskController(() => {});
@@ -24,7 +26,7 @@ function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean } 
     async execute(phase) {
       phases.push(phase);
       if (phase === 'inspect') return JSON.stringify({ ...handoff.brief, steps: ['Implement the requested scope'] });
-      if (phase === 'check') { checks++; if (!options.skip) plan.checks.forEach((_, index) => controller.recordBehaviorReceipt(receipt(controller.state!.behavior!.runId!, index, options.fail && index === 1 ? 1 : 0))); }
+      if (phase === 'check') { checks++; if (!options.skip || controller.state!.behavior!.runPurpose === 'baseline') plan.checks.forEach((_, index) => controller.recordBehaviorReceipt(receipt(controller.state!.behavior!.runId!, index, options.fail && index === 1 ? 1 : 0))); }
       return 'Phase complete; checks passed (prose must never be evidence)';
     },
     async behaviorPlan() { designs++; return { text: options.badPlan ? 'not JSON' : JSON.stringify(plan), sessionId: randomUUID(), model: 'mock/independent' }; },
@@ -70,7 +72,7 @@ describe('independent behavioral evidence', () => {
     const f = fixture();
     const task = await f.controller.run(request, 0, f.adapter, undefined, undefined, { workflow: 'planned', mode: 'agent', behaviorRequired: true });
     expect(task.status).toBe('completed'); expect(task.behavior?.status).toBe('passed');
-    expect(task.phases.map((item) => item.phase)).toEqual(['inspect', 'plan', 'implement', 'check', 'verify', 'review', 'complete']);
+    expect(task.phases.map((item) => item.phase)).toEqual(['inspect', 'plan', 'check', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(f.designs()).toBe(1); expect(taskStateSchema.safeParse(task).success).toBe(true);
     expect(taskResult(task)).toMatchObject({ status: 'implemented_unverified', behaviorChecks: 'passed', resolutionClaimed: false });
     const changed = structuredClone(task); changed.verification!.evidence!.workspace.digest = 'c'.repeat(64);
@@ -127,6 +129,26 @@ describe('native Pi behavior receipt policy', () => {
     p.callbacks['tool_call']({ toolName: 'bash', toolCallId: 'real', input: { command: plan.checks[0]!.command } });
     p.callbacks['tool_result']({ toolName: 'bash', toolCallId: 'real', input: { command: 'echo substituted' }, structuredContent: { exit_code: 0, output: 'success', truncated: false }, isError: false, content: [] });
     expect(p.receipts[0]!.status).toBe('unconfirmed');
+  });
+  it('discards pending calls when a new native run starts and accepts a fresh command', () => {
+    const p = policy(), input = { command: plan.checks[0]!.command };
+    p.callbacks['before_agent_start']({ systemPromptOptions: { sections: {} } });
+    p.callbacks['tool_call']({ toolName: 'bash', toolCallId: 'old-run', input });
+    p.state.runId = randomUUID();
+    p.callbacks['before_agent_start']({ systemPromptOptions: { sections: {} } });
+    p.callbacks['tool_result']({ toolName: 'bash', toolCallId: 'old-run', input, structuredContent: { exit_code: 0, output: 'assertions passed', truncated: false }, isError: false, content: [] });
+    expect(p.receipts).toHaveLength(0);
+    expect(p.callbacks['tool_call']({ toolName: 'bash', toolCallId: 'new-run', input })).toBeUndefined();
+    p.callbacks['tool_result']({ toolName: 'bash', toolCallId: 'new-run', input, structuredContent: { exit_code: 0, output: 'assertions passed', truncated: false }, isError: false, content: [] });
+    expect(p.receipts).toHaveLength(1);
+    expect(p.receipts[0]).toMatchObject({ runId: p.state.runId, toolCallId: 'new-run', status: 'passed' });
+  });
+  it.each([{ output: 'assertion failed', truncated: true }, { output: 'api_key=must-not-persist', truncated: false }])('does not confirm incomplete or sensitive native failures: %j', structuredContent => {
+    const p = policy(), input = { command: plan.checks[0]!.command };
+    p.callbacks['tool_call']({ toolName: 'bash', toolCallId: 'failure', input });
+    p.callbacks['tool_result']({ toolName: 'bash', toolCallId: 'failure', input, structuredContent: { ...structuredContent, exit_code: 1 }, isError: true, content: [] });
+    expect(p.receipts[0]).toMatchObject({ status: 'unconfirmed', exitCode: 1 });
+    expect(JSON.stringify(p.receipts)).not.toContain('must-not-persist');
   });
   it.each([{ structuredContent: undefined, isError: false, status: 'unconfirmed' }, { structuredContent: { exit_code: 0, output: '0 passed', truncated: false }, isError: false, status: 'unconfirmed' }, { structuredContent: { exit_code: 1, output: 'assertion failed', truncated: false }, isError: true, status: 'failed' }, { structuredContent: { exit_code: 0, output: 'assertions passed', truncated: false }, isError: false, status: 'passed' }, { structuredContent: { exit_code: 0, output: 'api_key=must-not-persist', truncated: false }, isError: false, status: 'unconfirmed' }])('records actual metadata, not success prose: $status', ({ structuredContent, isError, status }) => {
     const p = policy();

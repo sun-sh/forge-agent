@@ -22,6 +22,14 @@ node dist/pi-cli.js service stop
 
 队列最多保留 500 项元数据，待处理项最多 100 个。`tasks/queue.json` 不可读时拒绝启动并保留原文件；保存失败时停止队列准入并显示诊断。不要在网关运行时手工编辑该文件。
 
+## 生产行为基线与恢复
+
+新建且配置 `verify` 的 Planned Web 变更任务先由父 Pi 会话实际执行冻结检查，再进入实现；这与历史断网容器无模型诊断是两条路径。预期复现失败可以是完整基线观测；边界/回归失败或回执不完整至多触发一次全新只读诊断。仅允许带宿主核对源码引文的更正，检查数量、顺序 ID、类型、shell、需求引用不变且超时不增大；原方案/回执保留，替换方案必须先重跑再实现。引文存在不证明相关性，失败/前后变化也不自动证明代码缺陷。
+
+实现前中断后，明确继续须仍匹配首次准入的工作区 digest/scope，原始、替换、中断及恢复执行合计最多四次基线准入。中断的基线变为 unconfirmed；中断的诊断变为 unavailable 且单次机会已消耗。工作区变化/无法观测或准入耗尽时，先检查当前文件再开始新任务，不要编辑持久化标记来恢复“通过”。实现开始后仅刷新候选检查和配置验证，不重设计或补造基线；缺失/无效基线即便静态 ready 仍阻断。`task.result.behaviorCalibration` 展示派生状态，详见[结果协议](task-results.md#behavioral-receipt-gate)和[校准契约](behavior-calibration.md#production-calibration)。
+
+此流程不增加配置键，自适应、只读、未配置验证及 CLI 既有职责不变。Shell 仍具有启动用户的 OS 权限，不构成系统沙箱。旧评测报告保持原样，不能用历史数字证明新生产代码；新运行证据由独立报告记录。
+
 ## 检查点与 worktree
 
 模型阶段完成后，统一收尾服务还会封存检查点、恢复模式并确认任务索引写入。成功在这道边界前保持 pending；失败保留验证报告，同时将会话与任务标为失败。计数快照最多每秒合并一次，阶段、警告、停止和终态及时保存；进程突然退出可能丢失最后一个窗口内的用量。任务索引会跳过尚未执行的旧快照，并记录实际写次数和字节数。存储永久失败无法保证终态写入，必须先修复存储再检查已有文件，不能直接相信旧成功记录。这里没有 Pi 日志与索引之间的跨文件事务。
@@ -77,6 +85,14 @@ Before upgrading, stop the gateway, inspect queued work and unapplied proposals,
 Service status reads retry only transient OS sharing errors with bounded backoff (six attempts). Malformed records remain explicit failures and never authorize a PID-based kill. Service metadata uses atomic replacement; Windows verification cancellation launches process-tree termination asynchronously so the host can continue publishing state.
 
 Integration test deadlines are separate from runtime limits: the dynamic MCP lifecycle case has a 60-second total budget; workspace-evidence end-to-end lifecycles allow 120 seconds for multiple bounded parent/check operations and Git/worktree setup. Their 45-second parent-run and 20-second verification waits remain unchanged. Working-mode tests keep 15 seconds for ordinary settlement and allow 30 seconds specifically for resumed implementation → verification → independent review → sealing, under a 60-second lifecycle budget; timeout diagnostics include the phase and active tools. This does not increase production task, model, transport or command limits.
+
+### Production baseline recovery
+
+For new configured Planned Web changes, the parent Pi runs native baseline checks before implementation. Expected reproduction failures can be observed evidence; failed boundary/regression checks or incomplete baselines admit one fresh reader-only diagnosis. Source-quote-validated corrections must preserve check count, ordered IDs, kinds, shells and request anchors without increasing timeouts. Original plans/receipts remain; replacements execute again before implementation. Source presence cannot establish relevance, and comparisons are observations rather than defect proof.
+
+Before implementation, explicit continuation requires the first admitted workspace digest/scope and shares at most four total baseline admissions, including original, replacement and interrupted runs. Interrupted baselines become unconfirmed; interrupted diagnoses become unavailable and remain consumed. On workspace drift, incomplete observation or exhausted admissions, inspect files and start a new task instead of rebuilding the old baseline. After implementation starts, only candidate checks/verification refresh; design and baseline stay frozen. An invalid/unavailable baseline stays blocked despite candidate/configured passes and static ready. See [result fields](task-results.md#behavioral-receipt-gate) and [calibration recovery](behavior-calibration.md#recovery-and-candidate-evidence).
+
+No new configuration keys or CLI orchestration are added; adaptive, read-only and unconfigured paths retain their behavior. Shell is not an OS sandbox. Historical no-model diagnostic reports remain immutable and do not certify this production code; fresh run evidence is recorded separately.
 
 ### Updating a running Web service
 

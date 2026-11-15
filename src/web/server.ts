@@ -43,6 +43,7 @@ import { TaskQueue, QueueError, QueueDeferredError } from '../task/queue.js';
 import { TaskProgress } from '../task/progress.js';
 import { createModelOutputGuard, incompleteModelOutput } from '../task/output-guard.js';
 import { behaviorExecutionExtension } from '../task/behavior-runtime.js';
+import { validateBehaviorCorrection } from '../task/behavior-correction.js';
 import { shellTimeoutExtension } from '../task/shell-timeout.js';
 import { NetworkTools, loadNetworkSettings, saveNetworkSettings, NETWORK_EXTENSION_NAME, isForgeNetworkTool } from './network.js';
 import { ProjectConversations, CONVERSATIONS_EXTENSION, isForgeConversationTool } from './conversations.js';
@@ -749,7 +750,7 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
       allowed: () => !session.closed && session.running && session.mode === 'agent' && !session.controller.readOnly && session.controller.state?.phase !== 'check'
         && !(session.controller.active && ['answer', 'explore'].includes(session.controller.state?.kind ?? ''))
         && trustView(trustStore, session.settingsManager, session.project).trusted,
-      behaviorAllowed: () => !session.closed && session.running && session.mode === 'agent' && session.controller.active && session.controller.state?.behavior?.required === true && session.controller.state.behavior.plan?.status !== 'ready' && trustView(trustStore, session.settingsManager, session.project).trusted,
+      behaviorAllowed: () => !session.closed && session.running && session.mode === 'agent' && session.controller.active && session.controller.state?.behavior?.required === true && (session.controller.state.behavior.plan?.status !== 'ready' || session.controller.state.behavior.calibration?.correction?.status === 'running') && trustView(trustStore, session.settingsManager, session.project).trusted,
       reviewAllowed: () => !session.closed && session.running && session.mode === 'agent'
         && session.controller.active && session.controller.state?.phase === 'review'
         && trustView(trustStore, session.settingsManager, session.project).trusted,
@@ -982,6 +983,8 @@ export async function startWebConsole(options: WebConsoleOptions): Promise<{ url
           return session.verification.verifyTrusted(signal);
         },
         behaviorPlan: (text, signal) => session.subagents!.behaviorPlan(text, signal),
+        behaviorCorrection: (text, signal) => session.subagents!.behaviorCorrection(text, signal),
+        behaviorCorrectionEvidence: (plan, correction, request, signal) => validateBehaviorCorrection(session.project, plan, correction, request, signal),
         behaviorWorkspace: (signal) => captureWorkspace(session.project, signal),
         behaviorShell: process.platform === 'win32' ? 'powershell' : 'bash',
         commandEvidence: (task) => reviewCommandEvidence(session.manager.getBranch(), task.id, new Set(agent.getAllTools().filter((tool) => tool.sourceInfo.source === 'builtin').map((tool) => tool.name))),

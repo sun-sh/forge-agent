@@ -8,6 +8,7 @@ export function behaviorExecutionExtension(options: {
 }): ExtensionFactory {
   return (pi) => {
     let previousTools: string[] | undefined;
+    let observedRun: string | undefined;
     const pending = new Map<string, { runId: string; checkId: string; command: string; tool: 'bash' | 'powershell' }>();
     const tools = () => pi.getAllTools().filter((tool) => tool.sourceInfo.source === 'builtin' && ['read', 'grep', 'find', 'ls', 'bash', 'powershell'].includes(tool.name)).map((tool) => tool.name);
     pi.on('before_agent_start', (event) => {
@@ -16,6 +17,7 @@ export function behaviorExecutionExtension(options: {
         if (previousTools) { pi.setActiveTools(previousTools); previousTools = undefined; }
         return;
       }
+      const run = options.state()?.runId; if (run !== observedRun) { pending.clear(); observedRun = run; }
       previousTools ??= pi.getActiveTools();
       pi.setActiveTools(tools()); event.systemPromptOptions.selectedTools = tools();
       event.systemPromptOptions.sections['forge_behavior'] = 'CHECK ONLY. Use built-in readers and the exact frozen shell commands. No mutation tools, MCP, network, delegation or substitute commands. Commands still run with launching-user permissions; tool scope is not an OS sandbox.';
@@ -44,7 +46,7 @@ export function behaviorExecutionExtension(options: {
       const sensitive = sensitiveCommandEvidence(output);
       const exactInput = event.input['command'] === call.command;
       const passed = exactInput && !sensitive && exitCode === 0 && !event.isError && !truncated && classification.outcome !== 'failed' && classification.outcome !== 'zero_tests';
-      const failed = exactInput && exitCode !== null && exitCode !== 0;
+      const failed = exactInput && !sensitive && !truncated && exitCode !== null && exitCode !== 0;
       options.record(behaviorReceiptSchema.parse({ version: 1, runId: call.runId, checkId: call.checkId, toolCallId: event.toolCallId,
         tool: call.tool, commandSha256: behaviorHash(call.command), source: 'pi-builtin-shell', exitCode,
         status: passed ? 'passed' : failed ? 'failed' : 'unconfirmed', output: sensitive ? '[Sensitive output omitted]' : output.slice(0, 6000), outputSha256: behaviorHash(output), outputCharacters: output.length, truncated,
