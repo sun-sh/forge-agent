@@ -1,0 +1,72 @@
+name: behavior-baseline-calibration
+on:
+  push:
+    branches: [codex/behavior-calibration]
+    paths:
+      - '.github/workflows/behavior-calibration.yml'
+      - 'scripts/behavior-calibration-protocol.mjs'
+      - 'scripts/swebench-behavior-calibration-agent.mjs'
+      - 'scripts/swebench-behavior-replay.mjs'
+      - 'evals/swebench-lite/behavior-calibration.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  calibrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        instance: [pallets__flask-4045, matplotlib__matplotlib-23563, astropy__astropy-6938, sympy__sympy-18189]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build exact diagnostic sources
+        run: |
+          npm ci
+          npm run build
+          mkdir -p .forge-agent/behavior-package
+          npm pack --ignore-scripts --pack-destination .forge-agent/behavior-package
+      - uses: actions/download-artifact@v4
+        with:
+          name: swebench-real-evidence-43184349339
+          path: .forge-agent/behavior-source
+          run-id: 43184349339
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: swebench-regrade-evidence-43196437456
+          path: .forge-agent/behavior-grade
+          run-id: 43196437456
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: behavior-upstream-${{ matrix.instance }}-43571025712
+          path: .forge-agent/frozen-design
+          run-id: 43571025712
+          github-token: ${{ github.token }}
+      - name: Replay frozen commands in offline baseline and candidate containers
+        env:
+          CASE_ID: ${{ matrix.instance }}
+        run: |
+          node scripts/swebench-behavior-replay.mjs \
+            --case "$CASE_ID" \
+            --source-run .forge-agent/behavior-source/swebench-real-run \
+            --graded-run .forge-agent/behavior-grade/swebench-regraded \
+            --calibrate-from .forge-agent/frozen-design \
+            --package .forge-agent/behavior-package/forge-agent-0.2.0.tgz \
+            --output .forge-agent/behavior-calibration-result
+      - name: Retain all controls, missing plans and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavior-calibration-${{ matrix.instance }}-${{ github.run_id }}
+          path: .forge-agent/behavior-calibration-result
+          if-no-files-found: error
+          retention-days: 14

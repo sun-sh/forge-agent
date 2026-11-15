@@ -26,3 +26,5 @@ The initial Actions attempt reached the original images but the worker could not
 
 
 See the [published original-image qualification](evaluations/behavior-upstream-2026-11-14.md) for all infrastructure, first-attempt and revised outcomes. A successful workflow is not a defect-detection score.
+
+The separate [baseline calibration protocol](behavior-calibration.md) reuses revised frozen checks with zero new model calls; it does not replace earlier outcomes.

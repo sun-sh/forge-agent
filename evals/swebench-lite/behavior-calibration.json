@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "protocol": "frozen-behavior-baseline-calibration-v1",
+  "designSourceRunId": "43571025712",
+  "originalSourceRunId": "43184349339",
+  "gradedSourceRunId": "43196437456",
+  "selection": "All four revised fixed candidates, including the one without a frozen plan; no new check design or model calls.",
+  "cases": [
+    {
+      "id": "pallets__flask-4045",
+      "reportSha256": "974b392d0509be9a8d235226eaa617813a0ec5e1be2312d14d211313ec85ce30",
+      "planSha256": "5a9609731750be675f80b2ae0e0ba99e46b1bc299e266559ed6a3a6376c86943"
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "reportSha256": "70e45319bae6ae581c114d359e837409cb628d4e1a4d811ef371dbda330f288d",
+      "planSha256": null
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "reportSha256": "85e5a6544c0c6a6acf2836fa4d2045c4f1e754684717e2b274e476584e01169b",
+      "planSha256": "fb8045b5560c87c4d42cd7f8acfe8010b5b94782a92e92455778374b07813469"
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "reportSha256": "1859f3c17e8c40dc732e791b2eae39dad638d4f76ab13c2f934810c460a8ea6c",
+      "planSha256": "352155aeb84cad05ba56b008a39e2ddf190973ae35e563afdcfebe1cad92e760"
+    }
+  ]
+}
