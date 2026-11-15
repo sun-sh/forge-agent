@@ -29,6 +29,8 @@ describe('behavioral designer output headroom', () => {
     expect(() => capDesignPayload({ [key]: 10_000 }, 0)).toThrow('no remaining output');
   });
   it('does not invent wire fields for other protocols or exceed observed remaining output', () => {
+    const anthropic = { max_tokens: 10_000, thinking: { type: 'enabled', budget_tokens: 8_000 } };
+    expect(capDesignPayload(anthropic, 2_000, true, 'anthropic-messages')).toBe(anthropic);
     const payload = { generationConfig: { maxOutputTokens: 10_000 } };
     expect(capDesignPayload(payload, 2_000)).toBe(payload);
     const local = budget(), parent = budget(); local.usage!.output = 16_100;

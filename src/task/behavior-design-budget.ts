@@ -15,7 +15,8 @@ export function designAllowance(local: BudgetSnapshot, parent: BudgetSnapshot) {
 }
 
 /** Only clamp fields already emitted by Pi's OpenAI-compatible adapters. */
-export function capDesignPayload(payload: unknown, maximum: number, finalize = false): unknown {
+export function capDesignPayload(payload: unknown, maximum: number, finalize = false, api = 'openai-completions'): unknown {
+  if (!['openai-completions', 'openai-responses'].includes(api)) return payload;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
   const value = payload as Record<string, unknown>;
   const keys = ['max_tokens', 'max_completion_tokens', 'max_output_tokens'].filter(key => typeof value[key] === 'number' && Number.isFinite(value[key]) && (value[key] as number) > 0);

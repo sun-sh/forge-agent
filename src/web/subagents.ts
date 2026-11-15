@@ -10,7 +10,7 @@ import { CheckpointStore, checkpointTarget } from '../task/checkpoints.js';
 import { WorkerWorktrees } from '../task/worktrees.js';
 import { parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, REVIEW_FORMAT_RETRY } from '../task/review.js';
 import { parseBehaviorPlan, behaviorPlanFeedback, BEHAVIOR_FORMAT } from '../task/behavior.js';
-import { capDesignPayload, designAllowance, DESIGN_READ_LIMIT } from '../task/behavior-design-budget.js';
+import { capDesignPayload, designAllowance, DESIGN_READ_LIMIT, DESIGN_FINAL_OUTPUT } from '../task/behavior-design-budget.js';
 import { REVIEW_BUDGETS, reviewBudgetProfileSchema, type ReviewBudgetProfile } from '../task/review-budget.js';
 
 const ENTRY = 'forge.subagent';
@@ -283,7 +283,8 @@ export class ForgeSubagents {
         pi.on('turn_start', (_event, ctx) => { const local = budget.recordModelTurn(), total = parentBudget.recordModelTurn(); if (closeCollection()) pi.setActiveTools([]); if (!local || !total) ctx.abort(); });
         pi.on('before_provider_request', (event) => {
           if (!design) return;
-          return capDesignPayload(event.payload, designAllowance(budget.snapshot(), parentBudget.snapshot()).response, closeCollection());
+          const allowance = designAllowance(budget.snapshot(), parentBudget.snapshot()), closed = closeCollection();
+          return capDesignPayload(event.payload, Math.min(allowance.remaining, closed ? DESIGN_FINAL_OUTPUT : allowance.response), closed, model.api);
         });
         pi.on('tool_result', (event) => {
           if (!design) return;
@@ -360,6 +361,7 @@ export class ForgeSubagents {
         if (structured && !validResult(result)) {
           // A formatting correction stays inside this one reviewer session and
           // both ledgers; it never replays implementation or resets budgets.
+          if (design) collectionClosed = true; // The sole correction is finalization, not another collection round.
           record.formatRetries = 1; this.publish(record);
           budget.check(); parentBudget.check(); controller.signal.throwIfAborted();
           await created.session.prompt(design ? 'HOST CHECK PLAN FORMAT CORRECTION. This is the only retry in the same session and budget. Preserve the original request. Correct these specific schema errors: ' + behaviorPlanFeedback(result ?? '') + '\n' + BEHAVIOR_FORMAT : REVIEW_FORMAT_RETRY, { expandPromptTemplates: false });

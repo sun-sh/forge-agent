@@ -25,7 +25,7 @@ function answer(res: ServerResponse, input: any, content: string, call?: { name:
   res.write('data: ' + JSON.stringify({ id: 'test', object: 'chat.completion.chunk', model: input.model, choices: [], usage: { prompt_tokens: 30, completion_tokens: outputTokens, total_tokens: 30 + outputTokens } }) + '\n\n');
   res.end('data: [DONE]\n\n');
 }
-async function fixture(handler: (input: any, res: ServerResponse) => void | Promise<void>, reviewBudget: ReviewBudgetProfile = 'standard') {
+async function fixture(handler: (input: any, res: ServerResponse) => void | Promise<void>, reviewBudget: ReviewBudgetProfile = 'standard', modelMaxTokens = 1024) {
   const home = await mkdtemp(join(tmpdir(), 'forge-subagent-home-')), project = await mkdtemp(join(tmpdir(), 'forge-subagent-project-'));
   for (const [key, value] of Object.entries({ FORGE_AGENT_HOME: home, PFORGE_HOME: home, PI_CODING_AGENT_DIR: home, PI_CODING_AGENT_SESSION_DIR: join(home, 'sessions') })) vi.stubEnv(key, value);
   const requests: any[] = [];
@@ -40,7 +40,7 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
   await new Promise<void>((done) => modelServer.listen(0, '127.0.0.1', done));
   closers.push(async () => { modelServer.closeAllConnections(); await new Promise<void>((done) => modelServer.close(() => done())); });
   const address = modelServer.address() as { port: number };
-  await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { mock: { api: 'openai-completions', apiKey: 'test', baseUrl: `http://127.0.0.1:${address.port}/v1`, models: [{ id: 'test', contextWindow: 16000, maxTokens: 1024 }] } } }));
+  await writeFile(join(home, 'models.json'), JSON.stringify({ providers: { mock: { api: 'openai-completions', apiKey: 'test', baseUrl: `http://127.0.0.1:${address.port}/v1`, models: [{ id: 'test', contextWindow: 16000, maxTokens: modelMaxTokens }] } } }));
   await writeFile(join(project, 'sample.txt'), 'file-evidence\n');
   const runtime = await ModelRuntime.create({ authPath: join(home, 'auth.json'), modelsPath: join(home, 'models.json') });
   const manager = SessionManager.create(project, join(home, 'sessions'));
@@ -133,6 +133,19 @@ describe('managed Pi subagents', () => {
     for (const request of f.requests.slice(8)) expect(request.tools ?? []).toEqual([]);
     expect(text(f.requests.at(-1))).toContain('Behavior check design evidence window is closed');
     expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', formatRetries: 1, budget: { toolCalls: 7, modelTurns: 10, usage: { output: 8_400 }, limits: { maxOutputTokens: 16_000 } } });
+  });
+  it('uses the finalization response allowance for the sole malformed-plan correction', async () => {
+    const plan = { version: 1, status: 'ready', summary: 'Concise corrected plan', assumptions: [], unresolved: [], checks: [
+      { id: 'B1', kind: 'reproduction', requestQuote: 'Fix', expectation: 'Trigger works', command: 'node repro.cjs', shell: 'bash', timeoutSeconds: 60 },
+      { id: 'B2', kind: 'boundary', requestQuote: 'Fix', expectation: 'Boundary works', command: 'node boundary.cjs', shell: 'bash', timeoutSeconds: 60 }
+    ] };
+    const f = await fixture((input, res) => answer(res, input, f.requests.length === 1 ? '{"version":1' : JSON.stringify(plan), undefined, f.requests.length === 1 ? 2_000 : 200), 'standard', 8_192);
+    const result = await f.agents.behaviorPlan('Original request: Fix', new AbortController().signal);
+    expect(JSON.parse(result.text)).toEqual(plan); expect(f.requests).toHaveLength(2);
+    const cap = (request: any) => request.max_tokens ?? request.max_completion_tokens;
+    expect(cap(f.requests[0])).toBe(2_000); expect(cap(f.requests[1])).toBe(6_000);
+    expect(f.requests[0].tools).toHaveLength(4); expect(f.requests[1].tools ?? []).toEqual([]);
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', formatRetries: 1, budget: { modelTurns: 2, usage: { output: 2_200 }, limits: { maxOutputTokens: 16_000 } } });
   });
   it('allows a real Pi reviewer to finish beyond the previous 24-turn ceiling', async () => {
     let turns = 0;

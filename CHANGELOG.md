@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Treat the sole check-plan schema correction as finalization, using its reserved response allowance with tools closed. Scope wire-payload caps to Pi OpenAI Completions/Responses adapters, preserving other Providers and ordinary reviewer ceilings.
+
 - Add no-model baseline/candidate calibration for pinned frozen upstream checks. Use separate offline containers and native Pi programmatic shell receipts; retain inherited failures, unavailable plans and integrity errors without labeling them defect catches.
 
 - Close independent check-design collection on observed output/turn headroom as well as read count. Cap existing OpenAI-compatible output fields within unchanged local/parent hard budgets and keep stale tools closed across finalization/format correction. Native Pi fixture evidence is distinct from historical model-quality results.
