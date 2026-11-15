@@ -56,6 +56,35 @@ async function fixture(handler: (input: any, res: ServerResponse) => void | Prom
 const task = (title = '检查实现', prompt = 'Read sample.txt and report evidence.') => ({ title, prompt, role: 'explorer' as const });
 
 describe('managed Pi subagents', () => {
+  it('records each actual Pi provider request and restores only numeric timing checkpoints', async () => {
+    let count = 0;
+    const verdict = { verdict: 'ready', summary: 'Timing plumbing only', issues: [], acceptance: [{ id: 'A1', status: 'met', evidence: 'Fixture source read' }] };
+    const f = await fixture(async (input, res) => {
+      await new Promise(resolve => setTimeout(resolve, 40));
+      answer(res, input, JSON.stringify(verdict), ++count === 1 ? { name: 'read', args: { path: 'sample.txt' } } : undefined);
+    });
+    const result = await f.agents.reviewGate('LATENCY_INPUT_NOT_FOR_TELEMETRY: inspect sample.txt', new AbortController().signal);
+    expect(result.reviewTelemetry?.calls).toHaveLength(2);
+    expect(result.reviewTelemetry?.calls.every(call => call.outcome === 'completed' && call.durationMs! >= 30 && call.firstContentMs !== null && call.headersMs !== null)).toBe(true);
+    expect(result.reviewLatency).toMatchObject({ observedCalls: 2, successful: { count: 2 }, censoredCalls: 0 });
+    const checkpoints = f.manager.getBranch().filter(entry => entry.type === 'custom' && entry.customType === 'forge.review_call');
+    expect(checkpoints.length).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(checkpoints)).not.toContain('LATENCY_INPUT_NOT_FOR_TELEMETRY');
+    expect(JSON.stringify(checkpoints)).not.toContain('127.0.0.1');
+    const restored = new ForgeSubagents(f.options);
+    expect(restored.snapshot()[0]!.reviewTelemetry).toEqual(result.reviewTelemetry);
+    await restored.close();
+  });
+  it('retains an interrupted in-flight call on restore without inventing completed latency', async () => {
+    const f = await fixture(async () => { /* Keep the provider response pending until cancellation. */ });
+    const pending = f.agents.reviewGate('Wait for the response', new AbortController().signal).catch(error => error);
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1), { timeout: 10000 });
+    const restored = new ForgeSubagents(f.options);
+    expect(restored.snapshot()[0]).toMatchObject({ status: 'interrupted', reviewTelemetry: { calls: [{ outcome: 'interrupted', durationMs: null }] } });
+    await restored.close(); await f.agents.cancelAll();
+    expect(await pending).toBeInstanceOf(Error);
+    expect(f.agents.snapshot()[0]!.reviewTelemetry!.calls[0]).toMatchObject({ outcome: 'cancelled', durationMs: null });
+  });
   it('runs baseline diagnosis in a fresh read-only child with one bounded JSON retry', async () => {
     const correction = { version: 1, action: 'keep', summary: 'Retain the original failure', findings: [
       { id: 'B1', kind: 'expected_failure', requestQuote: 'Fix behavior', reason: 'Reproduction fails on the original version' },

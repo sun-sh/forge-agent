@@ -13,6 +13,7 @@ import { parseBehaviorPlan, behaviorPlanFeedback, BEHAVIOR_FORMAT } from '../tas
 import { capDesignPayload, designAllowance, DESIGN_READ_LIMIT, DESIGN_FINAL_OUTPUT } from '../task/behavior-design-budget.js';
 import { parseBehaviorCorrection, behaviorCorrectionFeedback, CORRECTION_FORMAT } from '../task/behavior-correction.js';
 import { REVIEW_BUDGETS, reviewBudgetProfileSchema, type ReviewBudgetProfile } from '../task/review-budget.js';
+import { REVIEW_CALL_ENTRY, ReviewCallTelemetry, newReviewTelemetry, reviewTelemetrySchema, reviewCallEntrySchema, summarizeReviewTelemetry } from '../task/review-telemetry.js';
 
 const ENTRY = 'forge.subagent';
 export const SUBAGENT_CONCURRENCY = 3;
@@ -47,6 +48,7 @@ const recordSchema = z.object({
   purpose: z.enum(['review_gate', 'behavior_plan', 'behavior_correction']).optional(),
   formatRetries: z.number().int().min(0).max(1).optional(), errorCode: z.enum(['invalid_review', 'invalid_behavior_plan', 'invalid_behavior_correction', 'budget_exhausted']).optional(),
   reviewStop: reviewStopSchema.optional(), reviewBudget: reviewBudgetProfileSchema.optional(),
+  reviewTelemetry: reviewTelemetrySchema.optional(),
   status: z.enum(['starting', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   model: z.string().min(1).max(512), thinkingLevel: z.string().max(32),
   createdAt: z.iso.datetime(), startedAt: z.iso.datetime(), endedAt: z.iso.datetime().optional(),
@@ -83,6 +85,19 @@ export class ForgeSubagents {
     this.checkpoints = new CheckpointStore(options.home);
     this.worktrees = new WorkerWorktrees(options.home, this.checkpoints);
     for (const entry of options.manager.getBranch()) {
+      if (entry.type === 'custom' && entry.customType === REVIEW_CALL_ENTRY) {
+        const parsed = reviewCallEntrySchema.safeParse(entry.data);
+        if (parsed.success && parsed.data.parentId === options.manager.getSessionId()) {
+          const record = this.records.get(parsed.data.childId);
+          if (record?.purpose === 'review_gate') {
+            const log = record.reviewTelemetry ??= newReviewTelemetry(record.prompt.length), call = parsed.data.call;
+            const index = log.calls.findIndex(item => item.sequence === call.sequence);
+            if (index >= 0) log.calls[index] = call;
+            else if (log.calls.length < 256) log.calls.push(call);
+          }
+        }
+        continue;
+      }
       if (entry.type !== 'custom' || entry.customType !== ENTRY) continue;
       const parsed = recordSchema.safeParse(entry.data);
       // A normal conversation fork does not inherit ownership of the original's children.
@@ -90,6 +105,7 @@ export class ForgeSubagents {
     }
     for (const record of this.records.values()) if (['starting', 'running'].includes(record.status)) {
       record.status = 'interrupted'; record.error = '服务已重启，子任务已中断；不会自动重放。'; record.endedAt = new Date().toISOString();
+      for (const call of record.reviewTelemetry?.calls ?? []) if (call.outcome === 'running') { call.outcome = 'interrupted'; call.durationMs = null; }
     }
   }
   snapshot(): SubagentView[] {
@@ -179,7 +195,8 @@ export class ForgeSubagents {
     if (['invalid_review', 'invalid_behavior_plan', 'invalid_behavior_correction'].includes(finished?.errorCode ?? '')) throw new ReviewFormatError(finished!.error ?? title + '格式无效。');
     if (finished?.budget?.status === 'exceeded') throw new ReviewBudgetExceededError(finished.error ?? finished.budget.exceededReason ?? title + '预算耗尽。', finished.id, finished.model);
     if (finished?.status !== 'completed' || !finished.result) throw new Error(finished?.error ?? title + '未完成。');
-    return { text: finished.result, sessionId: finished.id, model: finished.model, formatRetries: finished.formatRetries ?? 0 };
+    return { text: finished.result, sessionId: finished.id, model: finished.model, formatRetries: finished.formatRetries ?? 0,
+      reviewTelemetry: finished.reviewTelemetry, reviewLatency: summarizeReviewTelemetry(finished.reviewTelemetry) };
   }
   private async startBatch(tasks: TaskInput[], toolCallId: string, signal?: AbortSignal, reviewGate: boolean | 'behavior_plan' | 'behavior_correction' = false) {
     const parentBudget = this.assertAllowed(reviewGate);
@@ -238,6 +255,10 @@ export class ForgeSubagents {
     const { record, controller } = run;
     const parentLimits = parentBudget.limits;
     const gate = record.purpose === 'review_gate';
+    const telemetry = gate ? new ReviewCallTelemetry(record.reviewTelemetry ??= newReviewTelemetry(record.prompt.length), call => {
+      this.options.manager.appendCustomEntry(REVIEW_CALL_ENTRY, { version: 1, parentId: record.parentId, childId: record.id, call });
+    }) : undefined;
+    let modelTurn = 0;
     const correcting = record.purpose === 'behavior_correction', design = record.purpose === 'behavior_plan' || correcting, structured = gate || design;
     const limits = gate ? REVIEW_BUDGETS[record.reviewBudget ?? 'standard'] : { maxDurationMs: 180_000, maxModelTurns: 12, maxToolCalls: 60, maxOutputTokens: 16_000, maxCostUsd: 2 };
     const budget = new BudgetRuntime({ maxDurationMs: Math.min(limits.maxDurationMs, parentLimits.maxDurationMs), maxModelTurns: Math.min(limits.maxModelTurns, parentLimits.maxModelTurns), maxToolCalls: Math.min(limits.maxToolCalls, parentLimits.maxToolCalls), maxTotalTokens: 0, maxOutputTokens: Math.min(limits.maxOutputTokens, parentLimits.maxOutputTokens), maxCostUsd: Math.min(limits.maxCostUsd, parentLimits.maxCostUsd) }, (snapshot) => { record.budget = snapshot; this.publish(); });
@@ -282,11 +303,18 @@ export class ForgeSubagents {
           event.systemPromptOptions.selectedTools = [...activeTools];
           pi.setActiveTools(activeTools);
         });
-        pi.on('turn_start', (_event, ctx) => { const local = budget.recordModelTurn(), total = parentBudget.recordModelTurn(); if (closeCollection()) pi.setActiveTools([]); if (!local || !total) ctx.abort(); });
+        pi.on('turn_start', (_event, ctx) => { modelTurn++; const local = budget.recordModelTurn(), total = parentBudget.recordModelTurn(); if (closeCollection()) pi.setActiveTools([]); if (!local || !total) ctx.abort(); });
         pi.on('before_provider_request', (event) => {
+          telemetry?.start(modelTurn, event.payload);
           if (!design) return;
           const allowance = designAllowance(budget.snapshot(), parentBudget.snapshot()), closed = closeCollection();
           return capDesignPayload(event.payload, Math.min(allowance.remaining, closed ? DESIGN_FINAL_OUTPUT : allowance.response), closed, model.api);
+        });
+        pi.on('after_provider_response', event => { telemetry?.headers(event.status); });
+        pi.on('provider_stream_event', () => { telemetry?.stream(); });
+        pi.on('message_update', event => {
+          const update = event.assistantMessageEvent as { type?: string; delta?: unknown };
+          if (update.type?.endsWith('_delta') && typeof update.delta === 'string' && update.delta.length) telemetry?.stream(true);
         });
         pi.on('tool_result', (event) => {
           if (!design) return;
@@ -322,6 +350,8 @@ export class ForgeSubagents {
         });
         pi.on('message_end', (event, ctx) => {
           const message = event.message as any;
+          if (message.role === 'assistant') telemetry?.finish(controller.signal.aborted || message.stopReason === 'aborted'
+            ? budget.exceededReason || parentBudget.exceededReason ? 'budget_exhausted' : 'cancelled' : message.stopReason === 'error' ? 'error' : 'completed', message.usage);
           if (message.role === 'assistant' && message.usage) {
             // Count in both ledgers, including the request that crosses a limit.
             const pricingKnown = Object.values(model.cost).some((price) => typeof price === 'number' && price > 0);
@@ -387,6 +417,7 @@ export class ForgeSubagents {
       record.status = controller.signal.aborted && !budget.exceededReason && !parentBudget.exceededReason ? 'cancelled' : 'failed';
       record.error = (budget.exceededReason ?? parentBudget.exceededReason ?? (error instanceof Error ? error.message : String(error))).slice(0, 1000);
     } finally {
+      telemetry?.finish(budget.exceededReason || parentBudget.exceededReason ? 'budget_exhausted' : controller.signal.aborted ? 'cancelled' : 'error');
       stopParentBudget();
       unsubscribe?.();
       if (run.agent) {
