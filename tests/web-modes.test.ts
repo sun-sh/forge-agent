@@ -1,4 +1,4 @@
-import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, implementBehaviorFixture, behaviorFixtureWrite, behaviorFixtureSource } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -19,8 +19,10 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean; skipBehavior?: boolean; failBehavior?: boolean } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean; skipBehavior?: boolean; failBehavior?: boolean; stableBehavior?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
+  await seedBehaviorFixture(root);
+  if (options.stableBehavior) await writeFile(join(root, behaviorFixtureSource.path), behaviorFixtureSource.implemented);
   const home = process.env['PFORGE_HOME']!;
   let nextCalls: Array<{ name: string; arguments: Record<string, unknown> }> | undefined;
   let queuedCalls: NonNullable<typeof nextCalls>[] = [];
@@ -44,6 +46,9 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
     }
     if (!calls && phase === 'implement' && options.implementationCommand && !implementationRequested) { const tool = input.tools.find((item: any) => ['powershell', 'bash'].includes(item.function.name))?.function.name; calls = [{ name: tool ?? 'bash', arguments: { command: options.implementationCommand } }]; implementationRequested = true; }
     if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
+    const nativeWrite = behaviorFixtureWrite(input);
+    if (nativeWrite && calls?.some(call => call.name === 'write')) calls.push(nativeWrite);
+    else await implementBehaviorFixture(root, input);
     const evidenceGap = phase === 'review' && options.reviewEvidenceGap && reviews++ === 0;
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const delta = calls ? { role: 'assistant', tool_calls: calls.map((call, index) => ({ index, id: 'mode-' + requests.length + '-' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) } : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: evidenceGap ? 'changes_requested' : 'ready', summary: evidenceGap ? 'Missing focused command evidence' : 'Fixture review passed', issues: [], acceptance: evidenceGap ? handoff.acceptance.map((item) => ({ ...item, status: 'unconfirmed' })) : handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input).includes('End inspection with exactly one JSON object') ? JSON.stringify({ ...handoff.brief, ...(options.briefIntent ? { intent: options.briefIntent } : {}) }) : 'Mode response complete' };
@@ -99,6 +104,8 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.task).toMatchObject({ kind: 'change', status: 'completed', finalization: 'succeeded', result: { status: 'implemented_unverified', acceptance: 'unverified', resolutionClaimed: false } });
     expect(state.task.phases.map((phase: any) => phase.phase)).toEqual(['inspect', 'plan', 'check', 'implement', 'check', 'verify', 'review', 'complete']);
     expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implemented through Pi write');
+    expect(await readFile(join(f.root, behaviorFixtureSource.path), 'utf8')).toBe(behaviorFixtureSource.implemented);
+    expect(state.messages.some((entry: any) => entry.role === 'toolResult' && entry.toolName === 'write' && !entry.isError && JSON.stringify(entry).includes(behaviorFixtureSource.path))).toBe(true);
     expect(await readFile(join(f.root, 'verify.cjs'), 'utf8')).toContain('verified-exact-output');
   });
   it.each([{ skipBehavior: true }, { failBehavior: true }])('blocks a static ready review when native behavior evidence is missing or failed: %j', async (options) => {
@@ -111,6 +118,22 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.task.result).toMatchObject({ status: 'blocked', modelReview: 'insufficient_evidence', reviewStop: { action: 'provide_evidence', issueCount: 0 } });
     if (options.skipBehavior) { expect(state.task.behavior.receipts).toHaveLength(0); expect(state.task.behavior.status).toBe('unconfirmed'); }
     else { expect(state.task.behavior.status).toBe('failed'); expect(state.task.behavior.receipts.some((item: any) => item.exitCode === 1 && item.source === 'pi-builtin-shell')).toBe(true); }
+  });
+  it('blocks ready when real native checks pass identically before and after implementation', async () => {
+    const f = await fixture({ stableBehavior: true, implementationWrite: { path: 'implementation-result.txt', content: 'implementation preserved' } });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Implement the fixture behavior and preserve the boundary.', workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(await readFile(join(f.root, 'implementation-result.txt'), 'utf8')).toBe('implementation preserved');
+    const baseline = state.task.behavior.calibration.runs[0];
+    const candidate = state.task.behavior.receipts;
+    expect(baseline).toMatchObject({ status: 'observed', receipts: [{ status: 'passed', exitCode: 0, source: 'pi-builtin-shell' }, { status: 'passed', exitCode: 0, source: 'pi-builtin-shell' }] });
+    expect(candidate).toMatchObject([{ status: 'passed', exitCode: 0, source: 'pi-builtin-shell' }, { status: 'passed', exitCode: 0, source: 'pi-builtin-shell' }]);
+    expect(candidate.map((receipt: any) => [receipt.commandSha256, receipt.outputSha256])).toEqual(baseline.receipts.map((receipt: any) => [receipt.commandSha256, receipt.outputSha256]));
+    expect(state.task).toMatchObject({ status: 'needs_attention', repairs: 0, review: { verdict: 'insufficient_evidence', issues: [] }, reviewStop: { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0 }, result: { status: 'blocked', modelReview: 'insufficient_evidence' } });
+    expect(state.task.review.acceptance.map((item: any) => ({ id: item.id, status: item.status }))).toEqual(handoff.acceptance.map(item => ({ id: item.id, status: 'unconfirmed' })));
+    expect(state.task.reviewStop.unconfirmedIds).toEqual(handoff.acceptance.map(item => item.id));
+    expect(f.requests.filter(input => fixturePhase(input) === 'review')).toHaveLength(1);
   });
   it('passes a real Pi shell receipt to a fresh read-only reviewer without sending the parent transcript', async () => {
     const marker = 'REVIEW_RECEIPT_43_PASSED';
@@ -297,6 +320,13 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     const modelNodes = timeline.timeline.nodes.filter((node: any) => node.kind === 'model');
     expect(modelNodes).toHaveLength(10);
     expect(state.task.behavior).toMatchObject({ status: 'passed', receipts: [{ exitCode: 0 }, { exitCode: 0 }] });
+    const baseline = state.task.behavior.calibration.runs[0];
+    const candidate = state.task.behavior.receipts;
+    expect(baseline).toMatchObject({ status: 'observed', receipts: [{ checkId: 'B1', exitCode: 1, status: 'failed', source: 'pi-builtin-shell' }, { checkId: 'B2', exitCode: 0, status: 'passed', source: 'pi-builtin-shell' }] });
+    expect(candidate.map((receipt: any) => receipt.commandSha256)).toEqual(baseline.receipts.map((receipt: any) => receipt.commandSha256));
+    expect(candidate[0].outputSha256).not.toBe(baseline.receipts[0].outputSha256);
+    expect(candidate[1].outputSha256).toBe(baseline.receipts[1].outputSha256);
+    expect(state.task.behavior.calibration.comparisons).toMatchObject([{ checkId: 'B1', outcome: 'changed_to_pass' }, { checkId: 'B2', outcome: 'unchanged_pass' }]);
     expect(modelNodes.find((node: any) => node.label === 'independent reviewer')).toMatchObject({ source: 'pi', status: 'completed' });
     expect((await f.api('sessions/' + session.id + '/timeline?task=unknown')).status).toBe(404);
     expect(state.verification).toMatchObject({ status: 'passed', runId: state.task.id, evidenceId: expect.any(String) });
@@ -335,6 +365,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     const state = await f.settled(session.id);
     expect(f.requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('write');
     await expect(access(join(f.root, 'blocked-by-answer-router'))).rejects.toThrow();
+    expect(await readFile(join(f.root, behaviorFixtureSource.path), 'utf8')).toBe(behaviorFixtureSource.baseline);
     expect(state.task.kind === 'answer' || state.task.kind === 'explore').toBe(true);
   });
   it('keeps adaptive Agent prompts in the native Pi loop without a host task', async () => {
@@ -493,6 +524,7 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.verification.status).toBe('skipped');
     expect(JSON.stringify(state.messages)).toContain('read-only evidence');
     await expect(access(join(f.root, 'unsafe-write'))).rejects.toThrow();
+    expect(await readFile(join(f.root, behaviorFixtureSource.path), 'utf8')).toBe(behaviorFixtureSource.baseline);
     await expect(access(join(f.root, '.forge-agent', 'verified'))).rejects.toThrow();
     const declared = f.requests[0].tools.map((tool: any) => tool.function.name);
     expect(declared).toContain('read');

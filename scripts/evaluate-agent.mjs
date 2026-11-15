@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { respondBehaviorFixture, fixturePhase } from './test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, behaviorFixtureWrite } from './test-behavior-protocol.mjs';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
@@ -105,7 +105,9 @@ if (!real) {
     const phase = fixturePhase(input) ?? 'implement';
     const write = phase === 'implement' && input.messages.at(-1)?.role !== 'tool';
     const solutionFiles = activeTask.solutionFiles ?? { [activeTask.entry ?? 'solution.mjs']: activeTask.solution };
-    const calls = Object.entries(solutionFiles).map(([path, content], index) => ({ index, id: 'eval-' + requests + '-' + index, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path, content }) } }));
+    const writes = Object.entries(solutionFiles).map(([path, content]) => ({ name: 'write', arguments: { path, content } }));
+    const nativeWrite = behaviorFixtureWrite(input); if (nativeWrite) writes.push(nativeWrite);
+    const calls = writes.map((write, index) => ({ index, id: 'eval-' + requests + '-' + index, type: 'function', function: { name: write.name, arguments: JSON.stringify(write.arguments) } }));
     const handoff = JSON.parse(await readFile(new URL('../tests/fixtures/task-handoff.json', import.meta.url), 'utf8'));
     const review = phase === 'review' && reviewChallenge && activeWorkflow === 'planned' && challengeReviewCalls++ === 0
       ? { verdict: 'changes_requested', summary: 'Synthetic challenge defect requires repair.', issues: [activeTask.reviewFault?.label ?? 'Injected hidden defect'], issueKinds: ['code_defect'], acceptance: handoff.acceptance }
@@ -154,6 +156,7 @@ try {
     const started = performance.now(), beforeRequests = requests;
     const project = join(root, `${task.id}-${workflow}-r${run}`);
     await mkdir(project); await execute('git', ['init'], { cwd: project, windowsHide: true });
+    if (!real) await seedBehaviorFixture(project);
     const entry = task.entry ?? 'solution.mjs';
     const initialFiles = task.initialFiles ?? { [entry]: task.initial };
     for (const [path, content] of Object.entries(initialFiles)) await writeFixture(project, path, content);

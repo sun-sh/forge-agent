@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { respondBehaviorFixture, fixturePhase } from './test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, implementBehaviorFixture } from './test-behavior-protocol.mjs';
 // Real Chromium smoke check with an isolated profile, Pi home and local mock model.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -20,6 +20,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'pforge-web-smoke-'));
 const project = join(temporary, 'project'), home = join(temporary, 'home');
 const output = resolve('.forge-agent/web-audit');
 await Promise.all([mkdir(project), mkdir(home), mkdir(output, { recursive: true })]);
+await seedBehaviorFixture(project);
 const projectCanonical = await realpath(project).catch(() => project);
 const projectPathExpression = JSON.stringify([project, projectCanonical]);
 await writeFile(join(home, 'settings.json'), JSON.stringify({ compaction: { keepRecentTokens: 256 } }));
@@ -52,6 +53,7 @@ const modelServer = createServer(async (request, response) => {
   modelRequests++;
   const input = JSON.parse(raw);
   if (respondBehaviorFixture(input, response)) return;
+  await implementBehaviorFixture(project, input);
   const phase = fixturePhase(input);
   const content = phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Browser fixture review', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' && JSON.stringify(input.messages).includes('End inspection with exactly one JSON object') ? JSON.stringify(handoff.brief) : reply;
   observedEfforts.push(input.reasoning_effort);

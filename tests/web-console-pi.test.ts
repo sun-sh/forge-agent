@@ -1,4 +1,4 @@
-import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, behaviorFixtureWrite, behaviorFixtureSource } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -353,7 +353,9 @@ describe("pforge Pi web console", () => {
       if (phase === "inspect") {
         delta = { role: "assistant", content: JSON.stringify({ version: 1, intent: "change", goal: "Create index.html", affectedPaths: ["index.html"], constraints: [], acceptance: [{ criterion: "index.html exists", check: "inspection", evidence: "Read the file" }], unresolved: [], steps: ["Create index.html"] }) };
       } else if (phase === "implement" && last?.role !== "tool") {
-        delta = { role: "assistant", tool_calls: [{ id: "missing-delivery", type: "function", function: { name: "write", arguments: JSON.stringify({ path: "index.html", content: "<svg></svg>" }) } }] };
+        const writes = [{ name: 'write', arguments: { path: 'index.html', content: '<svg></svg>' } }];
+        const nativeWrite = behaviorFixtureWrite(payload); if (nativeWrite) writes.push(nativeWrite);
+        delta = { role: "assistant", tool_calls: writes.map((write, index) => ({ index, id: "missing-delivery-" + index, type: "function", function: { name: write.name, arguments: JSON.stringify(write.arguments) } })) };
         finish = "tool_calls";
       } else if (!modelVerified) {
         modelVerified = true;
@@ -369,6 +371,7 @@ describe("pforge Pi web console", () => {
     await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
     const port = (provider.address() as AddressInfo).port;
     const root = await mkdtemp(join(tmpdir(), "pforge-planned-delivery-project-"));
+    await seedBehaviorFixture(root);
     const home = await mkdtemp(join(tmpdir(), "pforge-planned-delivery-home-"));
     await writeFile(join(home, "models.json"), JSON.stringify({ providers: { mock: { baseUrl: "http://127.0.0.1:" + port + "/v1", api: "openai-completions", apiKey: "test", models: [{ id: "mock" }] } } }));
     const previousHome = process.env["PFORGE_HOME"];
@@ -388,7 +391,7 @@ describe("pforge Pi web console", () => {
         if (!latest.running) break;
       }
       expect(latest).toMatchObject({ running: false, outcome: "completed", task: { status: "completed", phase: "complete", validation: "unconfigured" } });
-      expect(latest.task.artifacts).toEqual([{ path: "index.html", operation: "write" }]);
+      expect(latest.task.artifacts).toEqual([{ path: "index.html", operation: "write" }, { path: behaviorFixtureSource.path, operation: "write" }]);
       expect(latest.verification).toMatchObject({ status: "skipped" });
       expect(latest.verification.report).toBeUndefined();
       expect(latest.messages.some((message: any) => message.role === "toolResult" && message.toolName === "run_verification" && !message.isError)).toBe(true);

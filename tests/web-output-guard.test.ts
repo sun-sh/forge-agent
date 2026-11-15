@@ -1,4 +1,4 @@
-import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, behaviorFixtureWrite, behaviorFixtureSource } from '../scripts/test-behavior-protocol.mjs';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,6 +15,7 @@ async function fixture(alwaysTruncated = false, empty = false) {
   const project = await mkdtemp(join(tmpdir(), 'forge-output-project-')), home = await mkdtemp(join(tmpdir(), 'forge-output-home-'));
   for (const name of ['FORGE_AGENT_HOME', 'PFORGE_HOME', 'PI_CODING_AGENT_DIR']) vi.stubEnv(name, home);
   vi.stubEnv('PI_CODING_AGENT_SESSION_DIR', join(home, 'sessions'));
+  await seedBehaviorFixture(project);
   await writeFile(join(project, 'forge-agent.json'), JSON.stringify({ verify: [{ name: 'node', command: 'node --version' }], verifyRetries: 0 }));
   await checkpointGit(project, ['init', '-q']); await checkpointGit(project, ['add', '.']);
   await checkpointGit(project, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'baseline']);
@@ -32,7 +33,9 @@ async function fixture(alwaysTruncated = false, empty = false) {
       truncated = true; delta = { reasoning_content: 'fixture-only reasoning that must never imply a finished implementation' };
       finish = empty ? 'stop' : 'length';
     } else if (input.messages.at(-1)?.role !== 'tool') {
-      delta = { tool_calls: [{ index: 0, id: 'create-' + calls, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path: 'index.html', content: '<!doctype html><html><body><svg><circle r="10"/></svg></body></html>' }) } }] };
+      const writes = [{ name: 'write', arguments: { path: 'index.html', content: '<!doctype html><html><body><svg><circle r="10"/></svg></body></html>' } }];
+      const nativeWrite = behaviorFixtureWrite(input); if (nativeWrite) writes.push(nativeWrite);
+      delta = { tool_calls: writes.map((write, index) => ({ index, id: 'create-' + calls + '-' + index, type: 'function', function: { name: write.name, arguments: JSON.stringify(write.arguments) } })) };
       finish = 'tool_calls';
     } else delta = { content: 'Saved index.html.' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -85,8 +88,9 @@ describe('incomplete model output delivery boundary', () => {
     expect(done.task.phases.some((phase: any) => phase.phase === 'verify')).toBe(false);
     expect(done.verification.report).toBeUndefined();
     await expect(readFile(join(f.project, 'index.html'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(f.project, behaviorFixtureSource.path), 'utf8')).toBe(behaviorFixtureSource.baseline);
     expect(f.calls()).toBe(9); // inspect + plan + design + three native baseline turns + original output + two recoveries
     expect(done.entries.filter((entry: any) => entry.type === 'custom' && entry.customType === 'forge.output_recovery')).toHaveLength(2);
-    expect(done.task.behavior.calibration.runs[0]).toMatchObject({ status: 'observed', receipts: [{ exitCode: 0 }, { exitCode: 0 }] });
+    expect(done.task.behavior.calibration.runs[0]).toMatchObject({ status: 'observed', receipts: [{ exitCode: 1 }, { exitCode: 0 }] });
   }, 60000);
 });

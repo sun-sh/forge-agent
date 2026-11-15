@@ -1,4 +1,4 @@
-import { respondBehaviorFixture, fixturePhase } from '../scripts/test-behavior-protocol.mjs';
+import { respondBehaviorFixture, fixturePhase, seedBehaviorFixture, behaviorFixtureWrite, implementBehaviorFixture } from '../scripts/test-behavior-protocol.mjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -15,6 +15,7 @@ async function fixture() {
   const home = await mkdtemp(join(tmpdir(), 'forge-web-evidence-home-'));
   for (const key of ['FORGE_AGENT_HOME', 'PFORGE_HOME', 'PI_CODING_AGENT_DIR']) vi.stubEnv(key, home);
   vi.stubEnv('PI_CODING_AGENT_SESSION_DIR', join(home, 'sessions'));
+  await seedBehaviorFixture(project);
   await writeFile(join(project, 'sample.txt'), 'before\n');
   await writeFile(join(project, 'forge-agent.json'), JSON.stringify({ verify: [{ name: 'gate', command: 'node --version' }], verifyRetries: 0 }));
   await checkpointGit(project, ['init', '-q']); await checkpointGit(project, ['add', '.']);
@@ -32,7 +33,11 @@ async function fixture() {
       call = operation === 'edit' ? { name: 'write', arguments: { path: 'sample.txt', content: 'after\n' } } : { name: 'subagent', arguments: { tasks: [{ title: 'Isolated edit', role: 'worker', prompt: 'Change sample.txt to worker proposal.' }] } };
       operation = 'answer';
     }
-    const delta = call ? { role: 'assistant', tool_calls: [{ index: 0, id: 'call-' + count, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } }] }
+    const calls = call ? [call] : [];
+    const nativeWrite = behaviorFixtureWrite(input);
+    if (nativeWrite && call?.name === 'write') calls.push(nativeWrite);
+    else if (!child) await implementBehaviorFixture(project, input);
+    const delta = call ? { role: 'assistant', tool_calls: calls.map((item, index) => ({ index, id: 'call-' + count + '-' + index, type: 'function', function: { name: item.name, arguments: JSON.stringify(item.arguments) } })) }
       : { role: 'assistant', content: phase === 'review' ? JSON.stringify({ verdict: 'ready', summary: 'Reviewed', issues: [], acceptance: handoff.acceptance }) : phase === 'plan' ? JSON.stringify(handoff.plan) : phase === 'inspect' ? JSON.stringify(handoff.brief) : 'Task response.' };
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const [part, finish] of [[delta, null], [{}, call ? 'tool_calls' : 'stop']]) response.write('data: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n');

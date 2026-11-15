@@ -1,5 +1,30 @@
 /** Scripted protocol fixture only: native Pi shell plumbing, never model quality. */
 import { randomUUID } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+// Controlled source for native process discrimination, never a quality oracle.
+// Seed before capturing the task baseline; only implementation may change it.
+export const behaviorFixtureSource = Object.freeze({
+  path: 'plumbing-normalizer.cjs',
+  baseline: '// Scripted native plumbing fixture only; not model quality evidence.\nmodule.exports = value => value.trim();\n',
+  implemented: '// Scripted native plumbing fixture only; not model quality evidence.\nmodule.exports = value => value.trim().toLowerCase();\n'
+});
+export async function seedBehaviorFixture(project) {
+  await writeFile(join(project, behaviorFixtureSource.path), behaviorFixtureSource.baseline);
+}
+/** Append to an existing Pi write turn when the test requires actual native writes. */
+export function behaviorFixtureWrite(input) {
+  if (fixturePhase(input) !== 'implement' || !input.tools?.some(tool => tool.function?.name === 'write')) return undefined;
+  return { name: 'write', arguments: { path: behaviorFixtureSource.path, content: behaviorFixtureSource.implemented } };
+}
+/** Host injection for scripted implementation plumbing, with no extra model turn. */
+export async function implementBehaviorFixture(project, input) {
+  const write = behaviorFixtureWrite(input);
+  if (!write || await readFile(join(project, write.arguments.path), 'utf8') !== behaviorFixtureSource.baseline) return false;
+  await writeFile(join(project, write.arguments.path), write.arguments.content);
+  return true;
+}
 const text = (message) => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part) => part.type === 'text').map((part) => part.text).join('\n');
 export function fixturePhase(input) {
   const systems = (input.messages ?? []).filter(message => ['system', 'developer'].includes(message.role));
@@ -16,8 +41,8 @@ export function respondBehaviorFixture(input, response, options = {}) {
     const request = JSON.parse(line).originalRequest;
     const shell = JSON.parse(line).requiredShell;
     const plan = { version: 1, status: 'ready', summary: 'Scripted plumbing fixture, not behavioral acceptance', assumptions: [], unresolved: [], checks: [
-      { id: 'B1', kind: 'reproduction', requestQuote: request.slice(0, 120), expectation: 'Exercise native assertion command plumbing', shell, timeoutSeconds: 30, command: options.fail ? 'node -e "require(\'node:assert/strict\').equal(2+2,5)"' : 'node -e "require(\'node:assert/strict\').equal(2+2,4)"' },
-      { id: 'B2', kind: 'boundary', requestQuote: request.slice(0, 120), expectation: 'Exercise a second independent receipt', shell, timeoutSeconds: 30, command: 'node -e "require(\'node:assert/strict\').equal(3*3,9)"' }
+      { id: 'B1', kind: 'reproduction', requestQuote: request.slice(0, 120), expectation: 'Controlled plumbing: trim and lowercase a mixed-case input', shell, timeoutSeconds: 30, command: `node -e "require('node:assert/strict').equal(require('./${behaviorFixtureSource.path}')(' MiXeD '),'${options.fail ? 'deliberately-wrong-fixture-expectation' : 'mixed'}')"` },
+      { id: 'B2', kind: 'boundary', requestQuote: request.slice(0, 120), expectation: 'Controlled plumbing: preserve blank and already-normalized input', shell, timeoutSeconds: 30, command: `node -e "const normalize=require('./${behaviorFixtureSource.path}');const assert=require('node:assert/strict');assert.equal(normalize('   '),'');assert.equal(normalize('mixed'),'mixed')"` }
     ] };
     delta = { role: 'assistant', content: JSON.stringify(plan) };
   } else {
