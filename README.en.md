@@ -51,7 +51,7 @@ The reviewer defaults return to 5 minutes, 24 turns, 120 tools, 32,000 output to
 
 Public web search and URL text reading work out of the box without a search API key. **Settings → Tools** provides an opt-out and an actual document-connection test. Results retain source URLs; use browser MCP for interactive or authenticated pages. The UI manages models, MCP, Skills, context compaction and scoped reference memory. Ordinary workers have no shell, MCP or nested delegation and suit bounded file tasks. See [subagent design](docs/subagents.md) for permissions, budgets and proposal limits.
 
-The review contract requires explicit compatibility-narrowing and test-regression checks; documentation and predicted future tests do not authorize an exemption. The host blocks ready when every valid frozen check is non-discriminating, while typed missing-execution findings request the required tests. These constraints do not guarantee defect detection; quality needs fixed-candidate replay evidence.
+The review contract requires explicit compatibility-narrowing and test-regression checks; documentation and predicted future tests do not authorize an exemption. The host blocks ready when every valid frozen check is non-discriminating, while typed missing-execution findings request the required tests. The [fixed-candidate replay](docs/evaluations/reviewer-compatibility-2026-11-16.md) still fails its preregistered missed-defect threshold; these constraints are not a reliable detection guarantee.
 
 An evidence-only review gap can trigger one focused follow-up within the shared repair allowance, followed by fresh verification and review. Remaining gaps retain explicit reasons, and continuation/restart preserve consumption.
 

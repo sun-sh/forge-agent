@@ -37,6 +37,8 @@ No claim is made that the historical Flask/Matplotlib failures are repaired, or 
 
 ## 中文
 
+The later [compatibility replay](evaluations/reviewer-compatibility-2026-11-16.md) does not meet its registered efficacy threshold: it contains one targeted Matplotlib finding, no targeted Flask finding and three timeouts, while both controls retain 3/3 acceptance. It does not activate the C host guard on historical snapshots without calibration. The report separates prompt compliance, native host-policy fixtures and actual model-quality evidence; none changes result semantics or the old official labels.
+
 旧实现确有预算异常类型、错误文案和 unconfirmed 验收项，但没有对用户统一表达三种原因；先前把它说成已完成三分类是不准确的。现在原因、恢复动作和验收 ID 同时进入持久化、API 和界面，证据不足有独立 verdict。标准预算恢复 24 回合/$4，40 回合/$6 由用户显式开启。原两轮 n=1 只验证路径，不证明扩大预算有效；漏检案例仍保留为未验证改善，新反例与实际上游成绩分别报告。
 
 The [24-review real-model diagnostic](evaluations/review-counterexamples-2026-11-13.md) detects both synthetic mechanisms under both prompts with no observed decision gain. It does not demonstrate repair of upstream misses or a need for extended budgets.

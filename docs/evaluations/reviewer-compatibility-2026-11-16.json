@@ -1,0 +1,877 @@
+{
+  "schemaVersion": 1,
+  "protocol": "reviewer-compatibility-readout-v1",
+  "protocolLabel": "2026-11-15",
+  "preregistration": {
+    "markdownSha256": "737d22986a541e9ca437175b4275b0859c55f64c8025e1f9d57c6c31568b94ab",
+    "jsonSha256": "7bfb115c6b5b2e58748a93bf58c56f9fc1e9d22bcdd2e182875629745ae2afe9"
+  },
+  "execution": {
+    "codeRevision": "5eb85054a9570651cd567dbdce1b7c130804066f",
+    "harnessFingerprint": "bed366cf55a47fd2952389e3a1e33e0e574ee96f861f5b4289f1a47e9d60da25",
+    "protocolContentSha256": "92ae6f7aa58bb78bf76e06589ba721ffaea159add064d4d94ee779450579e002",
+    "protocolFileSha256": "ea7458661d91345d87a4cccce9dd16bd48425bdd04e2dd154451e2b09a9f141c",
+    "rawReportSha256": "779b028df94dfb7b2b99342d11d188fda7985487bafd4fea7b282dbff1734221",
+    "admissionManifestSha256": "65aa0f1f1907c9d36936931c40c76f89cc96d54e67db450834a6ad3315822973",
+    "dirtyPathsAtAdmission": [
+      "scripts/check-web-ui.mjs",
+      "scripts/evaluate-agent.mjs",
+      "scripts/test-behavior-protocol.d.mts",
+      "scripts/test-behavior-protocol.mjs",
+      "tests/web-console-pi.test.ts",
+      "tests/web-evidence.test.ts",
+      "tests/web-modes.test.ts",
+      "tests/web-output-guard.test.ts"
+    ],
+    "dirtyDiffSha256": "817bc47a3a5564454ec8f478cc9362341db1fdca5149b2d0c3305ef86569a9da",
+    "startedAt": "2026-11-15T16:27:14.493Z",
+    "finishedAt": "2026-11-15T16:59:54.817Z",
+    "environment": {
+      "node": "v24.19.0",
+      "platform": "win32",
+      "piVersion": "1.4.0"
+    },
+    "frozenReplayBytesVerifiedAfterFinalBuild": true,
+    "wallElapsedMs": 1960324
+  },
+  "historicalEvidence": {
+    "originalRunId": "43184349339",
+    "regradeRunId": "43196437456",
+    "originalReportSha256": "a1792a3e12313809fd574f62f0539f67f71cd82ee4ddea5f99ba7aaf35070bff",
+    "regradedReportSha256": "26f74f0deb4ef4de37ceeff8e88c0aadce1801bed6afab1b6e6a94ccc293dd97",
+    "priorReplayReportSha256": "09a2610f8fa83d2782ed596f40204adb9d3d7e84c7f9644442a8641a4eadb52e"
+  },
+  "model": {
+    "id": "deepseek/deepseek-v4.1-flash",
+    "api": "openai-completions",
+    "thinking": "medium",
+    "pricingKnown": false,
+    "sameServiceBackendAsPriorEstablished": false
+  },
+  "reviewBudget": {
+    "profile": "standard",
+    "maxDurationMs": 300000,
+    "maxModelTurns": 24,
+    "maxToolCalls": 120,
+    "maxOutputTokens": 32000,
+    "maxCostUsd": 4
+  },
+  "parentBudget": {
+    "maxDurationMs": 5400000,
+    "maxModelTurns": 240,
+    "maxToolCalls": 500,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 300000,
+    "maxCostUsd": 40
+  },
+  "scope": {
+    "fixedCandidates": 4,
+    "reviewsPerCandidate": 3,
+    "newImplementations": 0,
+    "newOfficialGrades": 0,
+    "sourceTestExecutions": 0,
+    "hostDiscriminationApplied": false,
+    "CMeasuredByReplay": false
+  },
+  "candidates": [
+    {
+      "id": "pallets__flask-4045",
+      "patchSha256": "770690aee527cfcd6752d1ddc9d66866709be021b54e4dcc49f8affa1b859191",
+      "snapshotSha256": "376241542e109e5a7a631f54e345f03513d84d95509c1abea3e6c406c50fec8f",
+      "officialReportSha256": "8e7eeb60c63a4807dfe2bc194d400b1deee6f440ecca5af1eedbc94ffb418493",
+      "effectiveHead": "277886950a064f3525e9eda7c47e22363343af61",
+      "sourceTree": "dbead88be96fabe6a398df3f124987b9f78e1524",
+      "handoffSha256": "30eb8b67b8099bd9ae524ff018a8d0dfd3bb8c26539da227648d95122004c390",
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5"
+      ],
+      "behaviorEvidence": {
+        "present": false,
+        "calibrationPresent": false
+      },
+      "sourceImage": {
+        "imageId": "sha256:459abea2907f6db45f2a50cea2929e3e0867665eab9b9c6feb80fa737b2f0426",
+        "imageRef": "swebench/sweb.eval.x86_64.pallets_1776_flask-4045:latest",
+        "manifestDigest": "sha256:431573fcf066022cec6e296bdb1105b5135283a3ebdf13b9ad1bd1859580a7c0",
+        "layerDigest": "sha256:5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "layerBytes": 5749961,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "downloadedBytes": 5749961
+      },
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": []
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "patchSha256": "4ca8be6d8883e43dc0de1b03fb0c04693267689874425d756b645c0077431cd7",
+      "snapshotSha256": "0d849310a98c3b387266367ebac982d35269bf424a6b505edcceb98d125a0896",
+      "officialReportSha256": "a816053557e1f5e3a03e89d67d8f1076dfe32c09a6bd1beab584d33719c03e4b",
+      "effectiveHead": "84620c55178a66fa19105e561e5ff461fc07f9e4",
+      "sourceTree": "ad28d05b4c4bba6fbd08eec3b7e70612497b33aa",
+      "handoffSha256": "5ff702f8a50b307274ad1b0690bca249b0e9e2a99d654ec28b3239a027c4f656",
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4"
+      ],
+      "behaviorEvidence": {
+        "present": false,
+        "calibrationPresent": false
+      },
+      "sourceImage": {
+        "imageId": "sha256:93f13bec950adf1aa64132b4653af0503c6acdb49e8c3a771ae8efdf0813dac6",
+        "imageRef": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23563:latest",
+        "manifestDigest": "sha256:d868994deae1f816cb23b878db1e4c4cf371ef5f8d77d8bd2129c133ed0a4cbf",
+        "layerDigest": "sha256:10cb0b56e4d746893b68e02ddb5bfcf303a79f2bcd7266d16a35d3eaaa17e1f3",
+        "layerBytes": 971577772,
+        "sourceMode": "base-shallow-fetch-plus-verified-loose-objects",
+        "fullLayerVerified": false,
+        "downloadedSourceSha256": "489b6fd9265c9db11d47c2abc2438152e01dac6117502dfe6e55c12b9841cb83",
+        "downloadedBytes": 16777216
+      },
+      "symlinkPlaceholders": [
+        "lib/matplotlib/mpl-data/images/back-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/filesave-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/forward-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/help-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/home-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/move-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/subplots-symbolic.svg",
+        "lib/matplotlib/mpl-data/images/zoom_to_rect-symbolic.svg"
+      ],
+      "uninitializedSubmodules": []
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "patchSha256": "f580d0ca660630f9a048e6dcf975f1d6d370a85fb2a9ea2defc0e7e8dc16e2e9",
+      "snapshotSha256": "7d84a12aca57b095145ee22d3b7d8ee25c95b159f27364248135096155d8925e",
+      "officialReportSha256": "1424c0b3621434e905557f55c3c9318987743e4ecade58760625f5b22d30f95c",
+      "effectiveHead": "8784d2be8f7d89ee795e36e4fa751ea6a8ee3e0f",
+      "sourceTree": "e74e96d9bd4359a51960f6ba465da019aec0ab1a",
+      "handoffSha256": "842c17cfb8e3d0abfe12d4ee53d79341bd473fd585b932df6b67958fb18d4c55",
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ],
+      "behaviorEvidence": {
+        "present": false,
+        "calibrationPresent": false
+      },
+      "sourceImage": {
+        "imageId": "sha256:23df7aaa729e3a457bd0b6a83665178777019580c31c0b8a18069709167fb730",
+        "imageRef": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938:latest",
+        "manifestDigest": "sha256:e71ac0096dd19e742e2e70d088e970ee10471347847409c89cd40dbf32f4715e",
+        "layerDigest": "sha256:cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "layerBytes": 55724179,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "downloadedBytes": 55724179
+      },
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": [
+        "astropy_helpers"
+      ]
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "patchSha256": "10189ce6e8dfae864b295a89204755ba2bf71fa42ac4224230d45ebc012708a8",
+      "snapshotSha256": "e9087998fa38a2b3c1ad9667c99a2ebece005ebe39dceb642f5763e3a3d6513e",
+      "officialReportSha256": "762355f91a368a129fbfd8250150856ebb28c7e57e56982463f49cd509c2a15b",
+      "effectiveHead": "32537e483e2c24352d01019e86ed5199a9350ae4",
+      "sourceTree": "cdeb81de0eaea114053d5f2427930110d5c34ad6",
+      "handoffSha256": "2776690b1aadf189f11235e88a4a0b0db4493655987ac0253419e6eba4587281",
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3"
+      ],
+      "behaviorEvidence": {
+        "present": false,
+        "calibrationPresent": false
+      },
+      "sourceImage": {
+        "imageId": "sha256:576f6177b9b019c7eaaad1b546d6805007436b1a0cff5707d52236a741f37f47",
+        "imageRef": "swebench/sweb.eval.x86_64.sympy_1776_sympy-18189:latest",
+        "manifestDigest": "sha256:5d4dcec6309087223683586740b4fd96e27c0ef1678bccc872a0dd4eba1743b9",
+        "layerDigest": "sha256:f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "layerBytes": 73036869,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "downloadedBytes": 73036869
+      },
+      "symlinkPlaceholders": [],
+      "uninitializedSubmodules": []
+    }
+  ],
+  "perCase": [
+    {
+      "id": "pallets__flask-4045",
+      "officialResolved": false,
+      "prior": {
+        "accepted": 3,
+        "concreteBlocked": 0,
+        "abstained": 0
+      },
+      "scheduled": 3,
+      "accepted": 1,
+      "targeted": 0,
+      "otherConcreteBlocked": 0,
+      "abstained": 2
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "officialResolved": false,
+      "prior": {
+        "accepted": 3,
+        "concreteBlocked": 0,
+        "abstained": 0
+      },
+      "scheduled": 3,
+      "accepted": 1,
+      "targeted": 1,
+      "otherConcreteBlocked": 0,
+      "abstained": 1
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "officialResolved": true,
+      "prior": {
+        "accepted": 2,
+        "concreteBlocked": 0,
+        "abstained": 1
+      },
+      "scheduled": 3,
+      "accepted": 3,
+      "targeted": 0,
+      "otherConcreteBlocked": 0,
+      "abstained": 0
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "officialResolved": true,
+      "prior": {
+        "accepted": 3,
+        "concreteBlocked": 0,
+        "abstained": 0
+      },
+      "scheduled": 3,
+      "accepted": 3,
+      "targeted": 0,
+      "otherConcreteBlocked": 0,
+      "abstained": 0
+    }
+  ],
+  "results": [
+    {
+      "slot": 1,
+      "id": "pallets__flask-4045",
+      "run": 1,
+      "position": 1,
+      "officialResolved": false,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; notes explicitly excuse newly failing dotted-blueprint tests as intended behavior despite unchanged tests. No dotted-endpoint exception-contract finding.",
+        "path": "src/flask/blueprints.py",
+        "trigger": "dotted blueprint name versus dotted route endpoint",
+        "requirementAuthority": "explicit_for_dotted_blueprint_rejection_unresolved_for_endpoint_exception_type",
+        "targetRelevance": "missed_retained_official_endpoint_failure",
+        "disagreement": "Model treats explicit authorization to reject dotted blueprint names as sufficient to excuse unchanged failing tests; B additionally requires the corresponding test path in the patch. This is separate from the official endpoint exception mismatch."
+      },
+      "rawReviewTextSha256": "4fc5e58804b8eb3e5944e81da94d0fb1d617038c6c505537a934f4e07d1f1cc2",
+      "recordSha256": "6e74dc2378573952a19860e0a176230f0a35f7a1e160639471d78afac868fa7f",
+      "modelTurns": 5,
+      "toolCalls": 5,
+      "elapsedMs": 159985,
+      "usage": {
+        "input": 35418,
+        "output": 16788,
+        "cacheRead": 89280,
+        "cacheWrite": 0
+      },
+      "requestTokens": 141486,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 2,
+      "id": "matplotlib__matplotlib-23563",
+      "run": 1,
+      "position": 2,
+      "officialResolved": false,
+      "rawModelVerdict": null,
+      "normalizedModelVerdict": null,
+      "effectiveModelVerdict": null,
+      "hostGuardApplied": false,
+      "driverDecision": "abstained",
+      "coverage": false,
+      "issueKinds": [],
+      "stopReason": "budget_exhausted",
+      "outcome": "abstained",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Reviewer reached its unchanged 300-second duration limit after nine model turns, with no final verdict. No defect-detection credit.",
+        "path": null,
+        "trigger": null,
+        "requirementAuthority": "not_adjudicated_without_final_review",
+        "targetRelevance": "unresolved_budget_exhaustion",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": null,
+      "recordSha256": "0378755e862058d45ee040ee03faa1a185bcffcab4f4368b09eab36e5e5926eb",
+      "modelTurns": 9,
+      "toolCalls": 13,
+      "elapsedMs": 300023,
+      "usage": {
+        "input": 34782,
+        "output": 9594,
+        "cacheRead": 153920,
+        "cacheWrite": 0
+      },
+      "requestTokens": 198296,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 3,
+      "id": "astropy__astropy-6938",
+      "run": 1,
+      "position": 3,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; identifies in-place D-exponent assignment and distinguishes full-disk failures reproduced with the fix stashed from candidate regressions.",
+        "path": "astropy/io/fits/fitsrec.py",
+        "trigger": "writing ASCII FITS D-format columns",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "e2aa6752e6a6d90826590b5422d45e14e205c5cbb1e41cafb127657af2d9da8c",
+      "recordSha256": "2b5ac6a468b70dce5294108a9aca053abcd9def3b996f5ba11f23a6983828fe2",
+      "modelTurns": 8,
+      "toolCalls": 9,
+      "elapsedMs": 93175,
+      "usage": {
+        "input": 29406,
+        "output": 8995,
+        "cacheRead": 133312,
+        "cacheWrite": 0
+      },
+      "requestTokens": 171713,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 4,
+      "id": "sympy__sympy-18189",
+      "run": 1,
+      "position": 4,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; traces propagation of permute through the syms-reordering recursive call and uses the historical repository test-runner receipt.",
+        "path": "sympy/solvers/diophantine.py",
+        "trigger": "permute=True with reordered syms",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "f6f6b0c305de228e3e2059d6232e1a2dd717bb917fa2548196056d22ac94702f",
+      "recordSha256": "c06e68d083a594b5cdd66a782dc7d026ab08075e2c51e4fe16fdef99aaad037e",
+      "modelTurns": 4,
+      "toolCalls": 5,
+      "elapsedMs": 62900,
+      "usage": {
+        "input": 12887,
+        "output": 3216,
+        "cacheRead": 27328,
+        "cacheWrite": 0
+      },
+      "requestTokens": 43431,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 5,
+      "id": "matplotlib__matplotlib-23563",
+      "run": 2,
+      "position": 1,
+      "officialResolved": false,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; notes claim 2D input was never functioning and accept blanket ndim>1 rejection. Does not examine the previously working Nx1 column boundary.",
+        "path": "lib/mpl_toolkits/mplot3d/axes3d.py",
+        "trigger": "xs, ys or zs shaped (n,1)",
+        "requirementAuthority": "narrowing_not_authorized_by_original_issue",
+        "targetRelevance": "missed_Nx1_compatibility_regression",
+        "disagreement": "The reported broken 2D trigger does not establish that every 2D shape was broken. Broad historical passing tests do not cover the retained official Nx1 boundary."
+      },
+      "rawReviewTextSha256": "edb0bc6848d566290c7505e443126e26222a5cc90e03d03a70dd77d68da2d671",
+      "recordSha256": "3a5c90934e89f536e54775a503e617295e576d9dea1f5d6efa68a6a1e470834f",
+      "modelTurns": 4,
+      "toolCalls": 6,
+      "elapsedMs": 202406,
+      "usage": {
+        "input": 7175,
+        "output": 7150,
+        "cacheRead": 48640,
+        "cacheWrite": 0
+      },
+      "requestTokens": 62965,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 6,
+      "id": "astropy__astropy-6938",
+      "run": 2,
+      "position": 2,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; confirms assigned D-exponent replacement and preserves pre-existing full-disk/zero-precision limitations rather than inventing candidate regressions.",
+        "path": "astropy/io/fits/fitsrec.py",
+        "trigger": "writing ASCII FITS D-format columns",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "e1ccb97c24781204c3f3fee47062b3e0e07c39d2235a5461e2f0e77ebafcc5c3",
+      "recordSha256": "b104dc85572edbd48a39a39d72e7b2dcbb5c8beb3672dfe193a8583d3030d94a",
+      "modelTurns": 5,
+      "toolCalls": 8,
+      "elapsedMs": 76523,
+      "usage": {
+        "input": 10865,
+        "output": 8284,
+        "cacheRead": 69760,
+        "cacheWrite": 0
+      },
+      "requestTokens": 88909,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 7,
+      "id": "sympy__sympy-18189",
+      "run": 2,
+      "position": 3,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; confirms permute propagation while preserving no-syms and permute=False behavior. Historical repository runner is identified instead of claiming pytest ran.",
+        "path": "sympy/solvers/diophantine.py",
+        "trigger": "permute=True with reordered syms",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "bf0f74e3b529b4b94d458fdb73b20fdbfe75c5f8f1bc1e5ca8d4678dcbcf0173",
+      "recordSha256": "4749e2532c35b8c37b592e465dcedd30cee29e39523baf7c93c21297810e8aff",
+      "modelTurns": 2,
+      "toolCalls": 2,
+      "elapsedMs": 15375,
+      "usage": {
+        "input": 11001,
+        "output": 1427,
+        "cacheRead": 13824,
+        "cacheWrite": 0
+      },
+      "requestTokens": 26252,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 8,
+      "id": "pallets__flask-4045",
+      "run": 2,
+      "position": 4,
+      "officialResolved": false,
+      "rawModelVerdict": null,
+      "normalizedModelVerdict": null,
+      "effectiveModelVerdict": null,
+      "hostGuardApplied": false,
+      "driverDecision": "abstained",
+      "coverage": false,
+      "issueKinds": [],
+      "stopReason": "budget_exhausted",
+      "outcome": "abstained",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Reviewer reached its unchanged 300-second duration limit after three model turns, with no final verdict. No defect-detection credit.",
+        "path": null,
+        "trigger": null,
+        "requirementAuthority": "not_adjudicated_without_final_review",
+        "targetRelevance": "unresolved_budget_exhaustion",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": null,
+      "recordSha256": "bd47ac5116b7dc8cfd5575a8f01c237fdd20177013264cb9bb236ff0163f0f39",
+      "modelTurns": 3,
+      "toolCalls": 4,
+      "elapsedMs": 300023,
+      "usage": {
+        "input": 1899,
+        "output": 3728,
+        "cacheRead": 20352,
+        "cacheWrite": 0
+      },
+      "requestTokens": 25979,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 9,
+      "id": "astropy__astropy-6938",
+      "run": 3,
+      "position": 1,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; identifies the in-place chararray assignment and distinguishes pre-existing full-disk and zero-precision issues using the supplied historical receipts.",
+        "path": "astropy/io/fits/fitsrec.py",
+        "trigger": "writing ASCII FITS D-format columns",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "44c00e424738c53f3fe78518c8f7caecc255704501c7fd019906222a36357d87",
+      "recordSha256": "6e2f0d14356f2ce1be9283fbf05cb58958aee873bec6f482203762ab94dabf55",
+      "modelTurns": 3,
+      "toolCalls": 4,
+      "elapsedMs": 98982,
+      "usage": {
+        "input": 7342,
+        "output": 10168,
+        "cacheRead": 36096,
+        "cacheWrite": 0
+      },
+      "requestTokens": 53606,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 10,
+      "id": "sympy__sympy-18189",
+      "run": 3,
+      "position": 2,
+      "officialResolved": true,
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "driverDecision": "accepted",
+      "coverage": true,
+      "issueKinds": [],
+      "stopReason": null,
+      "outcome": "accepted",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Ready with complete coverage; traces recursive permute propagation and explicitly excludes a filtered zero-test invocation from evidence, using the historical full repository-runner result instead.",
+        "path": "sympy/solvers/diophantine.py",
+        "trigger": "permute=True with reordered syms",
+        "requirementAuthority": "explicit_original_issue",
+        "targetRelevance": "official_pass_control_accepted",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": "e0cac2b74ae4bdd3cb08f744d2f3dff174aac01a6a1237e0ae3427654ec09ff4",
+      "recordSha256": "27f7bf0652f1cc9bb659326c082b40d446f444639c4331b19947b82763946f60",
+      "modelTurns": 3,
+      "toolCalls": 4,
+      "elapsedMs": 26137,
+      "usage": {
+        "input": 9002,
+        "output": 2654,
+        "cacheRead": 27392,
+        "cacheWrite": 0
+      },
+      "requestTokens": 39048,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 11,
+      "id": "pallets__flask-4045",
+      "run": 3,
+      "position": 3,
+      "officialResolved": false,
+      "rawModelVerdict": null,
+      "normalizedModelVerdict": null,
+      "effectiveModelVerdict": null,
+      "hostGuardApplied": false,
+      "driverDecision": "abstained",
+      "coverage": false,
+      "issueKinds": [],
+      "stopReason": "budget_exhausted",
+      "outcome": "abstained",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Reviewer reached its unchanged 300-second duration limit after three model turns, with no final verdict. No defect-detection credit.",
+        "path": null,
+        "trigger": null,
+        "requirementAuthority": "not_adjudicated_without_final_review",
+        "targetRelevance": "unresolved_budget_exhaustion",
+        "disagreement": null
+      },
+      "rawReviewTextSha256": null,
+      "recordSha256": "f33d8e69ebf62f3f5cfdf841f6342221fbf121b65d493cec15530e1f9eb2e859",
+      "modelTurns": 3,
+      "toolCalls": 4,
+      "elapsedMs": 300031,
+      "usage": {
+        "input": 2082,
+        "output": 6752,
+        "cacheRead": 20352,
+        "cacheWrite": 0
+      },
+      "requestTokens": 29186,
+      "costUsd": null,
+      "formatRetries": 0
+    },
+    {
+      "slot": 12,
+      "id": "matplotlib__matplotlib-23563",
+      "run": 3,
+      "position": 4,
+      "officialResolved": false,
+      "rawModelVerdict": "changes_requested",
+      "normalizedModelVerdict": "changes_requested",
+      "effectiveModelVerdict": "changes_requested",
+      "hostGuardApplied": false,
+      "driverDecision": "defect_blocked",
+      "coverage": true,
+      "issueKinds": [
+        "code_defect"
+      ],
+      "stopReason": "code_defects",
+      "outcome": "targeted_changes_requested",
+      "integrity": {
+        "candidateUnchanged": true,
+        "readerPathsWithinProject": true
+      },
+      "finding": {
+        "summary": "Concrete code-defect finding identifies the previously accepted single-column 2D y case, traces Axes.plot column splitting and 1D zs broadcasting, and shows that the new ndim>1 guard rejects it.",
+        "path": "lib/mpl_toolkits/mplot3d/axes3d.py",
+        "trigger": "ax.plot(np.arange(3), np.arange(3)[:, None]) with default scalar z",
+        "requirementAuthority": "compatibility_narrowing_not_authorized_by_original_issue",
+        "targetRelevance": "matches_retained_Nx1_guard_regression_mechanism",
+        "disagreement": "Source-only finding matches the retained Nx1 failure mechanism; this replay does not execute the hidden test or regrade the patch. All model-authored acceptance items remain met, but a separate concrete compatibility issue blocks ready."
+      },
+      "rawReviewTextSha256": "580ceac190c28454b3657d3a13574a50ecd3900af7acb4d065e071c0e253ab8c",
+      "recordSha256": "803a435c1b91ddaf89aca4576ebe4aa1baf2603b06d2a0c1649d07670ab87baa",
+      "modelTurns": 10,
+      "toolCalls": 13,
+      "elapsedMs": 234008,
+      "usage": {
+        "input": 36541,
+        "output": 21195,
+        "cacheRead": 277312,
+        "cacheWrite": 0
+      },
+      "requestTokens": 335048,
+      "costUsd": null,
+      "formatRetries": 0
+    }
+  ],
+  "decision": {
+    "diagnosticEfficacyThresholdMet": false,
+    "overblockingRollbackCriterionMet": false,
+    "abstentionIsDefectDetection": false,
+    "interpretation": "efficacy_not_established_no_overblocking_rollback_triggered",
+    "casesWithThreeAcceptedReviews": [],
+    "targetedDetections": 1,
+    "generalSafetyOrResolutionGainClaimed": false
+  },
+  "usage": {
+    "requestTokens": 1215919,
+    "outputTokens": 99951,
+    "elapsedMs": 1869568,
+    "costUsd": null
+  },
+  "limitations": [
+    "Selected same-patch reviewer diagnostic, not end-to-end completion safety or a new SWE-bench score.",
+    "Original Python environments and ignored/generated products were not reconstructed; historical receipts are not fresh verification.",
+    "Original snapshots have no behavioral baseline/calibration; C is tested separately using controlled native fixtures, not this replay.",
+    "Matplotlib uses a verified 16 MiB layer prefix and verified Git objects/tree, not a fully verified 971577772-byte layer; eight resource symlink placeholders remain.",
+    "Astropy astropy_helpers gitlink is uninitialized.",
+    "Prior public model ID/API match but identical provider/backend revision is not established; no controlled same-service causal quality estimate.",
+    "The Flask official endpoint-exception contract is not explicit in the original request; unrelated stale-test blocks receive no targeted credit.",
+    "Raw sessions, credentials, private paths and connection details are retained locally and excluded from this allowlisted export.",
+    "Engineering tests ran concurrently with part of the model replay; latency and timeout observations are not a controlled performance comparison. All timeout slots remain in the denominator."
+  ],
+  "engineering": {
+    "revision": "0103a6da2445bafe94b748d80f5626ecd89f2c40",
+    "afterReplay": true,
+    "qualityRerun": false,
+    "changes": "Restore existing unresolved-calibration evidence priority; preserve typed missing-execution recovery and independent concrete findings with valid calibration. Reviewer replay does not import the controller.",
+    "checks": [
+      {
+        "kind": "first_full_active_suite",
+        "passed": 960,
+        "failed": 2,
+        "total": 962,
+        "retained": true,
+        "logSha256": "a3c1425db57047be6119927e2a8c56a661a98a01f03a41f6b1a1140e5dc0458b",
+        "findings": [
+          "Unresolved calibration recovered as code_defects: actual regression, repaired in source.",
+          "Worker false-path parent settle timeout under concurrent load; isolated same-bound recheck passed."
+        ]
+      },
+      {
+        "kind": "post_fix_focused_regressions",
+        "files": 6,
+        "passed": 389,
+        "failed": 0,
+        "logSha256": "a2ab310d1fb167d59170fbe84e3b6760f976e00d93e8b9176a7a1bba1b2364d1"
+      },
+      {
+        "kind": "native_web_identical_successful_receipts",
+        "passed": 1,
+        "failed": 0,
+        "model": "local_scripted_fixture_not_quality",
+        "logSha256": "b48998eb61cbe0a73f934f6c11e4788a35917f9057687787c319a7155ed01ad9"
+      },
+      {
+        "kind": "worker_apply_verify_isolated_recheck",
+        "passed": 2,
+        "failed": 0,
+        "boundsChanged": false,
+        "logSha256": "842987f321be95055a0f18bdffb43b0d708ca33d09faeae19d8f4da171e77b9d"
+      },
+      {
+        "kind": "scripted_smoke",
+        "passed": 5,
+        "total": 5,
+        "modelQualityEvidence": false,
+        "logSha256": "8965b363f53f5beb66562c78b179fbf7cc910d090593fc9e34aea3539ad21a76"
+      },
+      {
+        "kind": "isolated_edge_first_attempt",
+        "passed": false,
+        "cause": "MCP connection timeout",
+        "retained": true,
+        "logSha256": "a101b531d9fd3e342b1aab09c1e570e68a3322f877b0cd245899c4ed570a26fd"
+      },
+      {
+        "kind": "isolated_edge_same_bound_recheck",
+        "passed": true,
+        "boundsChanged": false,
+        "logSha256": "c9505db3112328274c942576637bf8bb313850fcb0a150f50728aea42c376433"
+      },
+      {
+        "kind": "final_typecheck_build_package_cli",
+        "passed": true,
+        "clean_dependency_install": false
+      }
+    ]
+  }
+}
