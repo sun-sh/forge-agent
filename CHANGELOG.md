@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Observe individual reviewer requests through Pi hooks, with first-header/content timing, numeric-only checkpoints, censored cancellations/timeouts and separate successful/error latency distributions.
+- Pair existing native baseline/candidate boundary evidence in review handoffs; reference only exact historical duplicates while preserving failed receipts and counts.
+- Require evidence for claims that an input was already broken before a change; retain A/B/C/D, result semantics and all reviewer budgets.
+
 - Add explicit compatibility-narrowing and pre-existing-test-regression review instructions; docstrings and predicted test updates do not authorize an exemption. Prompt compliance is measured separately from host enforcement.
 - Recompute frozen-check discrimination from valid native receipts. An otherwise valid ready review becomes insufficient_evidence when all comparisons are identical; no new model call or result-semantic change.
 - Preserve typed missing_execution provenance across normalization/recovery and expose run_required_tests with zero code-defect count.

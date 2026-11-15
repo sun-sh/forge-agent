@@ -15,6 +15,7 @@ import { ModelRuntime, SessionManager, VERSION } from '@earendil-works/pi-coding
 import { ForgeSubagents } from '../dist/web/subagents.js';
 import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../dist/task/budget.js';
 import { REVIEW_BUDGETS } from '../dist/task/review-budget.js';
+import { summarizeReviewTelemetry } from '../dist/task/review-telemetry.js';
 import { buildReviewHandoff } from '../dist/task/review-handoff.js';
 import { reviewCommandEvidence } from '../dist/task/review-evidence.js';
 import { parseReview, reviewStop, ReviewBudgetExceededError } from '../dist/task/review.js';
@@ -39,6 +40,7 @@ const git = (root, parameters) => execute('git', ['--no-pager', '-c', 'core.hook
 const safePath = (root, path) => { const target = resolve(root, path), rel = relative(root, target); if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../') || isAbsolute(rel)) throw new Error('Artifact path escapes its root'); return target; };
 const schedule = Array.from({ length: repeat }, (_, index) => ids.map((_, position) => ({ id: ids[(position + index) % ids.length], run: index + 1, position: position + 1 }))).flat();
 const harnessSources = [import.meta.url, ...[
+  '../src/task/review-telemetry.ts', '../dist/task/review-telemetry.js', '../src/task/review-boundary-evidence.ts', '../dist/task/review-boundary-evidence.js',
   './swebench-review-source.py', './evaluation-evidence.mjs',
   '../src/task/review-handoff.ts', '../src/task/review.ts', '../src/task/review-evidence.ts', '../src/task/git.ts', '../src/task/review-budget.ts', '../src/web/subagents.ts',
   '../src/task/behavior.ts', '../src/task/review-discrimination.ts', '../src/task/result.ts', '../src/task/plan.ts',
@@ -226,6 +228,8 @@ try {
         record.reviewFailure = error instanceof ReviewBudgetExceededError ? 'budget_exhausted' : 'review_failed';
       } finally {
         record.children = agents.snapshot();
+        record.reviewTelemetry = record.children.find(child => child.purpose === 'review_gate')?.reviewTelemetry;
+        record.reviewLatency = summarizeReviewTelemetry(record.reviewTelemetry);
         for (const child of record.children) {
           const detail = await agents.detail(child.id);
           await json(join(paths.output, candidate.id + '.r' + scheduled.run + '.detail.json'), detail);

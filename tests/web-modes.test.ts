@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean; skipBehavior?: boolean; failBehavior?: boolean; stableBehavior?: boolean } = {}) {
+async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; projectMcp?: boolean; untrusted?: boolean; disabledMcp?: boolean; replacementMcp?: boolean; briefIntent?: 'answer' | 'explore' | 'verify'; implementationWrite?: { path: string; content: string }; implementationCommand?: string; reviewEvidenceGap?: boolean; skipBehavior?: boolean; failBehavior?: boolean; stableBehavior?: boolean; boundaryRegression?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'pforge-mode-project-'));
   await seedBehaviorFixture(root);
   if (options.stableBehavior) await writeFile(join(root, behaviorFixtureSource.path), behaviorFixtureSource.implemented);
@@ -47,6 +47,7 @@ async function fixture(options: { mcp?: 'direct' | 'deferred' | 'codemode'; proj
     if (!calls && phase === 'implement' && options.implementationCommand && !implementationRequested) { const tool = input.tools.find((item: any) => ['powershell', 'bash'].includes(item.function.name))?.function.name; calls = [{ name: tool ?? 'bash', arguments: { command: options.implementationCommand } }]; implementationRequested = true; }
     if (!calls && phase === 'implement' && options.implementationWrite && !implementationRequested) { calls = [{ name: 'write', arguments: options.implementationWrite }]; implementationRequested = true; }
     const nativeWrite = behaviorFixtureWrite(input);
+    if (nativeWrite && options.boundaryRegression) nativeWrite.arguments.content = "module.exports = value => { const result = value.trim().toLowerCase(); if (!result) throw new Error('introduced blank-input regression'); return result; };\n";
     if (nativeWrite && calls?.some(call => call.name === 'write')) calls.push(nativeWrite);
     else await implementBehaviorFixture(root, input);
     const evidenceGap = phase === 'review' && options.reviewEvidenceGap && reviews++ === 0;
@@ -134,6 +135,20 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.task.review.acceptance.map((item: any) => ({ id: item.id, status: item.status }))).toEqual(handoff.acceptance.map(item => ({ id: item.id, status: 'unconfirmed' })));
     expect(state.task.reviewStop.unconfirmedIds).toEqual(handoff.acceptance.map(item => item.id));
     expect(f.requests.filter(input => fixturePhase(input) === 'review')).toHaveLength(1);
+  });
+  it('hands the reviewer native before/after boundary evidence while blocking its scripted ready', async () => {
+    const f = await fixture({ boundaryRegression: true, implementationWrite: { path: 'implementation-result.txt', content: 'retain implementation for inspection' } });
+    const session: any = await (await f.api('session', { project: f.root, mode: 'agent' })).json();
+    await f.api('sessions/' + session.id + '/prompt', { message: 'Normalize mixed case and preserve valid blank input.', workflow: 'planned' });
+    const state = await f.settled(session.id);
+    expect(state.task).toMatchObject({ status: 'needs_attention', review: { verdict: 'ready' }, behavior: { status: 'failed' } });
+    const reviewer = f.requests.find(input => fixturePhase(input) === 'review');
+    const text = reviewer.messages.map((message: any) => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text).join('\n')).find((value: string) => value.includes('EVIDENCE:\n'));
+    const evidence = JSON.parse(text.split('EVIDENCE:\n')[1].split('\n')[0]);
+    expect(evidence.nativeBoundaryEvidence.pairs[1]).toMatchObject({ kind: 'boundary', quotePresent: true, observation: 'candidate_regression', attributable: true,
+      baseline: { exitCode: 0, status: 'passed', source: 'pi-builtin-shell' }, candidate: { exitCode: 1, status: 'failed', source: 'pi-builtin-shell' } });
+    expect(evidence.nativeBoundaryEvidence.pairs[1].candidate.commandSha256).toBe(evidence.nativeBoundaryEvidence.pairs[1].baseline.commandSha256);
+    expect(text).toContain('HISTORICAL CLAIM VERIFICATION');
   });
   it('passes a real Pi shell receipt to a fresh read-only reviewer without sending the parent transcript', async () => {
     const marker = 'REVIEW_RECEIPT_43_PASSED';

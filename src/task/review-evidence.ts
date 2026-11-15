@@ -12,6 +12,8 @@ export interface ReviewCommandEvidence {
   commands: Array<{ toolCallId: string; tool: string; command: BoundedText; output: BoundedText; toolError: boolean; sourceTruncation?: 'reported' | 'not-reported'; kind: 'test' | 'command'; outcome: ReceiptOutcome; recordedAt?: number }>;
   omitted: number;
   scanTruncated: boolean;
+  /** Exactly matching native copies are referenced, not discarded or marked passing. */
+  representedByNativeReceipts?: Array<{ toolCallId: string; runId: string; checkId: string }>;
   /** Counts cover eligible observations in this attempt, including receipts omitted for size. */
   summary: { receipts: number; retainedReceipts: number; testReceipts: number; failedReceipts: number; zeroTestReceipts: number; sourceTruncatedReceipts: number };
 }
