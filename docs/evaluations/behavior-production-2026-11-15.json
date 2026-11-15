@@ -1,0 +1,1335 @@
+{
+  "version": 1,
+  "scope": "Controlled fixed candidates and model-authored checks/diagnosis/review; scripted inspection and implementation, not autonomous coding quality, SWE-bench or measured quality improvement.",
+  "canonicalRuntimeSourceCommit": "9eabebd",
+  "fingerprintNote": "Each run binds its exact built code/driver bytes. Run 1 preceded the valid_check and atomic recovery corrections; its fingerprint is not validation of the corrected runtime. The run 2 runtime source was committed during the run without changing its bytes.",
+  "privacy": "Allowlisted synthetic-fixture outcomes only; no raw sessions, source quotations, private paths, credentials or provider endpoints.",
+  "runs": [
+    {
+      "id": "r1",
+      "protocol": "production-behavior-calibration-fixed-candidates-v1",
+      "status": "failed",
+      "startedAt": "2026-11-15T04:38:28.168Z",
+      "endedAt": "2026-11-15T04:44:19.085Z",
+      "protocolSha256": "e77d73e1d39f65d4ead9116902404235ddbf661743e1d5e7b36b6f1297a9f97e",
+      "harnessFingerprint": "563456715ac243633c1c987d8461322faaf3f378956b4ad5eeabb0e222868b72",
+      "codeStable": true,
+      "temporaryHomeRemoved": true,
+      "model": {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "api": "openai-completions",
+        "pi": "1.4.0"
+      },
+      "pricingKnown": false,
+      "costUsd": null,
+      "cases": [
+        {
+          "id": "correct",
+          "qualified": false,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "insufficient_evidence",
+            "behaviorChecks": "unconfirmed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "unconfirmed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "unconfirmed",
+                  "sameOutput": true
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "insufficient_evidence",
+              "action": "provide_evidence",
+              "issueCount": 0,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T04:40:31.988Z",
+          "oracleStartedAt": "2026-11-15T04:40:32.086Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "c2297d7ff83095c17ff1bb7b6e3bc5f916a3891f6becf2a28bbb62e009f86f37",
+          "baselineRuns": [
+            {
+              "runId": "4e63a53f-0b80-425e-888d-f48094474495",
+              "planSha256": "c2297d7ff83095c17ff1bb7b6e3bc5f916a3891f6becf2a28bbb62e009f86f37",
+              "status": "observed",
+              "beforeDigest": "9c499d11dcf9051bf9090bf892c6561df92432490f004ab4776bc8c253722d7e",
+              "afterDigest": "9c499d11dcf9051bf9090bf892c6561df92432490f004ab4776bc8c253722d7e",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "4e63a53f-0b80-425e-888d-f48094474495",
+                  "tool": "powershell",
+                  "commandSha256": "7d60313ebac65310075cdf05220aa068889e8de36e46144d20b2ce2ac473bda4",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "a769f66cab310f3cd1616902ea448c69dee612015c27301f1248bc8e9363cf5e",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "4e63a53f-0b80-425e-888d-f48094474495",
+                  "tool": "powershell",
+                  "commandSha256": "d363d97b821d14f381be4a7595cacde28cd74f2f7e5b048d8338c5892cebfbe2",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "556a1db00b5ee32025ccf06ece6ae591eac8a954efcdde40b0cb44e5395ac520",
+                  "outputCharacters": 917,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "4e63a53f-0b80-425e-888d-f48094474495",
+                  "tool": "powershell",
+                  "commandSha256": "582f392aaab737ef307dbacf69916225523388d17ce29a910c9e5e31abfe3d9d",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B1",
+              "runId": "b8f4be13-b0d3-4a2f-aa0b-ee8ee5c1f2d4",
+              "tool": "powershell",
+              "commandSha256": "d363d97b821d14f381be4a7595cacde28cd74f2f7e5b048d8338c5892cebfbe2",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B2",
+              "runId": "b8f4be13-b0d3-4a2f-aa0b-ee8ee5c1f2d4",
+              "tool": "powershell",
+              "commandSha256": "7d60313ebac65310075cdf05220aa068889e8de36e46144d20b2ce2ac473bda4",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "b8f4be13-b0d3-4a2f-aa0b-ee8ee5c1f2d4",
+              "tool": "powershell",
+              "commandSha256": "582f392aaab737ef307dbacf69916225523388d17ce29a910c9e5e31abfe3d9d",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B3",
+                "kind": "unconfirmed"
+              }
+            ],
+            "evidence": []
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B3",
+              "outcome": "unconfirmed",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_plan",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 3959
+            },
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "outputTokens": 2927
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1144
+            }
+          ],
+          "budget": {
+            "modelTurns": 15,
+            "toolCalls": 19,
+            "usage": {
+              "input": 27060,
+              "output": 9366,
+              "cacheRead": 52032,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [
+            {
+              "index": 4,
+              "name": "AssertionError",
+              "message": "Expected values to be strictly equal:\n\nfalse !== true\n"
+            },
+            {
+              "index": 7,
+              "name": "AssertionError",
+              "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unconfirmed'\n- 'passed'\n"
+            },
+            {
+              "index": 8,
+              "name": "AssertionError",
+              "message": "Expected values to be strictly equal:\n\n1 !== 0\n"
+            }
+          ],
+          "errorStages": []
+        },
+        {
+          "id": "defective",
+          "qualified": false,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "insufficient_evidence",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "unconfirmed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "unconfirmed",
+                  "sameOutput": true
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "insufficient_evidence",
+              "action": "provide_evidence",
+              "issueCount": 0,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": false,
+          "decisionRecordedAt": "2026-11-15T04:42:37.962Z",
+          "oracleStartedAt": "2026-11-15T04:42:38.038Z",
+          "candidateSha256": "cc7ee976681496d373a04c058adf03da13e00f60f21ff873cc80ca2c18b1b8d5",
+          "planSha256": "c2297d7ff83095c17ff1bb7b6e3bc5f916a3891f6becf2a28bbb62e009f86f37",
+          "baselineRuns": [
+            {
+              "runId": "7e8029fc-0f09-4873-8bf9-886ccc179e5d",
+              "planSha256": "c2297d7ff83095c17ff1bb7b6e3bc5f916a3891f6becf2a28bbb62e009f86f37",
+              "status": "observed",
+              "beforeDigest": "d62b7ebe72f4047f344da7cabf4d1c3bee766adf9429d17c78241da1ec0558c6",
+              "afterDigest": "d62b7ebe72f4047f344da7cabf4d1c3bee766adf9429d17c78241da1ec0558c6",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "7e8029fc-0f09-4873-8bf9-886ccc179e5d",
+                  "tool": "powershell",
+                  "commandSha256": "d363d97b821d14f381be4a7595cacde28cd74f2f7e5b048d8338c5892cebfbe2",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "8cc06c680ef426764ac235d61c8bf66bfd8e1b8f783904a0289648be2e740bab",
+                  "outputCharacters": 917,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "7e8029fc-0f09-4873-8bf9-886ccc179e5d",
+                  "tool": "powershell",
+                  "commandSha256": "7d60313ebac65310075cdf05220aa068889e8de36e46144d20b2ce2ac473bda4",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "fa86388e277ab6f71715534869a5a7f3c8941b888cdf5cba6509befcafdbc396",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "7e8029fc-0f09-4873-8bf9-886ccc179e5d",
+                  "tool": "powershell",
+                  "commandSha256": "582f392aaab737ef307dbacf69916225523388d17ce29a910c9e5e31abfe3d9d",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B1",
+              "runId": "5c7a6b66-5155-4bde-ba6e-854d059b3814",
+              "tool": "powershell",
+              "commandSha256": "d363d97b821d14f381be4a7595cacde28cd74f2f7e5b048d8338c5892cebfbe2",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "6a220e628e5ff8cca25cda01429e895ead7da98dca0e6c15d816b63a4cac9855",
+              "outputCharacters": 925,
+              "truncated": false
+            },
+            {
+              "checkId": "B2",
+              "runId": "5c7a6b66-5155-4bde-ba6e-854d059b3814",
+              "tool": "powershell",
+              "commandSha256": "7d60313ebac65310075cdf05220aa068889e8de36e46144d20b2ce2ac473bda4",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "9d5f55b51060f19f7b221ff18d230f25107228854235106ff319ca8dc074597f",
+              "outputCharacters": 926,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "5c7a6b66-5155-4bde-ba6e-854d059b3814",
+              "tool": "powershell",
+              "commandSha256": "582f392aaab737ef307dbacf69916225523388d17ce29a910c9e5e31abfe3d9d",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B3",
+                "kind": "unconfirmed"
+              }
+            ],
+            "evidence": []
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B3",
+              "outcome": "unconfirmed",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "outputTokens": 2264
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 2,
+              "toolCalls": 2,
+              "outputTokens": 1272
+            }
+          ],
+          "budget": {
+            "modelTurns": 10,
+            "toolCalls": 13,
+            "usage": {
+              "input": 21146,
+              "output": 5221,
+              "cacheRead": 40704,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [
+            {
+              "index": 4,
+              "name": "AssertionError",
+              "message": "Expected values to be strictly equal:\n\nfalse !== true\n"
+            },
+            {
+              "index": 8,
+              "name": "AssertionError",
+              "message": "Expected values to be strictly equal:\n\n1 !== 0\n"
+            }
+          ],
+          "errorStages": []
+        },
+        {
+          "id": "controlled-correction",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 2
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "replaced",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T04:44:18.339Z",
+          "oracleStartedAt": "2026-11-15T04:44:18.424Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "f0ede373c536df236937295f40176f6639eee9db170ca7271c662ba5fe424871",
+          "baselineRuns": [
+            {
+              "runId": "19b18a8a-d02e-40cf-9b8a-c630d55186c0",
+              "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+              "status": "observed",
+              "beforeDigest": "3637e1f83725ee872cc5273cf0fd21bb7b26665417ec4056bba9cf4d289bbdfe",
+              "afterDigest": "3637e1f83725ee872cc5273cf0fd21bb7b26665417ec4056bba9cf4d289bbdfe",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "19b18a8a-d02e-40cf-9b8a-c630d55186c0",
+                  "tool": "powershell",
+                  "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+                  "outputCharacters": 701,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "19b18a8a-d02e-40cf-9b8a-c630d55186c0",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "2af710e29dfe601121cac5c7f6ddd153250e5c2b78399dde8d204e0ad9e022dd",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            },
+            {
+              "runId": "2401e49a-3c85-4f5a-bf92-aec5490076c5",
+              "planSha256": "f0ede373c536df236937295f40176f6639eee9db170ca7271c662ba5fe424871",
+              "status": "observed",
+              "beforeDigest": "3637e1f83725ee872cc5273cf0fd21bb7b26665417ec4056bba9cf4d289bbdfe",
+              "afterDigest": "3637e1f83725ee872cc5273cf0fd21bb7b26665417ec4056bba9cf4d289bbdfe",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "2401e49a-3c85-4f5a-bf92-aec5490076c5",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "2af710e29dfe601121cac5c7f6ddd153250e5c2b78399dde8d204e0ad9e022dd",
+                  "outputCharacters": 917,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "2401e49a-3c85-4f5a-bf92-aec5490076c5",
+                  "tool": "powershell",
+                  "commandSha256": "1d46ca1ebbeb27801ce7ddeab48b6593a4b4100400118b3146235ebaaf3bf35a",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "2d2cb0eb-e6ee-4e37-8af4-dd76dbff55bc",
+              "tool": "powershell",
+              "commandSha256": "1d46ca1ebbeb27801ce7ddeab48b6593a4b4100400118b3146235ebaaf3bf35a",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "2d2cb0eb-e6ee-4e37-8af4-dd76dbff55bc",
+              "tool": "powershell",
+              "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "replaced",
+            "action": "replace",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "invalid_expectation"
+              }
+            ],
+            "evidence": [
+              {
+                "checkId": "B2",
+                "path": "points.cjs",
+                "sha256": "e61a975aea6bc8665567b1d9fba56a3109fae75862f0527900d48b82efc257b8",
+                "quoteSha256": "4d02033881516f6e4f789f0ccec97cef70cb8e41125fb75e8a560067a03d0435"
+              }
+            ]
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1813
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 1444
+            }
+          ],
+          "budget": {
+            "modelTurns": 13,
+            "toolCalls": 14,
+            "usage": {
+              "input": 17155,
+              "output": 4540,
+              "cacheRead": 48320,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "protocol": "production-behavior-calibration-fixed-candidates-v2",
+      "status": "passed",
+      "startedAt": "2026-11-15T04:46:23.187Z",
+      "endedAt": "2026-11-15T04:52:05.510Z",
+      "protocolSha256": "988efe50834bf59d8043170c3d7d5201a14615d0e6676aff24ff285e6278fc5f",
+      "harnessFingerprint": "860edb1fde4763ab0901a58fa8b94bb0bccb77102546607d239b839ef2f113e0",
+      "codeStable": true,
+      "temporaryHomeRemoved": true,
+      "model": {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "api": "openai-completions",
+        "pi": "1.4.0"
+      },
+      "pricingKnown": false,
+      "costUsd": null,
+      "cases": [
+        {
+          "id": "correct",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T04:48:49.559Z",
+          "oracleStartedAt": "2026-11-15T04:48:49.644Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "082a46a58020f43d823efe54750adf79249f4a45766c219f7eed4b463dcffe5c",
+          "baselineRuns": [
+            {
+              "runId": "57ce5e94-e0e1-4e97-a949-c1982540fcf4",
+              "planSha256": "082a46a58020f43d823efe54750adf79249f4a45766c219f7eed4b463dcffe5c",
+              "status": "observed",
+              "beforeDigest": "947fc167dabf5d3b4a36922e7945d0c47c4c39dfa25b0ed381d08f245418152f",
+              "afterDigest": "947fc167dabf5d3b4a36922e7945d0c47c4c39dfa25b0ed381d08f245418152f",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "57ce5e94-e0e1-4e97-a949-c1982540fcf4",
+                  "tool": "powershell",
+                  "commandSha256": "7a311c87332ae9111960c9a33a9b1475d7d0c1ee02f8d89492e1e5d51260a4f5",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "64d2c27b9cabacbf362229c02ab0f0fad4df31ede8a2b8367dac9fff14a3f8c9",
+                  "outputCharacters": 19,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "57ce5e94-e0e1-4e97-a949-c1982540fcf4",
+                  "tool": "powershell",
+                  "commandSha256": "3531a77f70b4ce0228d3e474688c9de6bd7f1ce6041d92583f2f74c7dd8f15b1",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "57ce5e94-e0e1-4e97-a949-c1982540fcf4",
+                  "tool": "powershell",
+                  "commandSha256": "f133d901c3105c40d82492e650b5bd658ce0cb94d05371bf9aafa3bde0bbb0f8",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "46828af921c2df570efe9304ff8dcce7d05c1844cd344fd9f4d52b0399dcc8b0",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B1",
+              "runId": "18315458-9b40-47af-ae08-fc54b665b703",
+              "tool": "powershell",
+              "commandSha256": "7a311c87332ae9111960c9a33a9b1475d7d0c1ee02f8d89492e1e5d51260a4f5",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "b9c95c308a71453c86f1689824faefbcdf1cb3bdae8401a5c756ffdb17ac7ef2",
+              "outputCharacters": 12,
+              "truncated": false
+            },
+            {
+              "checkId": "B2",
+              "runId": "18315458-9b40-47af-ae08-fc54b665b703",
+              "tool": "powershell",
+              "commandSha256": "3531a77f70b4ce0228d3e474688c9de6bd7f1ce6041d92583f2f74c7dd8f15b1",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "18315458-9b40-47af-ae08-fc54b665b703",
+              "tool": "powershell",
+              "commandSha256": "f133d901c3105c40d82492e650b5bd658ce0cb94d05371bf9aafa3bde0bbb0f8",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "7729a20ddd7a602d7b95af5d9422b71385abc994d1b00c309f22d513a71223d8",
+              "outputCharacters": 6,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": []
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_plan",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 3908
+            },
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1568
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 1604
+            }
+          ],
+          "budget": {
+            "modelTurns": 15,
+            "toolCalls": 18,
+            "usage": {
+              "input": 23927,
+              "output": 8939,
+              "cacheRead": 55104,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "defective",
+          "qualified": true,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "changes_requested",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "code_defects",
+              "action": "fix_code",
+              "issueCount": 1,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": false,
+          "decisionRecordedAt": "2026-11-15T04:50:34.314Z",
+          "oracleStartedAt": "2026-11-15T04:50:34.405Z",
+          "candidateSha256": "cc7ee976681496d373a04c058adf03da13e00f60f21ff873cc80ca2c18b1b8d5",
+          "planSha256": "082a46a58020f43d823efe54750adf79249f4a45766c219f7eed4b463dcffe5c",
+          "baselineRuns": [
+            {
+              "runId": "34caa12c-edcc-4816-be65-8ba87d741fa3",
+              "planSha256": "082a46a58020f43d823efe54750adf79249f4a45766c219f7eed4b463dcffe5c",
+              "status": "observed",
+              "beforeDigest": "a479fc64dffb14cf14ea605121a234db399651331253d030afa7166dc4eb81fc",
+              "afterDigest": "a479fc64dffb14cf14ea605121a234db399651331253d030afa7166dc4eb81fc",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "34caa12c-edcc-4816-be65-8ba87d741fa3",
+                  "tool": "powershell",
+                  "commandSha256": "3531a77f70b4ce0228d3e474688c9de6bd7f1ce6041d92583f2f74c7dd8f15b1",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "34caa12c-edcc-4816-be65-8ba87d741fa3",
+                  "tool": "powershell",
+                  "commandSha256": "7a311c87332ae9111960c9a33a9b1475d7d0c1ee02f8d89492e1e5d51260a4f5",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "64d2c27b9cabacbf362229c02ab0f0fad4df31ede8a2b8367dac9fff14a3f8c9",
+                  "outputCharacters": 19,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "34caa12c-edcc-4816-be65-8ba87d741fa3",
+                  "tool": "powershell",
+                  "commandSha256": "f133d901c3105c40d82492e650b5bd658ce0cb94d05371bf9aafa3bde0bbb0f8",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "b5bb346ab24ff0f225203ffcecd6dc9e594d681fcdd2918958b08b2f50415241",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B1",
+              "runId": "c16891dd-dc2f-486f-a34b-6628da2c96f5",
+              "tool": "powershell",
+              "commandSha256": "7a311c87332ae9111960c9a33a9b1475d7d0c1ee02f8d89492e1e5d51260a4f5",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "286878c4f18e83b3cb3863844a27f3c3c00e9a31a56e1fad0ab0ea3d9b5f2153",
+              "outputCharacters": 19,
+              "truncated": false
+            },
+            {
+              "checkId": "B2",
+              "runId": "c16891dd-dc2f-486f-a34b-6628da2c96f5",
+              "tool": "powershell",
+              "commandSha256": "3531a77f70b4ce0228d3e474688c9de6bd7f1ce6041d92583f2f74c7dd8f15b1",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "c16891dd-dc2f-486f-a34b-6628da2c96f5",
+              "tool": "powershell",
+              "commandSha256": "f133d901c3105c40d82492e650b5bd658ce0cb94d05371bf9aafa3bde0bbb0f8",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "a56eb722d3754a6184715f045ef067c4a4d9bb848d6ba7816e4dd6b8a212394b",
+              "outputCharacters": 926,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": []
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1730
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1549
+            }
+          ],
+          "budget": {
+            "modelTurns": 10,
+            "toolCalls": 14,
+            "usage": {
+              "input": 19715,
+              "output": 5390,
+              "cacheRead": 42112,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "controlled-correction",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 2
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "replaced",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T04:52:04.743Z",
+          "oracleStartedAt": "2026-11-15T04:52:04.848Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "f1ad1d17dcb8b693744cf5703e8689c0d7eecdb139afeb95459bbd02fb22d7c4",
+          "baselineRuns": [
+            {
+              "runId": "b0d5f267-72c8-405d-b7d9-b54c72e092e9",
+              "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+              "status": "observed",
+              "beforeDigest": "f49bdad38e682228d7d722a74d42506d92829efa747e324a63ea6335cd1c718f",
+              "afterDigest": "f49bdad38e682228d7d722a74d42506d92829efa747e324a63ea6335cd1c718f",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "b0d5f267-72c8-405d-b7d9-b54c72e092e9",
+                  "tool": "powershell",
+                  "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+                  "outputCharacters": 701,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "b0d5f267-72c8-405d-b7d9-b54c72e092e9",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "c340f59ce558ea3843c8640209a377873fae87fdfb334f0951881f3c6b21ecb2",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            },
+            {
+              "runId": "eb02a754-2d23-4c8a-8128-4a8b0c7af43d",
+              "planSha256": "f1ad1d17dcb8b693744cf5703e8689c0d7eecdb139afeb95459bbd02fb22d7c4",
+              "status": "observed",
+              "beforeDigest": "f49bdad38e682228d7d722a74d42506d92829efa747e324a63ea6335cd1c718f",
+              "afterDigest": "f49bdad38e682228d7d722a74d42506d92829efa747e324a63ea6335cd1c718f",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "eb02a754-2d23-4c8a-8128-4a8b0c7af43d",
+                  "tool": "powershell",
+                  "commandSha256": "29e56768ce9729ef27ae9432e68bd0bcd629b19b6d7172f378e18bf91b8df339",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "eb02a754-2d23-4c8a-8128-4a8b0c7af43d",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "c340f59ce558ea3843c8640209a377873fae87fdfb334f0951881f3c6b21ecb2",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "f5d53720-778d-43c3-a07d-1c799c727514",
+              "tool": "powershell",
+              "commandSha256": "29e56768ce9729ef27ae9432e68bd0bcd629b19b6d7172f378e18bf91b8df339",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "f5d53720-778d-43c3-a07d-1c799c727514",
+              "tool": "powershell",
+              "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "correction": {
+            "status": "replaced",
+            "action": "replace",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "invalid_expectation"
+              }
+            ],
+            "evidence": [
+              {
+                "checkId": "B2",
+                "path": "points.cjs",
+                "sha256": "e61a975aea6bc8665567b1d9fba56a3109fae75862f0527900d48b82efc257b8",
+                "quoteSha256": "bf4220663c14a3145cfa8a94ad6f2c42610f07f3688cc195f9de3058665bdf74"
+              }
+            ]
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "modelTurns": 3,
+              "toolCalls": 6,
+              "outputTokens": 1664
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 1883
+            }
+          ],
+          "budget": {
+            "modelTurns": 14,
+            "toolCalls": 17,
+            "usage": {
+              "input": 18592,
+              "output": 5176,
+              "cacheRead": 52544,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "One attempt per candidate per protocol, on one tiny synthetic behavior; not a coding-quality score.",
+    "Run 2 used a fresh independent model design. Changed model outputs and protocol mean outcomes cannot be attributed solely to valid_check.",
+    "Protocol v1 incorrectly prohibited legitimate keep diagnoses in the fixed-plan pair; v2 permits one keep only, never replacement. The separate correction case still requires an actual source-backed replacement.",
+    "The v1 failure helper overwrote failing assertion names with AssertionError; indexes and messages are retained. V2 preserves descriptive names.",
+    "Native exits/outputs prove process observations, not semantic correctness or full requirement coverage."
+  ],
+  "correctedRuntimeSources": [
+    {
+      "path": "src/task/behavior.ts",
+      "sha256": "f0b3baf7e22171e179b0f7b6656b0122486fe2225bc9ff6f864ea62c2129f94b"
+    },
+    {
+      "path": "src/task/behavior-correction.ts",
+      "sha256": "52582c1678e67d86cfb7db971da0f2ae4b1f43ec3e41379c5df759da2205c0b0"
+    },
+    {
+      "path": "src/task/behavior-runtime.ts",
+      "sha256": "df0a27686fea2798a9d076ecd23e57724f572901708563556f1a921efbe1119e"
+    },
+    {
+      "path": "src/task/controller.ts",
+      "sha256": "4d666b900f4828f0a5aee79ba13ff4df76a3fca843cdb21a216d8ef7914a7ccc"
+    },
+    {
+      "path": "src/task/result.ts",
+      "sha256": "75f3a015917afa56b5dc1eaa895649a7651ad8ba1fdef264898369e7c689943a"
+    },
+    {
+      "path": "src/task/review-handoff.ts",
+      "sha256": "212b6338110afd0f2b27b8e218e1329cf03e40ac92d80390e70516eb25de8b54"
+    },
+    {
+      "path": "src/web/subagents.ts",
+      "sha256": "b9f2d44470ca819d61d5474321283816f881df6d774232c5f67460dccfa62fd4"
+    },
+    {
+      "path": "src/web/server.ts",
+      "sha256": "2a51ba82b356db140e8ee800563289ccac35917169449b8c1ed7e37a5f40fb7b"
+    }
+  ]
+}

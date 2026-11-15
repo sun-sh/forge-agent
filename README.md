@@ -55,7 +55,7 @@ npm start
 
 新建且配置了 `verify` 的“规划并执行”变更任务，由全新只读 Pi 会话设计 2–3 条原始需求检查，再由父 Pi 会话在实现前实际执行基线。预期的复现失败保留为观测；边界失败或基线不完整至多触发一次全新只读诊断。更正命令或预期必须有宿主核对的源码原文，保留检查数量、ID、类型、shell、需求引用和不增大的超时；原方案与回执保留，替换方案先重跑基线再实现。实现后不重设计或补造基线，无效基线仍阻断静态 `ready`。命令继续受 Agent 模式、项目信任及预算约束，shell 不构成 OS 沙箱；前后变化不自动证明代码缺陷，通过也不等于需求已验收。详见[行为检查](docs/behavior-checks.md)与[生产校准及恢复边界](docs/behavior-calibration.md)。不增加配置键，自适应、只读和未配置验证的路径保持原行为。
 
-原始镜像中固定上游补丁的通过、误阻断与未完成情况见[真实行为门禁复测](docs/evaluations/behavior-upstream-2026-11-14.md)；另有[历史冻结检查校准](docs/behavior-calibration.md#historical-frozen-check-diagnostic)以无模型重放区分已有失败与候选变化。旧报告及其数字保持原代码身份，不验证新的生产校准，也未证明修复历史漏检；新证据须另行运行并记录。
+原始镜像中固定上游补丁的通过、误阻断与未完成情况见[真实行为门禁复测](docs/evaluations/behavior-upstream-2026-11-14.md)；另有[历史冻结检查校准](docs/behavior-calibration.md#historical-frozen-check-diagnostic)以无模型重放区分已有失败与候选变化。旧报告及其数字保持原代码身份，不验证新的生产校准，也未证明修复历史漏检；生产流程的受控实测及首轮失败见[校准验证记录](docs/evaluations/behavior-production-2026-11-15.md)。
 
 
 新一轮[审阅预算与证据回归](docs/evaluations/review-budget-evidence-2026-11-13.md)保留了首轮通过 2/2、交付 1/2，以及调整过严回执规则后第二轮通过并交付 2/2 的结果；后续自动补证分支仅有工程回归，未继承这些成绩。

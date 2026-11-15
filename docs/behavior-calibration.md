@@ -70,3 +70,7 @@ On a Linux Docker host omit --prepare-only and supply --package with the freshly
 上文生产路径面向新建且配置验证的 Planned Web 变更任务：父 Pi 会话先实际运行基线；预期复现失败可以是有效观测，边界失败或回执不完整至多进行一次全新只读诊断；通过且有契约支持的边界/回归检查标为 `valid_check`，语义仍不明则保持 `unconfirmed`。实现开始标记与阶段、采纳更正与替换方案分别在同一任务状态中原子提交；已进入实现的历史任务继续时不能新造设计或基线。仅采纳源码原文核对通过、保留覆盖与权限边界且不增大超时的更正，保留原方案/回执，并先重跑基线再实现。实现前明确继续须匹配同一工作区，累计最多四次基线准入；实现后不重设计或补造基线，无效证据仍阻断静态 ready。源码引文存在不等于相关性已证明；shell 不是 OS 沙箱，比较也不是具体缺陷证明。自适应、只读、未配置验证和 CLI 原有职责不变，无新配置键。
 
 这里另列的历史诊断只重放上一轮冻结检查，基线和候选分别在断网容器中执行，不调用模型、不更正检查。前后都失败仍需区分错误断言、环境问题或未修复缺陷；Matplotlib 无方案，保留不可校准。旧报告及数字不可改写为新生产代码的验证，新运行须另存带代码身份的证据；两条路径都不声称需求已验收。
+
+## Production qualification evidence
+
+The [controlled real-model qualification](evaluations/behavior-production-2026-11-15.md) retains both protocols, the first false block, the corrected run and their exact code fingerprints. It is not autonomous coding quality or a SWE-bench result.

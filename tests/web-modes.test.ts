@@ -293,22 +293,22 @@ describe('Web working modes with real Pi sessions', { timeout: 60_000 }, () => {
     expect(state.task.plan.acceptance[0].id).toBe('A1'); expect(state.task.review.acceptance[0].status).toBe('met');
     const timeline: any = await (await f.api('sessions/' + session.id + '/timeline?task=' + state.task.id)).json();
     expect(timeline.timeline).toMatchObject({ taskId: state.task.id, readOnly: true, truncated: false });
-    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(7);
+    expect(timeline.timeline.nodes.filter((node: any) => node.kind === 'phase')).toHaveLength(8);
     const modelNodes = timeline.timeline.nodes.filter((node: any) => node.kind === 'model');
-    expect(modelNodes).toHaveLength(7);
+    expect(modelNodes).toHaveLength(10);
     expect(state.task.behavior).toMatchObject({ status: 'passed', receipts: [{ exitCode: 0 }, { exitCode: 0 }] });
     expect(modelNodes.find((node: any) => node.label === 'independent reviewer')).toMatchObject({ source: 'pi', status: 'completed' });
     expect((await f.api('sessions/' + session.id + '/timeline?task=unknown')).status).toBe(404);
     expect(state.verification).toMatchObject({ status: 'passed', runId: state.task.id, evidenceId: expect.any(String) });
-    expect(f.requests).toHaveLength(8);
-    for (const index of [0, 1, 2, 7]) expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('write');
-    expect(f.requests[3].tools.map((tool: any) => tool.function.name)).toContain('write');
+    expect(f.requests).toHaveLength(11);
+    for (const index of [0, 1, 2, 3, 4, 5, 7, 8, 9, 10]) expect(f.requests[index].tools.map((tool: any) => tool.function.name)).not.toContain('write');
+    expect(f.requests[6].tools.map((tool: any) => tool.function.name)).toContain('write');
     await f.restart();
     const restored: any = await (await f.api('session', { project: f.root, sessionFile: state.sessionFile })).json();
     expect(restored.task.status).toBe('completed'); expect(restored.verification.evidenceId).toBe(state.verification.evidenceId);
     const restoredTimeline: any = await (await f.api('sessions/' + restored.id + '/timeline?task=' + state.task.id)).json();
     expect(restoredTimeline.timeline).toEqual(timeline.timeline);
-    expect(f.requests).toHaveLength(8);
+    expect(f.requests).toHaveLength(11);
   });
   it('answers a planned prompt after structured inspection without running the change pipeline', async () => {
     const f = await fixture({ briefIntent: 'answer' });

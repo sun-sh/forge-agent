@@ -439,3 +439,7 @@ when cleanup itself fails.
 避免某项失败让其他指标被误标。最终会话与 tracked diff 留在本机 `evidence/` 中，
 分享前需检查敏感输出。模型价格全为 0 时费用记作未知，不宣称免费。小任务 v4 已明确
 非法重试次数回退到 3，禁止取整或夹紧；带歧义的旧题面结果单独保留。
+
+## Production behavior calibration qualification
+
+The [production calibration report](evaluations/behavior-production-2026-11-15.md) separates controlled fixed candidates, native Pi execution, real model diagnosis/review and an external post-decision oracle. Its first failure and protocol revision remain published; it does not replace the historical SWE-bench or ablation results.
