@@ -1,57 +1,59 @@
 # Production behavior calibration qualification — 2026-11-15
 
-This is a controlled production-lifecycle qualification, not autonomous coding quality, SWE-bench resolution, or proof that calibration improves general quality. Inspection and candidate implementation are scripted. Check design, parent Pi command execution, fresh baseline diagnosis and independent final review use the configured real DeepSeek model. Pi 1.4.0 remains the model/tool runtime.
+This is controlled production-lifecycle qualification, not autonomous coding quality, SWE-bench resolution or proof of general quality improvement. Inspection and candidate implementation are scripted. Independent check design, parent Pi shell execution, fresh diagnosis and final review use the configured external model service. Pi 1.4.0 remains the model/tool runtime.
 
-## Protocol and identity
+## Protocol
 
-The [driver](../../scripts/probe-production-behavior-calibration.mjs) creates a tiny CommonJS fixture: normalizePoints rejects Nx1 columns; the request requires flattening, preserved flat/empty inputs, new arrays and no input mutation. Existing tests and package scripts are protected. Configured verification is syntax-only, intentionally insufficient for the reported behavior.
+The [driver](../../scripts/probe-production-behavior-calibration.mjs) creates a tiny CommonJS fixture where normalizePoints rejects Nx1 columns. The request requires flattening, preserved flat/empty inputs, new arrays and no mutation. Existing tests and package scripts are protected. Configured verification is syntax-only and intentionally insufficient.
 
-Within each run, correct and defective candidates share one frozen real independent check plan. The correct candidate flattens columns; the defective candidate only changes the thrown error. A separate case injects an explicitly wrong empty-array identity expectation, then requires a fresh real diagnosis, actual source-quote validation and pre-implementation re-execution. The host retains both plans and native receipts. Each product decision is flushed before a separate external assertion oracle runs. No oracle results or candidate labels enter model context.
+Within each run, correct and defective fixed candidates share one frozen real independent plan. A separate control injects an incorrect empty-array identity expectation and requires a fresh real diagnosis, actual source-quote validation and pre-implementation rerun. Product decisions are flushed before a separate external oracle. No oracle outcomes or candidate labels enter model context.
 
-Model: deepseek/deepseek-v4.1-flash, OpenAI-compatible completions, medium thinking. One attempt per case per protocol. Prices are not configured: monetary cost is unknown, not zero. Protocol hashes, exact built-code/driver fingerprints, native command hashes/exits, workspace digests, token counts and all six case outcomes are in the [allowlisted evidence](behavior-production-2026-11-15.json). Raw private sessions, credentials and provider endpoints are excluded.
+Configured model ID: deepseek/deepseek-v4.1-flash, OpenAI-compatible completions, medium thinking. The backend vendor identity is not independently attested. One attempt per case per recorded run/code fingerprint. Prices are unconfigured: monetary cost is unknown, not zero. [Allowlisted evidence](behavior-production-2026-11-15.json) retains all 15 case attempts, native command hashes/exits, workspace digests, token counts and source identities; no raw private sessions, credentials or endpoints are published.
 
-Corrected runtime source is commit 9eabebd. That source tree was committed during run 2 without changing measured bytes. Fingerprints, rather than the commit time, identify executed code. Run 1 used the earlier uncommitted implementation and does not qualify later fixes.
+## Retained outcomes
 
-## Retained first run
+I = implemented_unverified; B = blocked. The defective control is supposed to be blocked. Oracle outcomes for correct / defective / correction candidates are pass / fail / pass in every run. No result claims resolution.
 
-Protocol: production-behavior-calibration-fixed-candidates-v1
+| Run | Runtime source | Protocol | Correct | Defective | Wrong-check correction | Qualification |
+| --- | --- | --- | --- | --- | --- | --- |
+| r1 | uncommitted earlier code | v1 | B | B | I | failed |
+| r2 | 9eabebd | v2 | I | B | I | passed |
+| r3 | 193fdab | v3 | I | B | B | failed |
+| r4 | bc7e009 | v3 | B | B | I | failed |
+| r5 | 43c5a1c | v3 | I | B | I | passed |
 
-Built code/driver fingerprint:
+## Exact fingerprints
 
-    563456715ac243633c1c987d8461322faaf3f378956b4ad5eeabb0e222868b72
+Protocol hashes and full per-case identities are in the JSON. Built-code/driver fingerprints:
 
-| Candidate | Product result | External oracle | Harness qualification |
-| --- | --- | --- | --- |
-| Correct | blocked | pass | fail |
-| Still defective | blocked | fail | fail |
-| Wrong-check correction | implemented_unverified | pass | pass |
+- r1: 563456715ac243633c1c987d8461322faaf3f378956b4ad5eeabb0e222868b72
+- r2: 860edb1fde4763ab0901a58fa8b94bb0bccb77102546607d239b839ef2f113e0
+- r3: c6941085559983f98aa4301d721dd95cfbeb2fc286a3123a44a8d06cf99c110f
+- r4: 4daf8bd04417ad533c7a8f897f88f9c4d32609d87d507ab6a0293ca240218e3d
+- r5: 55a49f15a2a1c534c60ffc9389ee996ad9637a55066f0fea016632388b33e12b
 
-The first correct candidate exposed a real false block: every candidate command passed, but the diagnosis taxonomy had no clear category for a valid passing regression check. The model retained it as unconfirmed, and the host correctly refused to turn that uncertainty into a pass. Added valid_check distinguishes an observed, supported passing check from an expected pre-fix failure and unresolved semantics. Host validation also requires its native baseline receipt to have passed.
+Only r5 measures runtime commit 43c5a1ca98f01ce54a96c92228f19fc99bd1f08b. Earlier successes and failures remain tied to their earlier code. The r2 source tree was committed during that run without changing measured bytes; other recorded committed runs identify their source before execution.
 
-The v1 harness additionally prohibited any diagnosis in the paired controls, even a normal keep diagnosis preserving every frozen command. That restriction did not match the production protocol when a legitimate boundary reproduced the same bug. V2 permits one keep diagnosis while still forbidding plan replacement in the paired comparison. Source-backed replacement remains mandatory in its separate control. This protocol change is disclosed; the old result is not relabeled. V1 also overwrote failing assertion names with AssertionError; original indexes/messages remain, and v2 preserves names.
+## What the failures established
 
-## Second run
+- r1 exposed a real false block: all candidate commands passed, but there was no clear finding category for a supported passing check. Added valid_check, tied to a native baseline pass; unresolved semantics remain blocking.
+- Protocol v1 incorrectly prohibited a legitimate keep diagnosis in the paired controls. V2 permits one keep while preserving the identical frozen plan; replacement is still prohibited in that pair and required in its separate correction control. This protocol change is disclosed rather than relabeling v1.
+- r3 added explicit candidate pre-run/settled stamp checks. Correct and defective controls qualified, but the correction model rephrased an unchanged B1 expectation without a source-backed finding. The strict validator rejected the whole proposal, leaving a wrong B2 check and blocking a correct candidate.
+- The subsequent host fix preserves the original frozen expectation for explicitly retained checks whose command is identical. Proposed/retained wording is audited; changed commands and other adopted expectation changes still need source evidence. The original child response remains retained. R4 correction passed but had zero preservation events, so that pass cannot be attributed to the new branch; deterministic regressions cover it.
+- r4 exposed another false block: diagnosis JSON included command/expectation inside findings and remained invalid after its one generic format retry. Added concrete schema paths/errors to that same existing retry, without stripping unknown fields, reopening tools, increasing budgets or adding model calls.
 
-Protocol: production-behavior-calibration-fixed-candidates-v2
+## Final recorded control
 
-Built code/driver fingerprint:
+R5 qualified all three controls: the correct candidate was delivered as implemented/unverified; the defective candidate stayed blocked; the wrong-check control retained original failures, admitted a source-backed replacement and reran it before implementation. Candidate workspace stamps were stable, protected inputs unchanged, and every decision retained resolutionClaimed=false.
 
-    860edb1fde4763ab0901a58fa8b94bb0bccb77102546607d239b839ef2f113e0
+- correct: diagnosis format retries [1]; preserved expectation events 0.
+- defective: diagnosis format retries [1]; preserved expectation events 0.
+- controlled-correction: diagnosis format retries [1]; preserved expectation events 0.
 
-| Candidate | Product result | External oracle | Harness qualification |
-| --- | --- | --- | --- |
-| Correct | implemented_unverified | pass | pass |
-| Still defective | blocked | fail | pass: correctly rejected |
-| Wrong-check correction | implemented_unverified | pass | pass |
+Temporary credential/session homes were removed and code-stability checks passed in every run. These are single tiny controls with fresh model outputs and evolving code/protocols, not an isolated ablation. Neither a final pass nor five blocked defective controls proves general defect sensitivity, reduced false completion or reduced cost. Source-quote presence still does not prove semantic relevance.
 
-The real diagnosis used valid_check for an already passing boundary and retained the requested failures. In the correction control, the original invalid assertion failed, the replacement baseline passed that assertion, and the requested reproduction still failed before implementation. Both baseline versions and their source evidence remained durable. Corrected candidate checks then passed. Protection stayed unchanged. All decisions kept resolutionClaimed=false.
+## Engineering evidence
 
-Both runs used native parent-session pi-builtin-shell receipts. Temporary credential/session homes were removed, and driver checks confirmed measured code stayed unchanged during each run. A qualification pass is not an assertion that every candidate should pass: rejection of the defective candidate is the required negative-control outcome.
+The [engineering record](behavior-production-engineering-2026-11-15.json) retains local failures, bounded test fixes, focused regressions and the completed browser check. CI results belong to the exact commit in each GitHub run; earlier green jobs are not relabeled as validation of later code. Scripted API/browser tests do not become model-quality measurements.
 
-## Limits and next evidence
-
-The second run used a fresh designer and changed some checks; protocol and recovery code also changed. It is not an isolated causal experiment for valid_check, nor a measured quality gain. Source quotation presence cannot prove semantic relevance, and passing model-authored commands cannot certify all requirements. These samples do not resolve the historical Flask/Matplotlib misses or replace a real-repository ablation.
-
-Recovery regressions additionally cover legacy postimplementation provenance, atomic implementation marker/phase and replacement-plan transitions, and interrupted replacement-baseline recovery. Engineering checks and their failures belong in a separate engineering record; mock/API tests are not real-model quality evidence.
-
-下一步应固定真实仓库、原始请求、环境和候选补丁，检验校准能否减少错误检查造成的阻断，同时保留缺陷检测能力；本报告不声称已经证明这一点。
+Next qualification should pin real repositories, original requests, environments and fixed candidates, then measure whether calibration reduces invalid-check blocks without losing defect rejection. Historical Flask/Matplotlib misses and earlier SWE-bench results remain unresolved evidence questions.

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "scope": "Controlled fixed candidates and model-authored checks/diagnosis/review; scripted inspection and implementation, not autonomous coding quality, SWE-bench or measured quality improvement.",
-  "canonicalRuntimeSourceCommit": "9eabebd",
-  "fingerprintNote": "Each run binds its exact built code/driver bytes. Run 1 preceded the valid_check and atomic recovery corrections; its fingerprint is not validation of the corrected runtime. The run 2 runtime source was committed during the run without changing its bytes.",
+  "canonicalRuntimeSourceCommit": "43c5a1ca98f01ce54a96c92228f19fc99bd1f08b",
+  "fingerprintNote": "Each run binds its exact built code and driver bytes. Only r5 measures the latest runtime source. r1/r3/r4 failures and r2 success retain their original source/protocol identities; later controls do not relabel them.",
   "privacy": "Allowlisted synthetic-fixture outcomes only; no raw sessions, source quotations, private paths, credentials or provider endpoints.",
   "runs": [
     {
@@ -1289,6 +1289,2030 @@
           "errorStages": []
         }
       ]
+    },
+    {
+      "id": "r3",
+      "protocol": "production-behavior-calibration-fixed-candidates-v3",
+      "status": "failed",
+      "sourceCommit": "193fdab08257f00f611429ca422ee02cdbe04f82",
+      "startedAt": "2026-11-15T05:12:51.190Z",
+      "endedAt": "2026-11-15T05:16:40.670Z",
+      "protocolSha256": "6b05aca825d78227ea8854b43528c6398dc90fb8988e2b310595fc01be14d4a4",
+      "harnessFingerprint": "c6941085559983f98aa4301d721dd95cfbeb2fc286a3123a44a8d06cf99c110f",
+      "codeStable": true,
+      "temporaryHomeRemoved": true,
+      "model": {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "api": "openai-completions",
+        "pi": "1.4.0"
+      },
+      "pricingKnown": false,
+      "costUsd": null,
+      "cases": [
+        {
+          "id": "correct",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:14:12.660Z",
+          "oracleStartedAt": "2026-11-15T05:14:12.719Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "5d98f4b4a6c02f8534f814076cb38e0b5e19383bab6ccc75e3f52267687e8800",
+          "baselineRuns": [
+            {
+              "runId": "21eb1c4c-1bd0-4266-ace8-15756ac3cfda",
+              "planSha256": "5d98f4b4a6c02f8534f814076cb38e0b5e19383bab6ccc75e3f52267687e8800",
+              "status": "observed",
+              "beforeDigest": "9708c4faf91c612488cdff79533ce2e6bf37156be4e51ef744d8062fd004b2ff",
+              "afterDigest": "9708c4faf91c612488cdff79533ce2e6bf37156be4e51ef744d8062fd004b2ff",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "21eb1c4c-1bd0-4266-ace8-15756ac3cfda",
+                  "tool": "powershell",
+                  "commandSha256": "7c05c631616851b2f70af31e99d340ecc0c12f901c1ee35e129a1a59386121ec",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "ebc8164d021305c763d9b21474df0b3094510808238177eb2c7084f654682079",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "21eb1c4c-1bd0-4266-ace8-15756ac3cfda",
+                  "tool": "powershell",
+                  "commandSha256": "28fd25ede6c06dcfa8b3fe4c05a2e8ba188b8d83fe3992bb4ea13e9b13e3ac99",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "971582ff139b19e0f003dbe0ea1cc78b0a58639735750e7996feb80ccc129bc4",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "21eb1c4c-1bd0-4266-ace8-15756ac3cfda",
+                  "tool": "powershell",
+                  "commandSha256": "72cf3e9c2cd07773787e7379dc384c298eac63d39991c2f0d186ecfc747f061e",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "7795bfb1-79f5-4e0d-961b-554731375343",
+              "tool": "powershell",
+              "commandSha256": "72cf3e9c2cd07773787e7379dc384c298eac63d39991c2f0d186ecfc747f061e",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "7795bfb1-79f5-4e0d-961b-554731375343",
+              "tool": "powershell",
+              "commandSha256": "7c05c631616851b2f70af31e99d340ecc0c12f901c1ee35e129a1a59386121ec",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "b9c95c308a71453c86f1689824faefbcdf1cb3bdae8401a5c756ffdb17ac7ef2",
+              "outputCharacters": 12,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "7795bfb1-79f5-4e0d-961b-554731375343",
+              "tool": "powershell",
+              "commandSha256": "28fd25ede6c06dcfa8b3fe4c05a2e8ba188b8d83fe3992bb4ea13e9b13e3ac99",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "7729a20ddd7a602d7b95af5d9422b71385abc994d1b00c309f22d513a71223d8",
+              "outputCharacters": 6,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "e17af4a657d27cd63a9e60965e7a9d13e25d3f29e3de7f375d1ac09e64f9a6d9",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "e17af4a657d27cd63a9e60965e7a9d13e25d3f29e3de7f375d1ac09e64f9a6d9",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:13:57.996Z"
+          },
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": [],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_plan",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 2138
+            },
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "outputTokens": 2260
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 961
+            }
+          ],
+          "budget": {
+            "modelTurns": 16,
+            "toolCalls": 25,
+            "usage": {
+              "input": 25754,
+              "output": 7341,
+              "cacheRead": 68992,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "defective",
+          "qualified": true,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "changes_requested",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "code_defects",
+              "action": "fix_code",
+              "issueCount": 1,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": false,
+          "decisionRecordedAt": "2026-11-15T05:15:34.079Z",
+          "oracleStartedAt": "2026-11-15T05:15:34.123Z",
+          "candidateSha256": "cc7ee976681496d373a04c058adf03da13e00f60f21ff873cc80ca2c18b1b8d5",
+          "planSha256": "5d98f4b4a6c02f8534f814076cb38e0b5e19383bab6ccc75e3f52267687e8800",
+          "baselineRuns": [
+            {
+              "runId": "d9fb30c2-c999-4275-ba8d-ba57a862c101",
+              "planSha256": "5d98f4b4a6c02f8534f814076cb38e0b5e19383bab6ccc75e3f52267687e8800",
+              "status": "observed",
+              "beforeDigest": "b9c1eb52457096f1b08aa568f284dc43fc4322569303ca36de75acabafd71a43",
+              "afterDigest": "b9c1eb52457096f1b08aa568f284dc43fc4322569303ca36de75acabafd71a43",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "d9fb30c2-c999-4275-ba8d-ba57a862c101",
+                  "tool": "powershell",
+                  "commandSha256": "7c05c631616851b2f70af31e99d340ecc0c12f901c1ee35e129a1a59386121ec",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "add8d0203a8f765dad48098b7252f48a135a5e987756e5471c7598528872c4c8",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "d9fb30c2-c999-4275-ba8d-ba57a862c101",
+                  "tool": "powershell",
+                  "commandSha256": "72cf3e9c2cd07773787e7379dc384c298eac63d39991c2f0d186ecfc747f061e",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "d9fb30c2-c999-4275-ba8d-ba57a862c101",
+                  "tool": "powershell",
+                  "commandSha256": "28fd25ede6c06dcfa8b3fe4c05a2e8ba188b8d83fe3992bb4ea13e9b13e3ac99",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "44bd2e3b5784e727ce40edb0983ef93bbdba3a11dc7bc47b59077c5441da85fc",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B1",
+              "runId": "83901a45-243a-49cc-b1eb-148b0fcc4578",
+              "tool": "powershell",
+              "commandSha256": "7c05c631616851b2f70af31e99d340ecc0c12f901c1ee35e129a1a59386121ec",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "21f2d06579b60d573e2f6df8ce05961b7196bf5cd4f0746d05f0abe6e159fb8f",
+              "outputCharacters": 926,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "83901a45-243a-49cc-b1eb-148b0fcc4578",
+              "tool": "powershell",
+              "commandSha256": "28fd25ede6c06dcfa8b3fe4c05a2e8ba188b8d83fe3992bb4ea13e9b13e3ac99",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "76e577db5bc2bc1e42edd92c4aa4fe56b3a30a8cec2b71e24f8496151f99a525",
+              "outputCharacters": 926,
+              "truncated": false
+            },
+            {
+              "checkId": "B2",
+              "runId": "83901a45-243a-49cc-b1eb-148b0fcc4578",
+              "tool": "powershell",
+              "commandSha256": "72cf3e9c2cd07773787e7379dc384c298eac63d39991c2f0d186ecfc747f061e",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "23a807458dd7900be27d90d4b135064f184e8db12f0fa54f8b22fea8657b5dcf",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "23a807458dd7900be27d90d4b135064f184e8db12f0fa54f8b22fea8657b5dcf",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:15:20.429Z"
+          },
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": [],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1400
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 2,
+              "toolCalls": 2,
+              "outputTokens": 937
+            }
+          ],
+          "budget": {
+            "modelTurns": 9,
+            "toolCalls": 12,
+            "usage": {
+              "input": 22528,
+              "output": 4126,
+              "cacheRead": 37568,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "controlled-correction",
+          "qualified": false,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "insufficient_evidence",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "unconfirmed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "unavailable",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unconfirmed",
+                  "sameOutput": true
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "insufficient_evidence",
+              "action": "provide_evidence",
+              "issueCount": 0,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:16:40.182Z",
+          "oracleStartedAt": "2026-11-15T05:16:40.238Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+          "baselineRuns": [
+            {
+              "runId": "0573a151-3959-41f5-a121-5082bd0d952a",
+              "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+              "status": "observed",
+              "beforeDigest": "372f9c1796bb115beab63948c0394cb78e0e7eb0ad23525486217fb39f42ea97",
+              "afterDigest": "372f9c1796bb115beab63948c0394cb78e0e7eb0ad23525486217fb39f42ea97",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "0573a151-3959-41f5-a121-5082bd0d952a",
+                  "tool": "powershell",
+                  "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+                  "outputCharacters": 701,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "0573a151-3959-41f5-a121-5082bd0d952a",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "e25e934060c36db00df4cee61011fcf4045a4a2f06e67118bb7b7aadad56f711",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "fbbf7f80-919d-4802-b2cc-a77d5de2a61a",
+              "tool": "powershell",
+              "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+              "outputCharacters": 701,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "fbbf7f80-919d-4802-b2cc-a77d5de2a61a",
+              "tool": "powershell",
+              "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "47bd0c80755e2fa298c4ee294695fe9b319fb9c989a3780b931e266bbb19bade",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "47bd0c80755e2fa298c4ee294695fe9b319fb9c989a3780b931e266bbb19bade",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:16:23.449Z"
+          },
+          "correction": {
+            "status": "unavailable",
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unconfirmed",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1703
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1397
+            }
+          ],
+          "budget": {
+            "modelTurns": 10,
+            "toolCalls": 12,
+            "usage": {
+              "input": 14496,
+              "output": 3978,
+              "cacheRead": 31744,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [
+            {
+              "index": 4,
+              "name": "retained stable preimplementation baseline receipts"
+            },
+            {
+              "index": 7,
+              "name": "product decision matches candidate, without claiming resolution"
+            },
+            {
+              "index": 8,
+              "name": "fresh real correction child and actual source validation"
+            },
+            {
+              "index": 9,
+              "name": "retain old and replacement plans/receipts before implementation"
+            },
+            {
+              "index": 10,
+              "name": "public projection retains correction provenance"
+            }
+          ],
+          "errorStages": []
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "protocol": "production-behavior-calibration-fixed-candidates-v3",
+      "status": "failed",
+      "sourceCommit": "bc7e0098734436200ea48f65e80c932c92c0cae7",
+      "startedAt": "2026-11-15T05:23:52.793Z",
+      "endedAt": "2026-11-15T05:28:30.215Z",
+      "protocolSha256": "9891b070b04cf298c6ddd9a205c514f3ac6540be18a17a65a10cb08276e9dc63",
+      "harnessFingerprint": "4daf8bd04417ad533c7a8f897f88f9c4d32609d87d507ab6a0293ca240218e3d",
+      "codeStable": true,
+      "temporaryHomeRemoved": true,
+      "model": {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "api": "openai-completions",
+        "pi": "1.4.0"
+      },
+      "pricingKnown": false,
+      "costUsd": null,
+      "cases": [
+        {
+          "id": "correct",
+          "qualified": false,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "insufficient_evidence",
+            "behaviorChecks": "unconfirmed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "unconfirmed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "unavailable",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unconfirmed",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "unconfirmed",
+                  "sameOutput": false
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "insufficient_evidence",
+              "action": "provide_evidence",
+              "issueCount": 0,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:26:11.518Z",
+          "oracleStartedAt": "2026-11-15T05:26:11.576Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "7016480bf38de296d262483d245feb72ae8c46d4811d496ab0ae105f38a73567",
+          "baselineRuns": [
+            {
+              "runId": "aaecd8eb-af86-4d42-90d7-4c047ce02e78",
+              "planSha256": "7016480bf38de296d262483d245feb72ae8c46d4811d496ab0ae105f38a73567",
+              "status": "observed",
+              "beforeDigest": "a4cda60b1694fbcb41f92301863ee1b2d946ce753ac31d7e975925610cec645f",
+              "afterDigest": "a4cda60b1694fbcb41f92301863ee1b2d946ce753ac31d7e975925610cec645f",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "aaecd8eb-af86-4d42-90d7-4c047ce02e78",
+                  "tool": "powershell",
+                  "commandSha256": "6fc21de4911f249d85d21486cb7f9d7d4fa48d153a9634e8849471e7ad4fd9be",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "aaecd8eb-af86-4d42-90d7-4c047ce02e78",
+                  "tool": "powershell",
+                  "commandSha256": "590ac0ab6b4fb66f735e45daeac725062275552fe0a1699968c4eb93ac762974",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "0142fa7f861530b63174d664abdc8aaba90770d58518dab57421c52e996204ea",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "aaecd8eb-af86-4d42-90d7-4c047ce02e78",
+                  "tool": "powershell",
+                  "commandSha256": "8b3e6b5d6dee51ed87df07d9a2d996c39a15636cfea8a6008ebad7492d5fd3a2",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "615fe499ccf5d503ba7022717a1bad0ee834f38e0d7b4070fd7ffdadb0799b60",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "b36d6e56-15f1-448d-a116-3efeb186d486",
+              "tool": "powershell",
+              "commandSha256": "6fc21de4911f249d85d21486cb7f9d7d4fa48d153a9634e8849471e7ad4fd9be",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "b36d6e56-15f1-448d-a116-3efeb186d486",
+              "tool": "powershell",
+              "commandSha256": "590ac0ab6b4fb66f735e45daeac725062275552fe0a1699968c4eb93ac762974",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "b36d6e56-15f1-448d-a116-3efeb186d486",
+              "tool": "powershell",
+              "commandSha256": "8b3e6b5d6dee51ed87df07d9a2d996c39a15636cfea8a6008ebad7492d5fd3a2",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "44717bd4f2982ea86eb77d8aacc5ebf1cc052ba6d780ceb2911250df7359d0a5",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "44717bd4f2982ea86eb77d8aacc5ebf1cc052ba6d780ceb2911250df7359d0a5",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:25:54.275Z"
+          },
+          "correction": {
+            "status": "unavailable",
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unconfirmed",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "unconfirmed",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_plan",
+              "status": "completed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 4005
+            },
+            {
+              "purpose": "behavior_correction",
+              "status": "failed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 3906
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 951
+            }
+          ],
+          "budget": {
+            "modelTurns": 15,
+            "toolCalls": 18,
+            "usage": {
+              "input": 28451,
+              "output": 10382,
+              "cacheRead": 45568,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [
+            {
+              "index": 4,
+              "name": "retained stable preimplementation baseline receipts"
+            },
+            {
+              "index": 7,
+              "name": "product decision matches candidate, without claiming resolution"
+            },
+            {
+              "index": 8,
+              "name": "same frozen real independent plan on both candidates"
+            }
+          ],
+          "errorStages": []
+        },
+        {
+          "id": "defective",
+          "qualified": true,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "changes_requested",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "code_defects",
+              "action": "fix_code",
+              "issueCount": 1,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": false,
+          "decisionRecordedAt": "2026-11-15T05:27:19.021Z",
+          "oracleStartedAt": "2026-11-15T05:27:19.058Z",
+          "candidateSha256": "cc7ee976681496d373a04c058adf03da13e00f60f21ff873cc80ca2c18b1b8d5",
+          "planSha256": "7016480bf38de296d262483d245feb72ae8c46d4811d496ab0ae105f38a73567",
+          "baselineRuns": [
+            {
+              "runId": "e9d39acf-72c2-4ed0-aae3-5e896ac42fe5",
+              "planSha256": "7016480bf38de296d262483d245feb72ae8c46d4811d496ab0ae105f38a73567",
+              "status": "observed",
+              "beforeDigest": "6b588a65d53da65fffaf2bf891999fb9929ab45614c122097d87e648c13745ac",
+              "afterDigest": "6b588a65d53da65fffaf2bf891999fb9929ab45614c122097d87e648c13745ac",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "e9d39acf-72c2-4ed0-aae3-5e896ac42fe5",
+                  "tool": "powershell",
+                  "commandSha256": "6fc21de4911f249d85d21486cb7f9d7d4fa48d153a9634e8849471e7ad4fd9be",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "e9d39acf-72c2-4ed0-aae3-5e896ac42fe5",
+                  "tool": "powershell",
+                  "commandSha256": "590ac0ab6b4fb66f735e45daeac725062275552fe0a1699968c4eb93ac762974",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "4a951350e775b46e1780fd71259e2e21a320abf93997b7780ab280d8d48db633",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "e9d39acf-72c2-4ed0-aae3-5e896ac42fe5",
+                  "tool": "powershell",
+                  "commandSha256": "8b3e6b5d6dee51ed87df07d9a2d996c39a15636cfea8a6008ebad7492d5fd3a2",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "001d30c77edb77909ae91d1ae982408c2d63a1db801df0512e965f8ba4739d97",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "c9535ae8-aa16-4388-9ac2-9894b3ce6e77",
+              "tool": "powershell",
+              "commandSha256": "6fc21de4911f249d85d21486cb7f9d7d4fa48d153a9634e8849471e7ad4fd9be",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "c9535ae8-aa16-4388-9ac2-9894b3ce6e77",
+              "tool": "powershell",
+              "commandSha256": "590ac0ab6b4fb66f735e45daeac725062275552fe0a1699968c4eb93ac762974",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "eb39479367c299008928aa5cc1b57a7dd90bd498c3d01d1886328bb0868756fc",
+              "outputCharacters": 926,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "c9535ae8-aa16-4388-9ac2-9894b3ce6e77",
+              "tool": "powershell",
+              "commandSha256": "8b3e6b5d6dee51ed87df07d9a2d996c39a15636cfea8a6008ebad7492d5fd3a2",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "3a08f0608cb5f03e1c9fcb720160cbffe641325bf5d55a04880500445973848e",
+              "outputCharacters": 926,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "c84c8d02b88b034f702aea7d3253a0628d9d2b656b3123ac4fa18123c70f8227",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "c84c8d02b88b034f702aea7d3253a0628d9d2b656b3123ac4fa18123c70f8227",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:27:08.006Z"
+          },
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": [],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 6,
+              "outputTokens": 1758
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 1,
+              "toolCalls": 0,
+              "outputTokens": 664
+            }
+          ],
+          "budget": {
+            "modelTurns": 8,
+            "toolCalls": 12,
+            "usage": {
+              "input": 20622,
+              "output": 4284,
+              "cacheRead": 26112,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "controlled-correction",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 2
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "replaced",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:28:29.701Z",
+          "oracleStartedAt": "2026-11-15T05:28:29.759Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "886b094a491a4173f6af1c45e65643766c1027b9c11c21c8bcc188de133787b8",
+          "baselineRuns": [
+            {
+              "runId": "72b56d32-871b-421c-bd74-7c5b8248a0d3",
+              "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+              "status": "observed",
+              "beforeDigest": "67d829df2be0af9385c6352b536f3c14ccf06d2b105e634c461a5e755151450b",
+              "afterDigest": "67d829df2be0af9385c6352b536f3c14ccf06d2b105e634c461a5e755151450b",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "72b56d32-871b-421c-bd74-7c5b8248a0d3",
+                  "tool": "powershell",
+                  "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+                  "outputCharacters": 701,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "72b56d32-871b-421c-bd74-7c5b8248a0d3",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "cbdbed3a3a3401fa54757eaf69b216c46c737489e6571d7295997a6a598a6744",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            },
+            {
+              "runId": "77db41a4-eb10-4ff6-9c7c-f938adaa3a11",
+              "planSha256": "886b094a491a4173f6af1c45e65643766c1027b9c11c21c8bcc188de133787b8",
+              "status": "observed",
+              "beforeDigest": "67d829df2be0af9385c6352b536f3c14ccf06d2b105e634c461a5e755151450b",
+              "afterDigest": "67d829df2be0af9385c6352b536f3c14ccf06d2b105e634c461a5e755151450b",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "77db41a4-eb10-4ff6-9c7c-f938adaa3a11",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "cbdbed3a3a3401fa54757eaf69b216c46c737489e6571d7295997a6a598a6744",
+                  "outputCharacters": 917,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "77db41a4-eb10-4ff6-9c7c-f938adaa3a11",
+                  "tool": "powershell",
+                  "commandSha256": "3a8b4a5284c24124524cf3d2ceb1ee11e43bbf70b7857f61c66ac317187f3848",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "1dbcc8dc-25d5-4a29-8299-ad4d9e4e66d0",
+              "tool": "powershell",
+              "commandSha256": "3a8b4a5284c24124524cf3d2ceb1ee11e43bbf70b7857f61c66ac317187f3848",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "1dbcc8dc-25d5-4a29-8299-ad4d9e4e66d0",
+              "tool": "powershell",
+              "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "ffcd87641159fcfd6c794159b6f61882a7211ed526c8a18d2404b89a0ac8bdbf",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "ffcd87641159fcfd6c794159b6f61882a7211ed526c8a18d2404b89a0ac8bdbf",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:28:14.736Z"
+          },
+          "correction": {
+            "status": "replaced",
+            "action": "replace",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "invalid_expectation"
+              }
+            ],
+            "evidence": [
+              {
+                "checkId": "B2",
+                "path": "points.cjs",
+                "sha256": "e61a975aea6bc8665567b1d9fba56a3109fae75862f0527900d48b82efc257b8",
+                "quoteSha256": "71ffbaab9a41af421330239323b6d15f40f55d3942b8201687745753786b12c6"
+              }
+            ],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "outputTokens": 2367
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 1270
+            }
+          ],
+          "budget": {
+            "modelTurns": 14,
+            "toolCalls": 16,
+            "usage": {
+              "input": 18214,
+              "output": 5617,
+              "cacheRead": 52480,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        }
+      ]
+    },
+    {
+      "id": "r5",
+      "protocol": "production-behavior-calibration-fixed-candidates-v3",
+      "status": "passed",
+      "sourceCommit": "43c5a1ca98f01ce54a96c92228f19fc99bd1f08b",
+      "startedAt": "2026-11-15T05:30:56.808Z",
+      "endedAt": "2026-11-15T05:36:13.704Z",
+      "protocolSha256": "858aba9e61148a7486ffbf5a0133517c5d8381ff558b8609484cfc3b9cadc2e0",
+      "harnessFingerprint": "55a49f15a2a1c534c60ffc9389ee996ad9637a55066f0fea016632388b33e12b",
+      "codeStable": true,
+      "temporaryHomeRemoved": true,
+      "model": {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "api": "openai-completions",
+        "pi": "1.4.0"
+      },
+      "pricingKnown": false,
+      "costUsd": null,
+      "cases": [
+        {
+          "id": "correct",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:32:40.589Z",
+          "oracleStartedAt": "2026-11-15T05:32:40.660Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "a1a4201b810339f57bea340abf04ae5526f18c5f0813271c855bd01d749e73f0",
+          "baselineRuns": [
+            {
+              "runId": "250cc193-cca1-4893-92df-5556b74abd8a",
+              "planSha256": "a1a4201b810339f57bea340abf04ae5526f18c5f0813271c855bd01d749e73f0",
+              "status": "observed",
+              "beforeDigest": "5273d5182043e2bab862ff4da6f1f03dcf1e501221972462cb7ff1a53d5c21c2",
+              "afterDigest": "5273d5182043e2bab862ff4da6f1f03dcf1e501221972462cb7ff1a53d5c21c2",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "250cc193-cca1-4893-92df-5556b74abd8a",
+                  "tool": "powershell",
+                  "commandSha256": "55ed5e32b7138515113570515b15d8bb89407511c977402658082a87b4c92a3c",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "0281270a444bf8b4e8ba4f7223df4f5985b75fca1b53e3d4afe222395b70c956",
+                  "outputCharacters": 25,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "250cc193-cca1-4893-92df-5556b74abd8a",
+                  "tool": "powershell",
+                  "commandSha256": "66359fb29d9ae51fdd9941546ca086f7cc7dd6596ed3bcaf0851c4f1b7c81d67",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "9b7500a22f67169a82267f5671358e199cdb8e542897a56d7ebfb4142fb62d5d",
+                  "outputCharacters": 918,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "250cc193-cca1-4893-92df-5556b74abd8a",
+                  "tool": "powershell",
+                  "commandSha256": "40234961e1e87acffd9e80f21f714ddf80366ab276b1afd5ce029c55892abe82",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "74f7d321-4d6e-49dd-bda4-ad7401d6e390",
+              "tool": "powershell",
+              "commandSha256": "40234961e1e87acffd9e80f21f714ddf80366ab276b1afd5ce029c55892abe82",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "74f7d321-4d6e-49dd-bda4-ad7401d6e390",
+              "tool": "powershell",
+              "commandSha256": "66359fb29d9ae51fdd9941546ca086f7cc7dd6596ed3bcaf0851c4f1b7c81d67",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "7729a20ddd7a602d7b95af5d9422b71385abc994d1b00c309f22d513a71223d8",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "74f7d321-4d6e-49dd-bda4-ad7401d6e390",
+              "tool": "powershell",
+              "commandSha256": "55ed5e32b7138515113570515b15d8bb89407511c977402658082a87b4c92a3c",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e6cb88521b35775ebfb9616108c26b4248399f9fb27341912b5d3086ed754cb7",
+              "outputCharacters": 6,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "6fb5019d4329993a57c10c2adf7f91b654391795f5ef3398972133e7e444a1d2",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "6fb5019d4329993a57c10c2adf7f91b654391795f5ef3398972133e7e444a1d2",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:32:26.446Z"
+          },
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": [],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_plan",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 4,
+              "toolCalls": 5,
+              "outputTokens": 2667
+            },
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 3686
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 861
+            }
+          ],
+          "budget": {
+            "modelTurns": 18,
+            "toolCalls": 25,
+            "usage": {
+              "input": 31812,
+              "output": 9522,
+              "cacheRead": 66880,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "defective",
+          "qualified": true,
+          "productStatus": "needs_attention",
+          "result": {
+            "version": 1,
+            "status": "blocked",
+            "execution": "blocked",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "changes_requested",
+            "behaviorChecks": "failed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 1
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "kept",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                },
+                {
+                  "checkId": "B3",
+                  "outcome": "pre_existing_failure",
+                  "sameOutput": false
+                }
+              ]
+            },
+            "reviewStop": {
+              "reason": "code_defects",
+              "action": "fix_code",
+              "issueCount": 1,
+              "unconfirmedIds": []
+            }
+          },
+          "oraclePassed": false,
+          "decisionRecordedAt": "2026-11-15T05:34:16.119Z",
+          "oracleStartedAt": "2026-11-15T05:34:16.176Z",
+          "candidateSha256": "cc7ee976681496d373a04c058adf03da13e00f60f21ff873cc80ca2c18b1b8d5",
+          "planSha256": "a1a4201b810339f57bea340abf04ae5526f18c5f0813271c855bd01d749e73f0",
+          "baselineRuns": [
+            {
+              "runId": "05d7b921-c54d-40b1-8398-ea13ccdcc489",
+              "planSha256": "a1a4201b810339f57bea340abf04ae5526f18c5f0813271c855bd01d749e73f0",
+              "status": "observed",
+              "beforeDigest": "e2a01b76a196c3c0bbbbc529970fc2eb40ace63ac6a948ad9b9d576774450b9a",
+              "afterDigest": "e2a01b76a196c3c0bbbbc529970fc2eb40ace63ac6a948ad9b9d576774450b9a",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "05d7b921-c54d-40b1-8398-ea13ccdcc489",
+                  "tool": "powershell",
+                  "commandSha256": "40234961e1e87acffd9e80f21f714ddf80366ab276b1afd5ce029c55892abe82",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+                  "outputCharacters": 6,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "05d7b921-c54d-40b1-8398-ea13ccdcc489",
+                  "tool": "powershell",
+                  "commandSha256": "55ed5e32b7138515113570515b15d8bb89407511c977402658082a87b4c92a3c",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "0281270a444bf8b4e8ba4f7223df4f5985b75fca1b53e3d4afe222395b70c956",
+                  "outputCharacters": 25,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B3",
+                  "runId": "05d7b921-c54d-40b1-8398-ea13ccdcc489",
+                  "tool": "powershell",
+                  "commandSha256": "66359fb29d9ae51fdd9941546ca086f7cc7dd6596ed3bcaf0851c4f1b7c81d67",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "3c4e289585ea905c9cc043410e4d79ccbfdd7c513dc1644f49a4de4774195f7f",
+                  "outputCharacters": 918,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "78988bb7-5083-4194-9697-3ef99d844e08",
+              "tool": "powershell",
+              "commandSha256": "40234961e1e87acffd9e80f21f714ddf80366ab276b1afd5ce029c55892abe82",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "f84277ac32858540e030296f4ba94659429761e1a52f4af92e56eebe209af98e",
+              "outputCharacters": 6,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "78988bb7-5083-4194-9697-3ef99d844e08",
+              "tool": "powershell",
+              "commandSha256": "55ed5e32b7138515113570515b15d8bb89407511c977402658082a87b4c92a3c",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "966a4ec2960037551101abdb43c71fdcbffb972b38a4a107b9077d3f306647bf",
+              "outputCharacters": 25,
+              "truncated": false
+            },
+            {
+              "checkId": "B3",
+              "runId": "78988bb7-5083-4194-9697-3ef99d844e08",
+              "tool": "powershell",
+              "commandSha256": "66359fb29d9ae51fdd9941546ca086f7cc7dd6596ed3bcaf0851c4f1b7c81d67",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "outputSha256": "6878e627191e1ecf418aee2bf1719dc2b0b58ac2aefc5dbd17ae5bda8f1b9a52",
+              "outputCharacters": 926,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "ae622227fdfaff16dc8e08c0a10af1639dd1fdc7584c20e8cbbf6135fcf75eb0",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "ae622227fdfaff16dc8e08c0a10af1639dd1fdc7584c20e8cbbf6135fcf75eb0",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:34:02.385Z"
+          },
+          "correction": {
+            "status": "kept",
+            "action": "keep",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "valid_check"
+              },
+              {
+                "id": "B3",
+                "kind": "expected_failure"
+              }
+            ],
+            "evidence": [],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            },
+            {
+              "checkId": "B3",
+              "outcome": "pre_existing_failure",
+              "sameOutput": false
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 3217
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 0,
+              "modelTurns": 3,
+              "toolCalls": 4,
+              "outputTokens": 766
+            }
+          ],
+          "budget": {
+            "modelTurns": 13,
+            "toolCalls": 17,
+            "usage": {
+              "input": 28686,
+              "output": 6597,
+              "cacheRead": 56192,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        },
+        {
+          "id": "controlled-correction",
+          "qualified": true,
+          "productStatus": "completed",
+          "result": {
+            "version": 1,
+            "status": "implemented_unverified",
+            "execution": "finished",
+            "acceptance": "unverified",
+            "resolutionClaimed": false,
+            "checks": "passed",
+            "modelReview": "passed",
+            "behaviorChecks": "passed",
+            "behaviorCalibration": {
+              "baseline": {
+                "status": "observed",
+                "runCount": 2
+              },
+              "implementationStarted": true,
+              "correction": {
+                "status": "replaced",
+                "consumed": true
+              },
+              "comparisons": [
+                {
+                  "checkId": "B1",
+                  "outcome": "changed_to_pass",
+                  "sameOutput": false
+                },
+                {
+                  "checkId": "B2",
+                  "outcome": "unchanged_pass",
+                  "sameOutput": true
+                }
+              ]
+            }
+          },
+          "oraclePassed": true,
+          "decisionRecordedAt": "2026-11-15T05:36:13.271Z",
+          "oracleStartedAt": "2026-11-15T05:36:13.313Z",
+          "candidateSha256": "78ce3b8e23c62728372ade3b08e78d9e442b05cdab72c023a51593d75353092a",
+          "planSha256": "a742cd13786970c373fd068d978f01cca17298acdd869cdbdd0a64347f9af769",
+          "baselineRuns": [
+            {
+              "runId": "417581bf-9e1e-4dae-9138-9a7408290cad",
+              "planSha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+              "status": "observed",
+              "beforeDigest": "ad9ea2fd8852a018fe166d88da9bb27261f41bb28bff62becd830edd45e015ab",
+              "afterDigest": "ad9ea2fd8852a018fe166d88da9bb27261f41bb28bff62becd830edd45e015ab",
+              "receipts": [
+                {
+                  "checkId": "B1",
+                  "runId": "417581bf-9e1e-4dae-9138-9a7408290cad",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "b3d4f067974219a9cf698db86ab668b126c8671ef1327827f9ea42473f413ddd",
+                  "outputCharacters": 917,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B2",
+                  "runId": "417581bf-9e1e-4dae-9138-9a7408290cad",
+                  "tool": "powershell",
+                  "commandSha256": "88185264c0bdc31c8d9d46c6eafcc9b310996bef0c5152da8667b81b6d85ec70",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "1c5f811d8932fb2a2fc5ea7d3dd1d8749af83a4bb71d919c69e4ea0050f71ec3",
+                  "outputCharacters": 701,
+                  "truncated": false
+                }
+              ]
+            },
+            {
+              "runId": "151d1417-056f-4cde-acee-d4bebc34e5f8",
+              "planSha256": "a742cd13786970c373fd068d978f01cca17298acdd869cdbdd0a64347f9af769",
+              "status": "observed",
+              "beforeDigest": "ad9ea2fd8852a018fe166d88da9bb27261f41bb28bff62becd830edd45e015ab",
+              "afterDigest": "ad9ea2fd8852a018fe166d88da9bb27261f41bb28bff62becd830edd45e015ab",
+              "receipts": [
+                {
+                  "checkId": "B2",
+                  "runId": "151d1417-056f-4cde-acee-d4bebc34e5f8",
+                  "tool": "powershell",
+                  "commandSha256": "d0b5c69610ddafc9aeee6dd48aec20aab9cbd81f6857369d07cd8e6322f86210",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 0,
+                  "status": "passed",
+                  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "outputCharacters": 0,
+                  "truncated": false
+                },
+                {
+                  "checkId": "B1",
+                  "runId": "151d1417-056f-4cde-acee-d4bebc34e5f8",
+                  "tool": "powershell",
+                  "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+                  "source": "pi-builtin-shell",
+                  "exitCode": 1,
+                  "status": "failed",
+                  "outputSha256": "b3d4f067974219a9cf698db86ab668b126c8671ef1327827f9ea42473f413ddd",
+                  "outputCharacters": 917,
+                  "truncated": false
+                }
+              ]
+            }
+          ],
+          "candidateReceipts": [
+            {
+              "checkId": "B2",
+              "runId": "bb467c34-c293-4f32-8407-b33b29c7b3b1",
+              "tool": "powershell",
+              "commandSha256": "d0b5c69610ddafc9aeee6dd48aec20aab9cbd81f6857369d07cd8e6322f86210",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            },
+            {
+              "checkId": "B1",
+              "runId": "bb467c34-c293-4f32-8407-b33b29c7b3b1",
+              "tool": "powershell",
+              "commandSha256": "a9d84f0c02fef42890780c465982dc6ff7daf06a128c46a926b10c5d3c25fbb3",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "outputCharacters": 0,
+              "truncated": false
+            }
+          ],
+          "candidateWorkspace": {
+            "before": {
+              "version": 1,
+              "scope": "git",
+              "digest": "a685edba6093d7c58ee36dadb47a76e742ae7df885bc74f58681121d738beaab",
+              "files": 4
+            },
+            "after": {
+              "version": 1,
+              "scope": "git",
+              "digest": "a685edba6093d7c58ee36dadb47a76e742ae7df885bc74f58681121d738beaab",
+              "files": 4
+            },
+            "checkedAt": "2026-11-15T05:35:40.157Z"
+          },
+          "correction": {
+            "status": "replaced",
+            "action": "replace",
+            "findings": [
+              {
+                "id": "B1",
+                "kind": "expected_failure"
+              },
+              {
+                "id": "B2",
+                "kind": "invalid_expectation"
+              }
+            ],
+            "evidence": [
+              {
+                "checkId": "B2",
+                "path": "points.cjs",
+                "sha256": "e61a975aea6bc8665567b1d9fba56a3109fae75862f0527900d48b82efc257b8",
+                "quoteSha256": "4d02033881516f6e4f789f0ccec97cef70cb8e41125fb75e8a560067a03d0435"
+              }
+            ],
+            "preservedExpectationCount": 0
+          },
+          "comparisons": [
+            {
+              "checkId": "B1",
+              "outcome": "changed_to_pass",
+              "sameOutput": false
+            },
+            {
+              "checkId": "B2",
+              "outcome": "unchanged_pass",
+              "sameOutput": true
+            }
+          ],
+          "children": [
+            {
+              "purpose": "behavior_correction",
+              "status": "completed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 2956
+            },
+            {
+              "purpose": "review_gate",
+              "status": "completed",
+              "formatRetries": 1,
+              "modelTurns": 4,
+              "toolCalls": 4,
+              "outputTokens": 1355
+            }
+          ],
+          "budget": {
+            "modelTurns": 15,
+            "toolCalls": 14,
+            "usage": {
+              "input": 21939,
+              "output": 5939,
+              "cacheRead": 53248,
+              "cacheWrite": 0
+            }
+          },
+          "failedAssertions": [],
+          "errorStages": []
+        }
+      ]
     }
   ],
   "limitations": [
@@ -1296,16 +3320,19 @@
     "Run 2 used a fresh independent model design. Changed model outputs and protocol mean outcomes cannot be attributed solely to valid_check.",
     "Protocol v1 incorrectly prohibited legitimate keep diagnoses in the fixed-plan pair; v2 permits one keep only, never replacement. The separate correction case still requires an actual source-backed replacement.",
     "The v1 failure helper overwrote failing assertion names with AssertionError; indexes and messages are retained. V2 preserves descriptive names.",
-    "Native exits/outputs prove process observations, not semantic correctness or full requirement coverage."
+    "Native exits/outputs prove process observations, not semantic correctness or full requirement coverage.",
+    "R3 source-validation failure came from rephrasing an unchanged B1 expectation; R4 correction passed but did not exercise frozen-expectation preservation. Deterministic regressions cover that branch.",
+    "R4 correct-candidate diagnosis failed strict JSON twice; r5 follows a field-specific feedback fix within the same sole retry. Fresh model outputs still prevent causal attribution.",
+    "Candidate pre-run and settled workspace stamps are explicitly asserted by protocol v3. Passing controls do not prove complete behavioral acceptance."
   ],
   "correctedRuntimeSources": [
     {
       "path": "src/task/behavior.ts",
-      "sha256": "f0b3baf7e22171e179b0f7b6656b0122486fe2225bc9ff6f864ea62c2129f94b"
+      "sha256": "bdd6fe8f2d4f915818be3a5553f8ccd4d767ba7584379f3c5501867db332e7db"
     },
     {
       "path": "src/task/behavior-correction.ts",
-      "sha256": "52582c1678e67d86cfb7db971da0f2ae4b1f43ec3e41379c5df759da2205c0b0"
+      "sha256": "5d1ea47abec9dde4b536b4ffb07ecada678f815d429d54c94cad6628cff8817d"
     },
     {
       "path": "src/task/behavior-runtime.ts",
@@ -1313,7 +3340,7 @@
     },
     {
       "path": "src/task/controller.ts",
-      "sha256": "4d666b900f4828f0a5aee79ba13ff4df76a3fca843cdb21a216d8ef7914a7ccc"
+      "sha256": "f5fa5efcdaaae1bd397e0214c4c04d8f04bc5e7231b802b67957c161b4825c8c"
     },
     {
       "path": "src/task/result.ts",
@@ -1321,15 +3348,446 @@
     },
     {
       "path": "src/task/review-handoff.ts",
-      "sha256": "212b6338110afd0f2b27b8e218e1329cf03e40ac92d80390e70516eb25de8b54"
+      "sha256": "e1c40f44fe733faf556ade2958f5e4b05501dd7ef65f1fdafa205de35e4cfdde"
     },
     {
       "path": "src/web/subagents.ts",
-      "sha256": "b9f2d44470ca819d61d5474321283816f881df6d774232c5f67460dccfa62fd4"
+      "sha256": "26501fa3130147a379e45c9e6e1cb59f47d48f69fbdb72aafc0f5e1b8f739d2b"
     },
     {
       "path": "src/web/server.ts",
       "sha256": "2a51ba82b356db140e8ee800563289ccac35917169449b8c1ed7e37a5f40fb7b"
+    }
+  ],
+  "previousQualifiedRuntimeSources": [
+    {
+      "run": "r2",
+      "sourceCommit": "9eabebd",
+      "sources": [
+        {
+          "path": "src/task/behavior.ts",
+          "sha256": "f0b3baf7e22171e179b0f7b6656b0122486fe2225bc9ff6f864ea62c2129f94b"
+        },
+        {
+          "path": "src/task/behavior-correction.ts",
+          "sha256": "52582c1678e67d86cfb7db971da0f2ae4b1f43ec3e41379c5df759da2205c0b0"
+        },
+        {
+          "path": "src/task/behavior-runtime.ts",
+          "sha256": "df0a27686fea2798a9d076ecd23e57724f572901708563556f1a921efbe1119e"
+        },
+        {
+          "path": "src/task/controller.ts",
+          "sha256": "4d666b900f4828f0a5aee79ba13ff4df76a3fca843cdb21a216d8ef7914a7ccc"
+        },
+        {
+          "path": "src/task/result.ts",
+          "sha256": "75f3a015917afa56b5dc1eaa895649a7651ad8ba1fdef264898369e7c689943a"
+        },
+        {
+          "path": "src/task/review-handoff.ts",
+          "sha256": "212b6338110afd0f2b27b8e218e1329cf03e40ac92d80390e70516eb25de8b54"
+        },
+        {
+          "path": "src/web/subagents.ts",
+          "sha256": "b9f2d44470ca819d61d5474321283816f881df6d774232c5f67460dccfa62fd4"
+        },
+        {
+          "path": "src/web/server.ts",
+          "sha256": "2a51ba82b356db140e8ee800563289ccac35917169449b8c1ed7e37a5f40fb7b"
+        }
+      ]
+    }
+  ],
+  "runtimeSourceCommits": {
+    "r1": null,
+    "r2": "9eabebd",
+    "r3": "193fdab08257f00f611429ca422ee02cdbe04f82",
+    "r4": "bc7e0098734436200ea48f65e80c932c92c0cae7",
+    "r5": "43c5a1ca98f01ce54a96c92228f19fc99bd1f08b"
+  },
+  "planCatalog": [
+    {
+      "sha256": "c2297d7ff83095c17ff1bb7b6e3bc5f916a3891f6becf2a28bbb62e009f86f37",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Three focused PowerShell checks using in-memory Node assertions against the public entry points/cjs and existing test contract: (B1) reproduce the reported Nx1 column input [[1],[2]], which currently throws, and assert it normalizes to [1,2]; (B2) boundary/contract check that flat [1,2], empty [], and a single-row column [[5]] all normalize correctly, that each returned value is a new array (not the input reference), and that inputs are left unmutated; (B3) regression check that the existing test file still passes unmodified and the package.json test script is unchanged. No files are written, dependencies installed, or scripts altered by these commands.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Calling normalizePoints([[1],[2]]) does not throw and returns a value deep-equal to [1,2].",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const out=n([[1],[2]]);a.deepEqual(out,[1,2]);'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "normalizePoints([1,2]) deep-equals [1,2]; normalizePoints([]) deep-equals []; normalizePoints([[5]]) deep-equals [5]; each result is a distinct array object from its input; and the original inputs remain deep-equal to their initial values after the calls (no mutation).",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const flat=[1,2];const f=n(flat);a.deepEqual(f,[1,2]);a.notEqual(f,flat);a.deepEqual(flat,[1,2]);const empty=[];const e=n(empty);a.deepEqual(e,[]);a.notEqual(e,empty);a.equal(empty.length,0);const col=[[5]];const c=n(col);a.deepEqual(c,[5]);a.notEqual(c,col);a.deepEqual(col,[[5]]);'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B3",
+            "kind": "regression",
+            "requestQuote": "Do not alter the existing test or package scripts.",
+            "expectation": "The unmodified existing test file passes when run via Node, and package.json's scripts.test value is still exactly \"node existing.test.cjs\".",
+            "command": "node existing.test.cjs; if ($LASTEXITCODE -ne 0) { exit 1 }; node -e 'const a=require(\"node:assert/strict\");const p=require(\"./package.json\");a.equal(p.scripts.test,\"node existing.test.cjs\");'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          }
+        ],
+        "assumptions": [
+          "The current working directory is the repository root, so ./points.cjs, ./existing.test.cjs, and ./package.json resolve directly.",
+          "The existing test file in the repo (existing.test.cjs) is the 'existing test' the request says must not be altered, and package.json scripts.test is the contract for 'package scripts'.",
+          "Node.js is available on PATH as `node` and supports require of CommonJS files plus node:assert/strict.",
+          "Only the Nx1 column shape [[1],[2]] and the listed flat/empty inputs are in scope; other input shapes (e.g., deeper nesting, non-numeric values) are out of scope.",
+          "Tests are run in-memory via node -e and the existing test runner; no project, test, or config files are modified by these commands."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "f0ede373c536df236937295f40176f6639eee9db170ca7271c662ba5fe424871",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Verify Nx1 column normalization (reproduction) plus flat and empty boundary inputs that must be returned as new, non-mutating arrays.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Nx1 columns return [1,2].",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');a.deepEqual(n([[1],[2]]),[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "Flat [1,2] returns a new array deep-equal to [1,2] with the input unchanged; empty [] returns a new array deep-equal to [] with the input unchanged; neither result is the same reference as its input.",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');const flat=[1,2];const fo=n(flat);a.deepEqual(fo,[1,2]);a.notStrictEqual(fo,flat);a.deepEqual(flat,[1,2]);const empty=[];const eo=n(empty);a.deepEqual(eo,[]);a.notStrictEqual(eo,empty);a.deepEqual(empty,[]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          }
+        ],
+        "assumptions": [
+          "Points may be any numeric values; only shape semantics (flat vs Nx1 column) are checked."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "0cb811036819a0ae1c164a03b1d0084beb732f6e3aafbff58c6163b5e43d519c",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Check column normalization and empty input behavior.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Nx1 columns return [1,2].",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');a.deepEqual(n([[1],[2]]),[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "Empty input returns the same array object.",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');const input=[];a.strictEqual(n(input),input);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          }
+        ],
+        "assumptions": [],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "082a46a58020f43d823efe54750adf79249f4a45766c219f7eed4b463dcffe5c",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Behavioral plan for points.cjs normalizePoints. B1 reproduces the reported Nx1 column input [[1],[2]] and asserts it flattens to [1,2] instead of throwing. B2 covers the preserved boundary inputs: empty [] and ordinary flat [1,2], plus a fresh-array guarantee for the empty case. B3 checks the non-mutation/new-array contract by snapshotting a nested column input, comparing after the call, and verifying a returned array is decoupled from its source. Each check is a single node -e command run from the repo root that exits nonzero on assertion failure. Existing test file and package scripts are not modified or relied upon for new assertions.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Calling normalizePoints([[1],[2]]) does not throw and returns a value deep-equal to [1,2] (the flattened column values).",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const m=require(\"./points.cjs\");const n=m.normalizePoints;a.equal(typeof n,\"function\");let out;try{out=n([[1],[2]]);}catch(err){console.error(\"B1 FAIL: threw\",err&&err.message);process.exit(1);}a.deepEqual(out,[1,2]);console.log(\"B1 ok\",JSON.stringify(out));'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs",
+            "expectation": "normalizePoints([]) returns []; normalizePoints([1,2]) returns a value deep-equal to [1,2]; the returned array for [] is a distinct object from the input, and the input [] remains empty.",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const m=require(\"./points.cjs\");const n=m.normalizePoints;const empty=[];const e=n(empty);a.deepEqual(e,[]);a.notStrictEqual(e,empty);a.deepEqual(empty,[]);const flat=[1,2];a.deepEqual(n(flat),[1,2]);a.deepEqual(n([0,-3.5,7]),[0,-3.5,7]);console.log(\"B2 ok\");'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B3",
+            "kind": "regression",
+            "requestQuote": "return new arrays without mutating inputs",
+            "expectation": "For column input [[1],[2]] and flat input [3,4], the input is unchanged after the call (deep-equal to a pre-call snapshot), and the returned array is not the same object as the input; mutating the flat source afterwards does not change the previously returned array.",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const m=require(\"./points.cjs\");const n=m.normalizePoints;const col=[[1],[2]];const snap=JSON.stringify(col);const c=n(col);a.deepEqual(c,[1,2]);a.strictEqual(JSON.stringify(col),snap);a.deepEqual(col,[[1],[2]]);a.notStrictEqual(c,col);const flat=[3,4];const f=n(flat);a.notStrictEqual(f,flat);flat.push(5);a.deepEqual(f,[3,4]);flat[0]=99;a.deepEqual(f,[3,4]);console.log(\"B3 ok\");'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          }
+        ],
+        "assumptions": [
+          "normalizePoints is reachable via require('./points.cjs').normalizePoints, per the module comments and the existing test file.",
+          "Column input elements are single numbers, so [[1],[2]] flattening to [1,2] is the expected shape; other nested shapes (e.g. Nx2) are outside the user request and are not asserted.",
+          "Commands are run from the repository root with Node.js available on PATH; node -e resolves require('./points.cjs') relative to the current directory.",
+          "The existing test file and package.json scripts are left untouched; these checks add independent in-memory assertions rather than relying only on the existing flat-input test.",
+          "Exact thrown-vs-other-failure distinctions are not asserted beyond not throwing for the column case, since the request specifies the required return value rather than an error contract."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "f1ad1d17dcb8b693744cf5703e8689c0d7eecdb139afeb95459bbd02fb22d7c4",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Verify the reported Nx1 column normalization and the empty/flat non-mutation boundary behavior of normalizePoints.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Nx1 columns return [1,2].",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');a.deepEqual(n([[1],[2]]),[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "Empty input yields a new array deeply equal to [] (not the same reference), flat [1,2] yields a new array deeply equal to [1,2] (not the same reference), and both inputs remain unchanged.",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');const e=[];const er=n(e);a.deepEqual(er,[]);a.notStrictEqual(er,e);const f=[1,2];const fr=n(f);a.deepEqual(fr,[1,2]);a.notStrictEqual(fr,f);a.deepEqual(f,[1,2]);a.deepEqual(e,[]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          }
+        ],
+        "assumptions": [],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "5d98f4b4a6c02f8534f814076cb38e0b5e19383bab6ccc75e3f52267687e8800",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "points.cjs exports normalizePoints(values) whose documented contract (in-file public API comment) requires: a new array for flat and empty inputs, never mutating the input, and Nx1 column input flattened to values. The current implementation throws whenever any element is an Array, so [[1],[2]] throws instead of returning [1,2]. existing.test.cjs only covers flat [1,2] and package.json maps `npm test` to that file, so both existing contracts must keep passing. Proposed checks use in-memory `node -e` assertions against the real module (no files created or modified): reproduction of the column case, a boundary/regression check for flat + empty inputs including new-array identity and non-mutation, and a further boundary check for a longer single column with non-mutation of the nested rows. All commands exit nonzero on assertion failure or uncaught throw.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Calling normalizePoints([[1],[2]]) does not throw and returns an array deep-equal to [1,2]; the returned value is a distinct array reference from any literal compared against it. Any thrown error or differing result makes the process exit nonzero.",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const input=[[1],[2]];const r=n(input);a.ok(Array.isArray(r),\"result must be an array\");a.deepEqual(r,[1,2]);a.notStrictEqual(r,input);console.log(\"B1 ok\",JSON.stringify(r));'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs",
+            "expectation": "normalizePoints([1,2]) returns an array deep-equal to [1,2] that is not the same reference as the input, leaving the input array still [1,2]; normalizePoints([]) returns an array deep-equal to [] that is a new reference, leaving the input empty array empty (length 0). Any throw, mutation, aliasing, or wrong contents exits nonzero.",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const flat=[1,2];const rf=n(flat);a.deepEqual(rf,[1,2],\"flat contents\");a.notStrictEqual(rf,flat,\"flat must be new array\");a.deepEqual(flat,[1,2],\"flat input unmutated\");a.equal(flat.length,2,\"flat input length\");const empty=[];const re=n(empty);a.ok(Array.isArray(re),\"empty result must be array\");a.deepEqual(re,[],\"empty contents\");a.notStrictEqual(re,empty,\"empty must be new array\");a.equal(empty.length,0,\"empty input unmutated\");console.log(\"B2 ok\");'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B3",
+            "kind": "boundary",
+            "requestQuote": "Exercise both the reported column case and valid boundary inputs before handing back.",
+            "expectation": "A single-column input of arbitrary row count is accepted without throwing: normalizePoints([[1],[2],[3]]) returns [1,2,3] and normalizePoints([[7]]) returns [7]. Neither call mutates its input: the outer array keeps its original row count and each row remains a single-element array holding its original value; results are new arrays, not the input or one of its rows. Any throw, wrong contents, or observed mutation of the nested structure exits nonzero.",
+            "command": "node -e 'const a=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const col=[[1],[2],[3]];const r=n(col);a.deepEqual(r,[1,2,3],\"3x1 contents\");a.notStrictEqual(r,col,\"3x1 must be new array\");a.deepEqual(col,[[1],[2],[3]],\"3x1 input unmutated\");a.equal(col.length,3,\"3x1 row count preserved\");const one=[[7]];const r1=n(one);a.deepEqual(r1,[7],\"1x1 contents\");a.notStrictEqual(r1,one,\"1x1 must be new array\");a.deepEqual(one,[[7]],\"1x1 input unmutated\");console.log(\"B3 ok\");'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          }
+        ],
+        "assumptions": [
+          "normalizePoints remains a CommonJS export of ./points.cjs consumed via require, as the in-file contract comment and existing.test.cjs indicate.",
+          "'Nx1 column input' generalizes to any row count >= 1 (not only exactly two rows), each row being a single-element array.",
+          "Nested non-numeric or ragged row shapes are outside the request scope and are not asserted.",
+          "Checks run from the fixture root directory so ./points.cjs and ./existing.test.cjs resolve; node is available on PATH.",
+          "existing.test.cjs and package.json scripts are left untouched; checks run as ephemeral `node -e` code and do not write files."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "7016480bf38de296d262483d245feb72ae8c46d4811d496ab0ae105f38a73567",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "points.cjs currently throws Error(123) whenever any element is an array, so the Nx1 column input fails; the existing test only covers flat [1,2]. The plan runs three focused Node assertions against the public export: the reported column case must flatten to [1,2] (B1), flat and empty inputs must be preserved while returning fresh arrays (B2), and inputs must remain unmutated, including deeply frozen inputs (B3). All checks use the required PowerShell shell and fail with a nonzero exit via node:assert.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Calling the public normalizePoints export with the Nx1 column input [[1],[2]] returns exactly [1,2] instead of throwing.",
+            "command": "node -e 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const r=n([[1],[2]]);assert.deepEqual(r,[1,2]);'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs",
+            "expectation": "normalizePoints([1,2]) returns [1,2] and normalizePoints([]) returns [] (empty result), and each call yields a distinct new array rather than the same reference passed in.",
+            "command": "node -e 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const flat=[1,2];const r=n(flat);assert.deepEqual(r,[1,2]);assert.notStrictEqual(r,flat);const empty=[];const e=n(empty);assert.deepEqual(e,[]);assert.notStrictEqual(e,empty);'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B3",
+            "kind": "regression",
+            "requestQuote": "return new arrays without mutating inputs",
+            "expectation": "The caller's input is left unchanged after normalization for both column and flat shapes (JSON snapshot identical), and normalizing a frozen column input still yields the flattened values without throwing from attempted mutation.",
+            "command": "node -e 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const col=[[1],[2]];const snap=JSON.stringify(col);const r=n(col);assert.deepEqual(r,[1,2]);assert.equal(JSON.stringify(col),snap);assert.notStrictEqual(r,col);const frozen=Object.freeze([[3],[4]]);const fr=Object.freeze([5,6]);assert.deepEqual(n(frozen),[3,4]);assert.deepEqual(n(fr),[5,6]);'",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          }
+        ],
+        "assumptions": [
+          "points.cjs exposes normalizePoints as a named CommonJS export, as observed in the module source.",
+          "Node.js is available on PATH and the checks are run from the project root so require(\"./points.cjs\") resolves.",
+          "Only the Nx1 column shape and flat/empty shapes named in the request are in scope; other nested or ragged shapes are unspecified and not asserted.",
+          "Array reference inequality is a valid observable proxy for 'new arrays' since identity is the only testable aspect of newness from outside the module.",
+          "The existing test and package scripts remain unmodified; the checks do not depend on editing them."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "886b094a491a4173f6af1c45e65643766c1027b9c11c21c8bcc188de133787b8",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Verify the reported Nx1 column normalization defect and the flat/empty non-mutating new-array boundaries.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Nx1 columns return [1,2].",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');a.deepEqual(n([[1],[2]]),[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "Flat [1,2] still normalizes to [1,2] and empty [] still normalizes to [], each result is a distinct array object from its input, and both original inputs are left unchanged after the calls.",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');const flat=[1,2];const flatOut=n(flat);a.deepEqual(flatOut,[1,2]);a.notStrictEqual(flatOut,flat);a.deepEqual(flat,[1,2]);const empty=[];const emptyOut=n(empty);a.deepEqual(emptyOut,[]);a.notStrictEqual(emptyOut,empty);a.deepEqual(empty,[]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          }
+        ],
+        "assumptions": [
+          "Returning \"new arrays\" means each result is a distinct array object (checked with notStrictEqual) while remaining deeply equal to the expected values.",
+          "The empty input [] is required to stay an empty array, not to be replaced by a different value such as null or undefined."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "a1a4201b810339f57bea340abf04ae5526f18c5f0813271c855bd01d749e73f0",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Three focused Node assertion checks run from the workspace root against ./points.cjs: (B1) the reported Nx1 column input [[1],[2]] must flatten to [1,2] without mutating the input; (B2) boundary/regression coverage for ordinary flat [1,2] and empty [] inputs, requiring value equality plus fresh-array identity and unchanged inputs; (B3) additional column shapes ([[7]], [[-1.5],[0],[2]]) plus re-running the existing shipped test file to confirm the preserved contract. Each command asserts with node:assert/strict and exits nonzero on any failure; no project files, tests, or package scripts are modified.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Calling normalizePoints with the Nx1 column array [[1],[2]] returns a value deep-equal to the flat array [1,2] instead of throwing, and the input array is still deep-equal to [[1],[2]] afterwards (no mutation).",
+            "command": "$code = 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const input=[[1],[2]];const before=JSON.stringify(input);let out;try{out=n(input);}catch(e){console.error(\"threw for [[1],[2]]:\",e&&e.message);process.exit(1);}assert.deepEqual(out,[1,2],\"column input must flatten to [1,2]\");assert.equal(JSON.stringify(input),before,\"column input was mutated\");console.log(\"B1 ok\");'; node -e $code; if ($LASTEXITCODE -ne 0) { exit 1 }",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs",
+            "expectation": "normalizePoints([1,2]) and normalizePoints([]) return values deep-equal to [1,2] and [] respectively; each returned array is a distinct object from the argument (assert.notStrictEqual), both inputs remain unmodified, and the empty result is an Array of length 0.",
+            "command": "$code = 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const flat=[1,2];const f=n(flat);assert.ok(Array.isArray(f),\"flat result must be an array\");assert.deepEqual(f,[1,2],\"flat [1,2] must be preserved\");assert.notStrictEqual(f,flat,\"flat input must yield a new array\");assert.deepEqual(flat,[1,2],\"flat input was mutated\");const empty=[];const e=n(empty);assert.ok(Array.isArray(e),\"empty result must be an array\");assert.equal(e.length,0,\"empty input must yield empty array\");assert.notStrictEqual(e,empty,\"empty input must yield a new array\");assert.equal(empty.length,0,\"empty input was mutated\");console.log(\"B2 ok\");'; node -e $code; if ($LASTEXITCODE -ne 0) { exit 1 }",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          },
+          {
+            "id": "B3",
+            "kind": "regression",
+            "requestQuote": "return new arrays without mutating inputs",
+            "expectation": "Other valid column shapes are accepted and flattened: [[7]] yields [7] and [[-1.5],[0],[2]] yields [-1.5,0,2]; each result is a new array distinct from its argument and each argument stays unchanged. Additionally the untouched existing.test.cjs still passes when required, so flat [1,2] behavior is preserved.",
+            "command": "$code = 'const assert=require(\"node:assert/strict\");const {normalizePoints:n}=require(\"./points.cjs\");const one=[[7]];const o=n(one);assert.deepEqual(o,[7],\"single-row column must flatten to [7]\");assert.notStrictEqual(o,one,\"single-row column must yield a new array\");assert.deepEqual(one,[[7]],\"single-row column input was mutated\");const three=[[-1.5],[0],[2]];const t=n(three);assert.deepEqual(t,[-1.5,0,2],\"multi-row column must flatten\");assert.notStrictEqual(t,three,\"multi-row column must yield a new array\");assert.deepEqual(three,[[-1.5],[0],[2]],\"multi-row column input was mutated\");require(\"./existing.test.cjs\");console.log(\"B3 ok\");'; node -e $code; if ($LASTEXITCODE -ne 0) { exit 1 }",
+            "shell": "powershell",
+            "timeoutSeconds": 60
+          }
+        ],
+        "assumptions": [
+          "The checks are run with the workspace root as the current directory so ./points.cjs and ./existing.test.cjs resolve.",
+          "A Node.js runtime is available on PATH as node and supports CommonJS require of the existing files.",
+          "PowerShell single-quoted script strings are passed literally to node -e, so no escaping of the JS double quotes is needed.",
+          "Non-numeric or ragged nested shapes, and any behavior for nested arrays that are not single-element columns, are outside the user's stated scope and are not asserted.",
+          "The existing test file and package.json scripts are treated as protected and are only re-run, never modified."
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "sha256": "a742cd13786970c373fd068d978f01cca17298acdd869cdbdd0a64347f9af769",
+      "plan": {
+        "version": 1,
+        "status": "ready",
+        "summary": "Verify that Nx1 column input [[1],[2]] returns [1,2], and that flat [1,2] and empty [] inputs are preserved while the function returns new arrays and never mutates its inputs.",
+        "checks": [
+          {
+            "id": "B1",
+            "kind": "reproduction",
+            "requestQuote": "It must return [1,2] for [[1],[2]]",
+            "expectation": "Nx1 columns return [1,2].",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');a.deepEqual(n([[1],[2]]),[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          },
+          {
+            "id": "B2",
+            "kind": "boundary",
+            "requestQuote": "preserve ordinary flat [1,2] and empty [] inputs, and return new arrays without mutating inputs.",
+            "expectation": "Empty [] input returns a new, deeply equal empty array; flat [1,2] input returns a new, deeply equal [1,2] array; neither input array is mutated.",
+            "command": "node -e \"const a=require('node:assert/strict'),{normalizePoints:n}=require('./points.cjs');const e=[];const eo=n(e);a.deepEqual(eo,[]);a.notStrictEqual(eo,e);a.deepEqual(e,[]);const f=[1,2];const fo=n(f);a.deepEqual(fo,[1,2]);a.notStrictEqual(fo,f);a.deepEqual(f,[1,2]);\"",
+            "shell": "powershell",
+            "timeoutSeconds": 30
+          }
+        ],
+        "assumptions": [
+          "Emptiness of the returned empty array is checked structurally with deepEqual because the contract requires a new array rather than the input object itself."
+        ],
+        "unresolved": []
+      }
     }
   ]
 }

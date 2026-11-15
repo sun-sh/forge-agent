@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "recordedAt": "2026-11-15T05:38:53.478Z",
+  "runtimeSourceCommit": "43c5a1ca98f01ce54a96c92228f19fc99bd1f08b",
+  "scope": "Engineering only; final CI status is reported for its exact GitHub commit, not inferred here.",
+  "completedChecks": [
+    {
+      "name": "production behavior policy file",
+      "passed": 99,
+      "source": "tests/behavior-production-calibration.test.ts",
+      "sourceSha256": "d4b51b8a81a5dc4f4a55f775fa472c0ebccd82f1682403032198835e708be009"
+    },
+    {
+      "name": "result and review-handoff focused files",
+      "passed": 22,
+      "sourceCommit": "193fdab"
+    },
+    {
+      "name": "strict diagnosis feedback retry",
+      "passed": 1,
+      "skipped": 37,
+      "source": "tests/web-subagents.test.ts",
+      "property": "one retry, detailed unknown-field paths, tools closed, same budgets"
+    },
+    {
+      "name": "corrected timeline integration",
+      "passed": 1,
+      "skipped": 47,
+      "properties": [
+        "8 phases",
+        "10 model timeline nodes",
+        "11 native model requests"
+      ]
+    },
+    {
+      "name": "corrected CI fixture regressions",
+      "passed": 3,
+      "skipped": 7
+    },
+    {
+      "name": "typecheck and build",
+      "status": "passed"
+    }
+  ],
+  "retainedEarlierFailures": [
+    {
+      "name": "local subagent/designer file run",
+      "passed": 38,
+      "failed": 6,
+      "reason": "Existing Windows worker timeouts and a Web child settlement wait; new diagnosis tests passed."
+    },
+    {
+      "name": "local projection/Web-mode file run",
+      "passed": 191,
+      "failed": 5,
+      "reason": "Four settlement waits and one stale 7-phase timeline expectation. The latter was fixed and rerun."
+    },
+    {
+      "name": "initial CI Linux Node 24",
+      "runId": 43679039079,
+      "sourceCommit": "090b959",
+      "passed": 896,
+      "failed": 3,
+      "reason": "Stale handoff classification and two pre-baseline output-recovery call counts; subsequently fixed without increasing product budgets."
+    },
+    {
+      "name": "earlier corrected full matrix",
+      "runId": 43679514502,
+      "sourceCommit": "5dfba42",
+      "status": "all four check/pack jobs passed",
+      "limit": "Before later candidate-stamp and diagnosis refinements; not final-code proof."
+    },
+    {
+      "name": "local full run",
+      "status": "no completed final result used",
+      "reason": "Superseded after further source refinements; not counted as a pass."
+    }
+  ],
+  "browser": {
+    "uiSourceCommit": "193fdab",
+    "currentUiSourcesUnchangedSinceThatCommit": true,
+    "finalAttempt": "passed",
+    "visualQa": "Eight phases fit; baseline/candidate labels are distinct and process/receipts are collapsed by default.",
+    "priorAttempts": [
+      {
+        "status": "failed",
+        "reason": "MCP connection test exceeded its unchanged 15-second connection bound."
+      },
+      {
+        "status": "failed",
+        "reason": "At the 20-second planned UI wait, native checks had passed and review was still running."
+      }
+    ],
+    "testOnlyChanges": [
+      "Planned stage/timeline expectations updated from 7 to 8.",
+      "Only the planned-task browser wait changed from 20 to 45 seconds; all other default waits remain 20 seconds.",
+      "Added collapsed receipt and baseline/candidate label assertions."
+    ],
+    "productBudgetsChanged": false,
+    "privacy": "Private screenshots and failure snapshots remain local; no user-specific paths or sessions published."
+  }
+}
