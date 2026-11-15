@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Close independent check-design collection on observed output/turn headroom as well as read count. Cap existing OpenAI-compatible output fields within unchanged local/parent hard budgets and keep stale tools closed across finalization/format correction. Native Pi fixture evidence is distinct from historical model-quality results.
+
 - Retain original-image behavioral-gate qualification: both correct fixed candidates pass native checks in the revised run; invalid expectations/environment and design-budget stops do not qualify historical defect misses. Preserve the infrastructure attempt, first run and revised fingerprints separately.
 
 - Bound independent check-design exploration with a notice after six native reads/searches and a ten-read collection window, leaving an opportunity for native Pi finalization with a structured plan or an explicit limitation, subject to unchanged hard budgets. Keep the 12-turn/three-minute ceiling unchanged; retain original-image budget-exhausted attempts separately.

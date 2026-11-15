@@ -15,14 +15,14 @@ import { REVIEW_BUDGETS, type ReviewBudgetProfile } from '../src/task/review-bud
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 const text = (input: any) => JSON.stringify(input.messages);
-function answer(res: ServerResponse, input: any, content: string, call?: { name: string; args: unknown }) {
+function answer(res: ServerResponse, input: any, content: string, call?: { name: string; args: unknown }, outputTokens = 10) {
   if (res.destroyed) return;
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   const delta = call ? { role: 'assistant', tool_calls: [{ index: 0, id: 'call-' + Math.random().toString(16).slice(2), type: 'function', function: { name: call.name, arguments: JSON.stringify(call.args) } }] } : { role: 'assistant', content };
   const send = (data: any) => res.write('data: ' + JSON.stringify({ id: 'test', object: 'chat.completion.chunk', model: input.model, choices: [{ index: 0, ...data }] }) + '\n\n');
   send({ delta, finish_reason: null });
   send({ delta: {}, finish_reason: call ? 'tool_calls' : 'stop' });
-  res.write('data: ' + JSON.stringify({ id: 'test', object: 'chat.completion.chunk', model: input.model, choices: [], usage: { prompt_tokens: 30, completion_tokens: 10, total_tokens: 40 } }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ id: 'test', object: 'chat.completion.chunk', model: input.model, choices: [], usage: { prompt_tokens: 30, completion_tokens: outputTokens, total_tokens: 30 + outputTokens } }) + '\n\n');
   res.end('data: [DONE]\n\n');
 }
 async function fixture(handler: (input: any, res: ServerResponse) => void | Promise<void>, reviewBudget: ReviewBudgetProfile = 'standard') {
@@ -118,6 +118,21 @@ describe('managed Pi subagents', () => {
     expect(text(f.requests[6])).toContain('focused file reads/searches remain');
     expect(text(f.requests.at(-1))).toContain('File evidence collection is closed');
     expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', ...(needsCorrection ? { formatRetries: 1 } : {}), budget: { toolCalls: 10, modelTurns: needsCorrection ? 12 : 11, limits: { maxModelTurns: 12 } } });
+  });
+  it('finalizes on observed output headroom before ten reads, without reopening tools for format correction', async () => {
+    const plan = { version: 1, status: 'ready', summary: 'Focused checks', assumptions: [], unresolved: [], checks: [
+      { id: 'B1', kind: 'reproduction', requestQuote: 'Fix', expectation: 'Trigger works', command: 'node repro.cjs', shell: 'bash', timeoutSeconds: 60 },
+      { id: 'B2', kind: 'boundary', requestQuote: 'Fix', expectation: 'Boundary works', command: 'node boundary.cjs', shell: 'bash', timeoutSeconds: 60 }
+    ] };
+    let finalCalls = 0;
+    const f = await fixture((input, res) => (input.tools ?? []).length
+      ? answer(res, input, '', { name: 'read', args: { path: 'sample.txt' } }, 1_000)
+      : answer(res, input, ++finalCalls === 1 ? 'invalid JSON' : JSON.stringify(plan), undefined, 200));
+    const result = await f.agents.behaviorPlan('Original request: Fix', new AbortController().signal);
+    expect(JSON.parse(result.text)).toEqual(plan); expect(f.requests).toHaveLength(10);
+    for (const request of f.requests.slice(8)) expect(request.tools ?? []).toEqual([]);
+    expect(text(f.requests.at(-1))).toContain('Behavior check design evidence window is closed');
+    expect(f.agents.snapshot()[0]).toMatchObject({ status: 'completed', formatRetries: 1, budget: { toolCalls: 7, modelTurns: 10, usage: { output: 8_400 }, limits: { maxOutputTokens: 16_000 } } });
   });
   it('allows a real Pi reviewer to finish beyond the previous 24-turn ceiling', async () => {
     let turns = 0;
