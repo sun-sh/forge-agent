@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bind candidate behavior comparisons to complete pre-run and settled workspace stamps; changed, missing or unsettled versions remain unconfirmed, including restored calibrated records.
+
 - Add diagnosis finding `valid_check` for passing, contract-supported boundary/regression checks; keep uncertain semantics `unconfirmed` and blocking. Persist implementation-start marker/phase and accepted correction/replacement-plan pairs as atomic task-state transitions, and prevent continued legacy postimplementation tasks from inventing a baseline. Fresh real-model evidence is reported separately under its own fingerprint; no new scores are asserted here.
 
 - Add production pre-implementation calibration for new Planned Web changes with configured verification: execute frozen checks through the native parent Pi session, retain expected reproduction failures, and allow one fresh reader-only diagnosis of failed boundaries or incomplete baselines. Admit only source-quote-validated corrections preserving count, IDs, kinds, shells, request anchors and non-increasing timeouts; preserve originals and rerun replacements before implementation. Freeze design/baselines once implementation starts; explicit pre-implementation recovery requires the same workspace and shares a four-admission ceiling. Expose derived baseline/correction/comparison summaries without treating comparisons as concrete-defect proof or allowing static ready to override unavailable evidence. No new configuration keys, CLI task orchestration or changes to adaptive/read-only/unconfigured paths. Historical no-model diagnostic reports remain immutable and do not qualify this production code; fresh engineering/model evidence must be recorded separately.

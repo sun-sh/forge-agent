@@ -31,7 +31,7 @@ export function buildReviewHandoff(task: TaskState, patch: ReviewPatch, previous
     historicalCommands: commands,
     independentBehaviorChecks: behavior ? {
       plan: behavior.plan, designer: behavior.designer, status: behavior.status, runPurpose: behavior.runPurpose,
-      receipts: behavior.receipts, workspace: behavior.workspace, reason: behavior.reason,
+      receipts: behavior.receipts, runWorkspace: behavior.runWorkspace, workspace: behavior.workspace, reason: behavior.reason,
       ...(behavior.calibration ? {
         calibration: behaviorCalibrationSummary(behavior),
         baseline: baseline ? { runId: baseline.runId, status: baseline.status, receipts: baseline.receipts, before: baseline.before, after: baseline.after, reason: baseline.reason } : undefined,

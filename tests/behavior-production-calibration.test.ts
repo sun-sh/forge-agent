@@ -152,6 +152,68 @@ describe('production baseline admission and comparison', () => {
   });
 });
 
+describe('candidate workspace comparison integrity', () => {
+  it.each([
+    { name: 'passing receipts with a changed digest', exits: [0, 0], after: { ...candidate, digest: 'c'.repeat(64) } },
+    { name: 'failed receipts with a changed digest', exits: [1, 1], after: { ...candidate, digest: 'c'.repeat(64) } },
+    { name: 'passing receipts with a changed scope', exits: [0, 0], after: { ...candidate, scope: 'directory' as const } },
+    { name: 'failed receipts with a changed scope', exits: [1, 1], after: { ...candidate, scope: 'directory' as const } }
+  ])('leaves every comparison unconfirmed for $name during execution', ({ exits, after }) => {
+    const baseline = observed(); baseline.calibration!.implementationStarted = true;
+    const state = beginBehaviorRun(baseline, candidate, 'candidate');
+    state.receipts = exits.map((exit, index) => receipt(state, index, exit));
+    const result = settleBehaviorRun(state, after);
+    expect(behaviorBaselineCurrent(result)).toBe(true);
+    expect(result.runWorkspace).toEqual(candidate);
+    expect(result.workspace).toEqual(after);
+    expect(result.checkedAt).toEqual(expect.any(String));
+    expect(result.status).not.toBe('passed');
+    expect(result.calibration!.comparisons.map(row => row.outcome)).toEqual(['unconfirmed', 'unconfirmed']);
+    expect(compareBehaviorBaseline(result).map(row => row.outcome)).toEqual(['unconfirmed', 'unconfirmed']);
+    expect(behaviorCurrent(result, after.digest)).toBe(false);
+    result.status = 'passed';
+    expect(behaviorCurrent(result, after.digest)).toBe(false);
+    expect(compareBehaviorBaseline(result).map(row => row.outcome)).toEqual(['unconfirmed', 'unconfirmed']);
+  });
+
+  const invalid: Array<{ name: string; mutate(state: BehaviorState): void }> = [
+    { name: 'missing prerun stamp', mutate: state => { delete state.runWorkspace; } },
+    { name: 'missing prerun digest', mutate: state => { delete state.runWorkspace!.digest; } },
+    { name: 'mismatched prerun digest', mutate: state => { state.runWorkspace!.digest = 'c'.repeat(64); } },
+    { name: 'mismatched prerun scope', mutate: state => { state.runWorkspace!.scope = 'directory'; } },
+    { name: 'missing settled stamp', mutate: state => { delete state.workspace; } },
+    { name: 'both digests absent', mutate: state => { delete state.runWorkspace!.digest; delete state.workspace!.digest; } },
+    { name: 'missing settlement timestamp', mutate: state => { delete state.checkedAt; } }
+  ];
+  it.each(invalid)('cannot promote a saved modern run with $name by forcing passed status', ({ mutate }) => {
+    const original = checked(observed());
+    const saved = behaviorStateSchema.parse(JSON.parse(JSON.stringify(original)));
+    mutate(saved); saved.status = 'passed';
+    const restored = behaviorStateSchema.parse(JSON.parse(JSON.stringify(saved)));
+    expect(restored.receipts.every(item => item.status === 'passed' && item.exitCode === 0)).toBe(true);
+    expect(restored.calibration!.comparisons.map(row => row.outcome)).toEqual(['changed_to_pass', 'unchanged_pass']);
+    expect(behaviorCurrent(restored, candidate.digest)).toBe(false);
+    expect(compareBehaviorBaseline(restored).map(row => row.outcome)).toEqual(['unconfirmed', 'unconfirmed']);
+  });
+
+  it.each([
+    { name: 'reproduction changes to pass', baseline: [1, 0], exits: [0, 0], outcomes: ['changed_to_pass', 'unchanged_pass'] },
+    { name: 'reproduction remains a failure', baseline: [1, 0], exits: [1, 0], outcomes: ['pre_existing_failure', 'unchanged_pass'] },
+    { name: 'candidate introduces a boundary regression', baseline: [0, 0], exits: [0, 1], outcomes: ['unchanged_pass', 'candidate_regression'] }
+  ])('keeps same-workspace outcomes when $name', ({ baseline, exits, outcomes }) => {
+    const state = checked(observed(baseline), exits);
+    expect(state.runWorkspace).toEqual(candidate);
+    expect(state.workspace).toEqual(candidate);
+    expect(state.checkedAt).toEqual(expect.any(String));
+    expect(compareBehaviorBaseline(state).map(row => row.outcome)).toEqual(outcomes);
+    expect(state.calibration!.comparisons).toEqual(compareBehaviorBaseline(state));
+    expect(behaviorCurrent(state, candidate.digest)).toBe(exits.every(exit => exit === 0));
+    const saved = behaviorStateSchema.parse(JSON.parse(JSON.stringify(state)));
+    expect(compareBehaviorBaseline(saved)).toEqual(state.calibration!.comparisons);
+    expect(behaviorCurrent(saved, candidate.digest)).toBe(exits.every(exit => exit === 0));
+  });
+});
+
 describe('source-backed production check correction', () => {
   it('retains frozen coverage and records exact source and normalized quotation hashes', async () => {
     const root = await project(); await writeFile(join(root, 'contract.ts'), source);

@@ -52,6 +52,8 @@ function calibrated() {
 describe('behavior calibration result projection', () => {
   it('derives comparisons from native receipts instead of cached flags without upgrading acceptance', () => {
     const task = calibrated();
+    expect(task.behavior!.runWorkspace).toEqual(task.behavior!.workspace);
+    expect(task.behavior!.checkedAt).toEqual(expect.any(String));
     task.behavior!.calibration!.comparisons = [{ checkId: 'B1', outcome: 'pre_existing_failure', sameOutput: true }];
     const saved = structuredClone(task), result = taskResult(task);
     expect(result).toMatchObject({ behaviorChecks: 'passed', acceptance: 'unverified', resolutionClaimed: false, behaviorCalibration: {
@@ -60,6 +62,15 @@ describe('behavior calibration result projection', () => {
     } });
     expect(task).toEqual(saved);
     expect(() => taskResultSchema.parse({ ...result, behaviorCalibration: { ...result.behaviorCalibration, comparisons: [{ checkId: 'B1', outcome: 'fixed', sameOutput: false }] } })).toThrow();
+  });
+  it.each(['runWorkspace', 'workspace', 'checkedAt'] as const)('leaves candidate checks and comparisons unconfirmed without %s', (field) => {
+    const task = calibrated(); delete task.behavior![field];
+    expect(taskResult(task)).toMatchObject({ behaviorChecks: 'unconfirmed', acceptance: 'unverified', resolutionClaimed: false, behaviorCalibration: { baseline: { status: 'observed' }, comparisons: [{ checkId: 'B1', outcome: 'unconfirmed' }, { checkId: 'B2', outcome: 'unconfirmed' }] } });
+  });
+  it.each(['digest', 'scope'] as const)('does not compare a candidate whose settled workspace changed %s during execution', (field) => {
+    const task = calibrated(), stamp = task.behavior!.runWorkspace!;
+    task.behavior!.runWorkspace = { ...stamp, ...(field === 'digest' ? { digest: 'c'.repeat(64) } : { scope: 'directory' as const }) };
+    expect(taskResult(task)).toMatchObject({ behaviorChecks: 'unconfirmed', behaviorCalibration: { baseline: { status: 'observed' }, comparisons: [{ outcome: 'unconfirmed' }, { outcome: 'unconfirmed' }] } });
   });
   it.each(['running', 'unavailable'] as const)('retains a consumed %s diagnosis without claiming a valid baseline', (status) => {
     const task = calibrated(); task.behavior!.calibration!.correction = { status };

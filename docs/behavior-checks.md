@@ -20,6 +20,8 @@ Shell 本身仍有启动用户的 OS 权限，限制工具名和检查命令不�
 
 检查运行状态、方案、回执和请求哈希随任务持久化。实现前明确继续须保持首次基线的工作区 digest/scope，累计最多四次基线准入，包含原始、替换及中断后的恢复执行，不是四次额外重试。基线 running 恢复为 unconfirmed；诊断 running 恢复为 unavailable，单次机会仍已消耗。版本改变、无法观测或次数耗尽时须检查文件并新建任务，不能重置旧对照。实现开始后只补候选检查/验证，不重设计或重建基线；中断发生在实现时先继续实现，候选 check/verify/review 恢复获取当前版本新回执，不重放成功实现。自动修复仍共享 `verifyRetries`，审阅补证至多一次；继续不重置已用额度，也不能删除配置来消除已启用门禁。
 
+候选执行还保存 runWorkspace（执行前）和 workspace（执行后）指纹，并在收尾后派生对照。两者不完整、版本不一致或尚未收尾时，前后对照为 unconfirmed；不会展示为已确认的失败转通过。旧校准记录缺少执行前指纹时，保留未确认状态，继续重新执行候选检查，不补造基线。
+
 ## 审阅分类
 
 新 reviewer 的每个 `issues` 条目必须有对应 `issueKinds`：`code_defect`、`missing_execution`、`environment` 或 `requirement_ambiguity`。宿主执行新审阅时严格校验；旧持久化记录仍可读。

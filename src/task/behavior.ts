@@ -57,7 +57,7 @@ export const behaviorStateSchema = z.object({
   version: z.literal(1), required: z.literal(true), status: z.enum(['pending', 'running', 'passed', 'failed', 'unconfirmed']),
   plan: behaviorPlanSchema.optional(), designer: designerSchema.optional(), runPurpose: z.enum(['baseline','candidate']).optional(), calibration: calibrationSchema.optional(),
   requestSha256: z.string().regex(/^[a-f0-9]{64}$/), runId: z.uuid().optional(),
-  receipts: z.array(behaviorReceiptSchema).max(3), workspace: workspaceStampSchema.optional(),
+  receipts: z.array(behaviorReceiptSchema).max(3), workspace: workspaceStampSchema.optional(), runWorkspace: workspaceStampSchema.optional(),
   checkedAt: z.iso.datetime().optional(), reason: z.string().max(2000).optional()
 }).strict();
 export type BehaviorState = z.infer<typeof behaviorStateSchema>;
@@ -88,7 +88,7 @@ export function behaviorExecutionPrompt(state: BehaviorState) {
   return 'PFORGE TASK PHASE: check\nExecute the frozen independent checks through their named built-in shell tool, each command EXACTLY as supplied. Do not substitute commands, modify source/tests/config, install anything, delegate or use MCP. Supply a timeout no larger than the recorded bound. If a check cannot run, report the actual limitation; do not invent a passing receipt or change expected behavior. The host records native exit codes and output, not your prose. Stop after each planned command has one result. Do not repair in this phase.\n' + JSON.stringify({ runId: state.runId, target: state.runPurpose ?? 'candidate', baselineNotice: state.runPurpose === 'baseline' ? 'This is the pre-implementation workspace. Expected reproduction failures are observations, not instructions to change files.' : undefined, plan: state.plan });
 }
 export function beginBehaviorRun(state: BehaviorState, workspace: WorkspaceStamp, purpose: 'baseline' | 'candidate' = 'candidate'): BehaviorState {
-  const next = { ...state, status: 'running' as const, runPurpose: purpose, runId: randomUUID(), receipts: [], workspace, checkedAt: undefined, reason: undefined };
+  const next = { ...state, status: 'running' as const, runPurpose: purpose, runId: randomUUID(), receipts: [], workspace, runWorkspace: structuredClone(workspace), checkedAt: undefined, reason: undefined };
   if (purpose === 'baseline') {
     if (!next.calibration || next.calibration.implementationStarted || next.calibration.runs.length >= 4 || next.plan?.status !== 'ready') throw new Error('Cannot rebuild or replay a baseline outside its bounded pre-implementation window');
     next.calibration.status = 'running';
@@ -111,14 +111,18 @@ export function settleBehaviorRun(state: BehaviorState, after: WorkspaceStamp): 
     state.calibration.status = observed ? 'observed' : 'unavailable';
     return { ...state, status: 'pending', workspace: after, reason: run.reason };
   }
-  if (state.calibration) state.calibration.comparisons = compareBehaviorBaseline(state);
   const baselineReady = behaviorBaselineCurrent(state);
-  return { ...state, status: passed && baselineReady ? 'passed' : failed ? 'failed' : 'unconfirmed', workspace: after, checkedAt: new Date().toISOString(),
+  const settled: BehaviorState = { ...state, status: passed && baselineReady ? 'passed' : failed ? 'failed' : 'unconfirmed', workspace: after, checkedAt: new Date().toISOString(),
     reason: passed && baselineReady ? undefined : !baselineReady ? '缺少有效的实现前基线；没有在实现后的文件上补造对照。' : !stable ? '行为检查期间工作区发生变化或无法完整观测；现有结果不能证明当前版本。' : !exact ? '未取得全部冻结检查的原生命令回执；模型文字不算执行证据。' : '行为命令未全部通过；请检查真实输出、环境或未确认的预期，不要据此直接重写代码。' };
+  if (settled.calibration) settled.calibration.comparisons = compareBehaviorBaseline(settled);
+  return settled;
+}
+function candidateWorkspaceCurrent(state: BehaviorState): boolean {
+  return Boolean(state.checkedAt && state.runWorkspace?.digest && state.runWorkspace.digest === state.workspace?.digest && state.runWorkspace.scope === state.workspace?.scope);
 }
 export function behaviorCurrent(state: BehaviorState | undefined, workspaceDigest?: string): boolean {
   if (!state) return true; // Legacy and adaptive tasks have no independent behavioral gate.
-  return behaviorBaselineCurrent(state) && state.runPurpose !== 'baseline' && state.status === 'passed' && state.plan?.status === 'ready' && Boolean(workspaceDigest) && state.workspace?.digest === workspaceDigest
+  return behaviorBaselineCurrent(state) && (!state.calibration || candidateWorkspaceCurrent(state)) && state.runPurpose !== 'baseline' && state.status === 'passed' && state.plan?.status === 'ready' && Boolean(workspaceDigest) && state.workspace?.digest === workspaceDigest
     && state.plan.checks.length === state.receipts.length && state.plan.checks.every((check) => state.receipts.some((receipt) => receipt.runId === state.runId && receipt.checkId === check.id && receipt.tool === check.shell && receipt.commandSha256 === behaviorHash(check.command) && receipt.exitCode === 0 && !receipt.truncated && receipt.status === 'passed'));
 }
 
@@ -148,7 +152,7 @@ export function compareBehaviorBaseline(state: BehaviorState): z.infer<typeof be
   const baseline = behaviorBaseline(state);
   return (state.plan?.checks ?? []).map(check => {
     const before = baseline?.receipts.find(r => r.checkId === check.id), after = state.receipts.find(r => r.checkId === check.id);
-    const valid = Boolean(state.runPurpose !== 'baseline' && behaviorBaselineCurrent(state) && after && after.runId === state.runId && after.tool === check.shell && after.commandSha256 === behaviorHash(check.command) && state.receipts.filter(item => item.checkId === check.id).length === 1 && !after.truncated && (after.status === 'passed' && after.exitCode === 0 || after.status === 'failed' && after.exitCode !== null && after.exitCode !== 0));
+    const valid = Boolean(state.runPurpose !== 'baseline' && candidateWorkspaceCurrent(state) && behaviorBaselineCurrent(state) && after && after.runId === state.runId && after.tool === check.shell && after.commandSha256 === behaviorHash(check.command) && state.receipts.filter(item => item.checkId === check.id).length === 1 && !after.truncated && (after.status === 'passed' && after.exitCode === 0 || after.status === 'failed' && after.exitCode !== null && after.exitCode !== 0));
     const outcome = !valid || !before || !after ? 'unconfirmed' : before.status === 'passed' ? after.status === 'passed' ? 'unchanged_pass' : 'candidate_regression' : after.status === 'passed' ? 'changed_to_pass' : 'pre_existing_failure';
     return { checkId: check.id, outcome, sameOutput: Boolean(before && after && before.outputSha256 === after.outputSha256) };
   });

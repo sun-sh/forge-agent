@@ -22,6 +22,7 @@ describe('focused independent review handoff', () => {
       return { version: 1 as const, runId: id, checkId: check.id, toolCallId: randomUUID(), tool: check.shell, commandSha256: behaviorHash(check.command), source: 'pi-builtin-shell' as const, exitCode: failed ? 1 : 0, status: failed ? 'failed' as const : 'passed' as const, output, outputSha256: behaviorHash(output), outputCharacters: output.length, truncated: false, recordedAt: task.updatedAt };
     });
     state.plan = plan; state.runId = runId; state.runPurpose = 'candidate'; state.receipts = receipts(runId, false);
+    state.runWorkspace = structuredClone(stamp); state.workspace = structuredClone(stamp); state.checkedAt = task.updatedAt; state.status = 'passed';
     state.calibration = { version: 1, status: 'observed', implementationStarted: true, runs: [{ runId: baselineId, plan, status: 'observed', before: stamp, after: stamp, receipts: receipts(baselineId, true) }], comparisons: [{ checkId: 'B1', outcome: 'pre_existing_failure', sameOutput: true }], correction: { status: 'kept', result: { version: 1, action: 'keep', summary: 'Preserve the frozen checks', findings: plan.checks.map(check => ({ id: check.id, kind: check.id === 'B1' ? 'expected_failure' : 'valid_check', reason: 'Original contract retained', requestQuote: task.prompt })) } } };
     task.behavior = state; const saved = structuredClone(state);
     const result = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 });
@@ -29,6 +30,10 @@ describe('focused independent review handoff', () => {
     expect(evidence).toMatchObject({ runPurpose: 'candidate', baseline: { runId: baselineId, receipts: [{ output: 'BASELINE_NATIVE_FAILURE' }, { exitCode: 0 }] }, correction: { status: 'kept', result: { action: 'keep' } }, calibration: { implementationStarted: true, correction: { consumed: true }, comparisons: [{ checkId: 'B1', outcome: 'changed_to_pass', sameOutput: false }, { checkId: 'B2', outcome: 'unchanged_pass' }] } });
     expect(result.prompt.match(/UNIQUE_FROZEN_PLAN/g)).toHaveLength(1);
     expect(task.behavior).toEqual(saved);
+    delete state.runWorkspace;
+    const unstamped = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 });
+    const unstampedChecks = JSON.parse(unstamped.prompt.split('\n\nEVIDENCE:\n')[1]!.split('\n')[0]!).independentBehaviorChecks;
+    expect(unstampedChecks.calibration).toMatchObject({ baseline: { status: 'observed' }, comparisons: [{ checkId: 'B1', outcome: 'unconfirmed' }, { checkId: 'B2', outcome: 'unconfirmed' }] });
     delete state.calibration;
     const legacy = buildReviewHandoff(task, { version: 1, files: [], characters: 0, lines: 0 });
     expect(legacy.prompt).not.toContain('BASELINE_NATIVE_FAILURE');
