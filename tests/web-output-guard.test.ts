@@ -85,6 +85,8 @@ describe('incomplete model output delivery boundary', () => {
     expect(done.task.phases.some((phase: any) => phase.phase === 'verify')).toBe(false);
     expect(done.verification.report).toBeUndefined();
     await expect(readFile(join(f.project, 'index.html'))).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(f.calls()).toBe(6); // inspect + plan + independent check design + original output + two recoveries
+    expect(f.calls()).toBe(9); // inspect + plan + design + three native baseline turns + original output + two recoveries
+    expect(done.entries.filter((entry: any) => entry.type === 'custom' && entry.customType === 'forge.output_recovery')).toHaveLength(2);
+    expect(done.task.behavior.calibration.runs[0]).toMatchObject({ status: 'observed', receipts: [{ exitCode: 0 }, { exitCode: 0 }] });
   }, 60000);
 });
