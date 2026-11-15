@@ -27,7 +27,13 @@
       "status": "passed"
     },
     "fullSuite": "not_run",
-    "browser": "not_run"
+    "browser": "not_run",
+    "build": "passed",
+    "packageCheck": {
+      "status": "passed",
+      "scope": "Clean tarball assets, CLI and installed dependencies",
+      "logSha256": "64eaff634f09be755d4b404ac86d1ef2ae2d0dcd9dae6aca3a9534a8c7fa080d"
+    }
   },
   "developmentFindings": [
     "The initial high-output native fixture exposed stale tool declarations at the Provider request boundary; fixed and retained in the final regression.",
@@ -39,5 +45,17 @@
     "liveDesignerBenefitMeasured": false,
     "historicalMissesQualified": false
   },
-  "sourceHashEncoding": "Git blob bytes at runtimeCodeRevision, independent of working-copy line endings"
+  "sourceHashEncoding": "Git blob bytes at runtimeCodeRevision, independent of working-copy line endings",
+  "earlierCI": {
+    "runId": "43669953570",
+    "codeRevision": "f43482c6ae85b14527d9daaa7b478ce537117729",
+    "status": "passed",
+    "matrix": [
+      "windows-latest/22",
+      "windows-latest/24",
+      "ubuntu-latest/22",
+      "ubuntu-latest/24"
+    ],
+    "scope": "Predates the later schema-correction finalization fix; not used to claim full-suite coverage of runtimeCodeRevision."
+  }
 }
