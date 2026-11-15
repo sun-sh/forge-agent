@@ -1,5 +1,9 @@
 # Evaluation and evidence
 
+## Reviewer call-latency diagnostic — 2026-11-16
+
+The [fixed-input measurement](evaluations/review-call-latency-2026-11-16.md) records six calls with a 9.2795-second successful median, 28.173-second maximum and 0.813-second median first content. This sample does not reproduce the registered slow-median threshold or establish the causes of old timeouts. The [registered fixed-input protocol](evaluations/review-call-latency-protocol-2026-11-16.md) measures hook-observed individual provider calls with the previous Flask handoff, unchanged standard limits and explicit censoring. It does not backfill old call timings, replace prior abstentions or add a detection-rate sample to the compatibility replay. See [instrumentation and native evidence](reviewer-diagnostics.md) for persistence, 60-second routing and attribution limits.
+
 ## Result semantics and unchanged quality denominators
 
 [Execution versus acceptance](task-results.md) now reports implemented-but-unverified results without a behavioral-attestation contract. Official resolution and finished-but-unacceptable metrics retain their original definitions; relabeling the six Direct failures does not improve 9/15 resolution or erase six unsuccessful finished outcomes. Explicit resolution claims are counted separately, with a null error rate when there are no assessed claims. Historical reports and missing claim fields remain untouched. This reporting change adds no model calls and has no new coding-quality score.

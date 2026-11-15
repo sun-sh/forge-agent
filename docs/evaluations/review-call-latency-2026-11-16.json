@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "protocol": "review-call-latency-diagnostic-v1",
+  "date": "2026-11-16",
+  "timezone": "Asia/Shanghai",
+  "scope": {
+    "fixedCandidate": "pallets__flask-4045.planned.r1",
+    "freshReviews": 1,
+    "qualityEstimate": false,
+    "oldCohortModified": false,
+    "newHistoricalClaimClauseIncluded": false,
+    "newNativePairsIncluded": false,
+    "newCodingSamples": 0,
+    "freshOfficialGrades": 0,
+    "priorSingleCallTimingsKnown": false
+  },
+  "identity": {
+    "sourceRevision": "76ed389068b9ac86f17208c74ad5a5385f97319b",
+    "workingTreeDirtyAtAdmission": true,
+    "dirtyStatusAtAdmission": [
+      "M CHANGELOG.md",
+      " M README.en.md",
+      " M README.md",
+      " M docs/evaluation.md",
+      " M scripts/replay-swebench-review.mjs",
+      " M src/task/review-evidence.ts",
+      " M src/task/review-handoff.ts",
+      " M src/web/subagents.ts",
+      " M tests/web-modes.test.ts",
+      " M tests/web-subagents.test.ts",
+      "?? docs/reviewer-diagnostics.md",
+      "?? src/task/review-boundary-evidence.ts",
+      "?? src/task/review-telemetry.ts",
+      "?? tests/review-boundary-evidence.test.ts",
+      "?? tests/review-telemetry.test.ts"
+    ],
+    "dirtyDiffSha256": "f2c20ae08d9c09532297f6ba250a0273a48d9c0921af1f0f8f6f8e92ecc94a44",
+    "harnessFingerprint": "1de515f70391f5b5f5773265a44e236540c72f8f351dd2f4fc6808fa1151d7e0",
+    "protocolSha256": "9c420a70ba98894a31610b27c11734ffab9fa71b63b1e78633eedea23eb1b4fc",
+    "rawPrivateReportSha256": "9fdb37a4ee298c27b6f064e84084df9f85238f28682d8853e0ba0e5f80564a9c",
+    "callEventJournalSha256": "22f2cd25df7e6b55a31d423b1e65b176c069ab1628ce4850a38f1557b6e853ba",
+    "handoffSha256": "30eb8b67b8099bd9ae524ff018a8d0dfd3bb8c26539da227648d95122004c390",
+    "handoffCharacters": 30026,
+    "patchSha256": "770690aee527cfcd6752d1ddc9d66866709be021b54e4dcc49f8affa1b859191",
+    "workspaceBefore": "9e4d2349c4de96becd0d53c50e8329d613190c8a2822473408bca7d4e08fb643",
+    "workspaceAfter": "9e4d2349c4de96becd0d53c50e8329d613190c8a2822473408bca7d4e08fb643"
+  },
+  "model": {
+    "id": "deepseek/deepseek-v4.1-flash",
+    "api": "openai-completions",
+    "thinking": "medium",
+    "pricingKnown": false,
+    "identicalBackendToPriorEstablished": false
+  },
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "piVersion": "1.4.0"
+  },
+  "reviewBudget": {
+    "maxDurationMs": 300000,
+    "maxModelTurns": 24,
+    "maxToolCalls": 120,
+    "maxOutputTokens": 32000,
+    "maxCostUsd": 4
+  },
+  "parentBudget": {
+    "maxDurationMs": 5400000,
+    "maxModelTurns": 240,
+    "maxToolCalls": 500,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 300000,
+    "maxCostUsd": 40
+  },
+  "startedAt": "2026-11-15T17:53:05.075Z",
+  "finishedAt": "2026-11-15T17:54:20.740Z",
+  "integrity": {
+    "workspaceUnchanged": true,
+    "readerPathsWithinProject": true,
+    "readerCalls": 8
+  },
+  "telemetry": {
+    "version": 1,
+    "source": "pi-provider-hooks",
+    "handoffCharacters": 30052,
+    "droppedCalls": 0,
+    "calls": [
+      {
+        "sequence": 1,
+        "turn": 1,
+        "startedAt": "2026-11-15T17:53:05.332Z",
+        "outcome": "completed",
+        "elapsedMs": 4990,
+        "durationMs": 4990,
+        "headersMs": 623,
+        "firstStreamMs": 625,
+        "firstContentMs": 643,
+        "payloadBytes": 38098,
+        "httpStatus": 200,
+        "usage": {
+          "input": 93,
+          "output": 571,
+          "cacheRead": 10176,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "sequence": 2,
+        "turn": 2,
+        "startedAt": "2026-11-15T17:53:10.574Z",
+        "outcome": "completed",
+        "elapsedMs": 1618,
+        "durationMs": 1618,
+        "headersMs": 945,
+        "firstStreamMs": 945,
+        "firstContentMs": 988,
+        "payloadBytes": 64074,
+        "httpStatus": 200,
+        "usage": {
+          "input": 7172,
+          "output": 122,
+          "cacheRead": 10176,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "sequence": 3,
+        "turn": 3,
+        "startedAt": "2026-11-15T17:53:12.379Z",
+        "outcome": "completed",
+        "elapsedMs": 13569,
+        "durationMs": 13569,
+        "headersMs": 618,
+        "firstStreamMs": 618,
+        "firstContentMs": 635,
+        "payloadBytes": 66599,
+        "httpStatus": 200,
+        "usage": {
+          "input": 834,
+          "output": 1282,
+          "cacheRead": 17280,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "sequence": 4,
+        "turn": 4,
+        "startedAt": "2026-11-15T17:53:25.956Z",
+        "outcome": "completed",
+        "elapsedMs": 22735,
+        "durationMs": 22735,
+        "headersMs": 870,
+        "firstStreamMs": 870,
+        "firstContentMs": 894,
+        "payloadBytes": 82556,
+        "httpStatus": 200,
+        "usage": {
+          "input": 3446,
+          "output": 2414,
+          "cacheRead": 18048,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "sequence": 5,
+        "turn": 5,
+        "startedAt": "2026-11-15T17:53:48.699Z",
+        "outcome": "completed",
+        "elapsedMs": 2296,
+        "durationMs": 2296,
+        "headersMs": 928,
+        "firstStreamMs": 928,
+        "firstContentMs": 949,
+        "payloadBytes": 95569,
+        "httpStatus": 200,
+        "usage": {
+          "input": 2997,
+          "output": 217,
+          "cacheRead": 21376,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "sequence": 6,
+        "turn": 6,
+        "startedAt": "2026-11-15T17:53:51.364Z",
+        "outcome": "completed",
+        "elapsedMs": 28173,
+        "durationMs": 28173,
+        "headersMs": 713,
+        "firstStreamMs": 713,
+        "firstContentMs": 732,
+        "payloadBytes": 96453,
+        "httpStatus": 200,
+        "usage": {
+          "input": 359,
+          "output": 3024,
+          "cacheRead": 24256,
+          "cacheWrite": 0
+        }
+      }
+    ]
+  },
+  "latency": {
+    "source": "pi-provider-hooks",
+    "observedCalls": 6,
+    "droppedCalls": 0,
+    "successful": {
+      "count": 6,
+      "medianMs": 9279.5,
+      "p90Ms": 28173,
+      "maxMs": 28173
+    },
+    "errors": {
+      "count": 0,
+      "medianMs": null,
+      "p90Ms": null,
+      "maxMs": null
+    },
+    "headers": {
+      "count": 6,
+      "medianMs": 791.5,
+      "p90Ms": 945,
+      "maxMs": 945
+    },
+    "firstContent": {
+      "count": 6,
+      "medianMs": 813,
+      "p90Ms": 988,
+      "maxMs": 988
+    },
+    "censoredCalls": 0,
+    "longCensoredCalls": 0,
+    "priority": "no_slow_call_signal"
+  },
+  "contextOnly": {
+    "normalizedReviewVerdict": "ready",
+    "failureClass": null
+  },
+  "costUsd": null,
+  "interpretation": {
+    "slowMedianThresholdMs": 60000,
+    "slowMedianTriggered": false,
+    "priorTimeoutCause": "unconfirmed_no_historical_single_call_data",
+    "intelligenceOrPromptQualityInferred": false,
+    "turnAllowanceIncreased": false
+  },
+  "limitations": [
+    "One new reviewer conversation; six correlated calls, not six independent review samples.",
+    "The exact old input is retained; this measures instrumentation/call timing, not the new historical-claim clause or native-pair quality.",
+    "Cache state, provider load, generated output, model decisions and backend revision were not controlled against the old runs.",
+    "Hook-observed calls can contain hidden SDK retries and local processing; this is not a raw wire-attempt trace or a pure network measurement.",
+    "No concurrent test suite ran during the diagnostic; no general tail-latency or old-timeout cause is established.",
+    "Zero censored/error calls in this probe does not validate every production failure mode; engineering fixtures test those paths separately."
+  ]
+}
