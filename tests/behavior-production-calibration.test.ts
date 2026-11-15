@@ -616,6 +616,23 @@ describe('production calibration orchestration and persistence', () => {
     expect(f.adapter.behaviorPlan).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves typed required-execution recovery while baseline attribution is unresolved', async () => {
+    const f = controllerFixture({ baseline: [1, 1], candidate: [0, 1] });
+    f.adapter.review.mockResolvedValue({ text: JSON.stringify({ verdict: 'changes_requested', summary: 'The original request required a test command that has not run', issues: ['Run the explicitly requested test command and retain its output'], issueKinds: ['missing_execution'], acceptance: handoff.acceptance.map(item => ({ ...item, status: 'unconfirmed' })) }), sessionId: randomUUID(), model: 'mock/reviewer' });
+    const task = await f.run();
+    expect(task).toMatchObject({ status: 'needs_attention', repairs: 0, review: { verdict: 'insufficient_evidence', evidenceIssues: [{ kind: 'missing_execution' }] }, reviewStop: { reason: 'missing_execution', action: 'run_required_tests', issueCount: 0 } });
+    expect(f.phases.filter(phase => phase === 'implement')).toHaveLength(1);
+  });
+
+  it('retains an independent concrete finding when calibrated checks are valid but identical', async () => {
+    const f = controllerFixture({ baseline: [0, 0], candidate: [0, 0] });
+    f.adapter.review.mockResolvedValue({ text: JSON.stringify({ verdict: 'changes_requested', summary: 'A source counterexample independent of the frozen receipts', issues: ['normalizeTag.ts: normalizeTag(null) now dereferences null before the existing public null guard'], issueKinds: ['code_defect'], acceptance: handoff.acceptance.map(item => ({ ...item, status: 'unmet' })) }), sessionId: randomUUID(), model: 'mock/reviewer' });
+    const task = await f.run();
+    expect(task).toMatchObject({ status: 'needs_attention', repairs: 0, review: { verdict: 'changes_requested' }, reviewStop: { reason: 'code_defects', action: 'fix_code', issueCount: 1 } });
+    expect(task.behavior!.calibration!.comparisons.every(item => item.outcome === 'unchanged_pass' && item.sameOutput)).toBe(true);
+    expect(f.phases.filter(phase => phase === 'implement')).toHaveLength(1);
+  });
+
   it('refuses stale observed baseline reuse before implementation on resume', async () => {
     const f = controllerFixture(); await f.run();
     const checkpoint = f.saved.find(state => state.behavior?.calibration?.status === 'observed' && !state.behavior.calibration.implementationStarted)!;

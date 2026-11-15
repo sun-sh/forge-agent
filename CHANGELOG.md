@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- Require compatibility-narrowing and pre-existing-test-regression reasoning in independent review; docstrings and predicted test updates cannot justify acceptance.
+- Add explicit compatibility-narrowing and pre-existing-test-regression review instructions; docstrings and predicted test updates do not authorize an exemption. Prompt compliance is measured separately from host enforcement.
 - Recompute frozen-check discrimination from valid native receipts. An otherwise valid ready review becomes insufficient_evidence when all comparisons are identical; no new model call or result-semantic change.
 - Preserve typed missing_execution provenance across normalization/recovery and expose run_required_tests with zero code-defect count.
+- Preserve unresolved baseline attribution as an evidence blocker, retain its acceptance IDs and avoid spending repair retries on an inherited failure; keep typed missing-execution recovery distinct.
 
 - Supply field-specific schema diagnostics to the sole baseline-diagnosis format retry, keeping tools closed and strict schemas, turn and cost ceilings unchanged.
 

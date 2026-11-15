@@ -504,8 +504,13 @@ export class TaskController {
           const passed = isVerified(task.verification);
           const behaviorPassed = behaviorCurrent(task.behavior, task.verification.evidence?.workspace.digest);
           const nonDiscriminatingChecks = allBehaviorChecksNonDiscriminating(task.behavior);
-          const checkDiagnosisNeeded = behaviorNeedsEvidence(task.behavior) || nonDiscriminatingChecks;
-          if (checkDiagnosisNeeded && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
+          const calibrationEvidenceNeeded = behaviorNeedsEvidence(task.behavior);
+          const checkDiagnosisNeeded = calibrationEvidenceNeeded || nonDiscriminatingChecks;
+          // Unresolved baseline attribution retains the existing evidence gate:
+          // a typed model claim cannot turn an inherited failure into a new defect.
+          // A current, valid comparison may still coexist with an independent finding.
+          if (calibrationEvidenceNeeded && (!task.reviewStop || task.reviewStop.reason === 'code_defects')) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: task.plan?.acceptance.map(item => item.id) ?? [] };
+          else if (nonDiscriminatingChecks && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (!behaviorPassed && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (task.review) { task.review.freshness = stale ? 'stale' : passed ? 'current' : 'unconfirmed'; task.review.evidenceId = task.verification.evidenceId; }
           // Only a complete, consistent acceptance ledger may ask the parent
