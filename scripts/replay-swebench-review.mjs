@@ -18,6 +18,7 @@ import { REVIEW_BUDGETS } from '../dist/task/review-budget.js';
 import { buildReviewHandoff } from '../dist/task/review-handoff.js';
 import { reviewCommandEvidence } from '../dist/task/review-evidence.js';
 import { parseReview, reviewStop, ReviewBudgetExceededError } from '../dist/task/review.js';
+import { parseHandoffJson } from '../dist/task/plan.js';
 import { captureGit, compareGit, captureReviewPatch } from '../dist/task/git.js';
 import { captureWorkspace } from '../dist/verification/evidence.js';
 import { pforgeHome } from '../dist/pforge-home.js';
@@ -37,7 +38,13 @@ const digestFile = async (path) => { const hash = createHash('sha256'); for awai
 const git = (root, parameters) => execute('git', ['--no-pager', '-c', 'core.hooksPath=', '-c', 'core.fsmonitor=false', '-c', 'core.quotePath=false', ...parameters], { cwd: root, windowsHide: true, timeout: 60000, maxBuffer: 8_000_000 });
 const safePath = (root, path) => { const target = resolve(root, path), rel = relative(root, target); if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../') || isAbsolute(rel)) throw new Error('Artifact path escapes its root'); return target; };
 const schedule = Array.from({ length: repeat }, (_, index) => ids.map((_, position) => ({ id: ids[(position + index) % ids.length], run: index + 1, position: position + 1 }))).flat();
-const harnessSources = [import.meta.url, ...['./swebench-review-source.py', './evaluation-evidence.mjs', '../src/task/review-handoff.ts', '../src/task/review.ts', '../src/task/review-evidence.ts', '../src/task/git.ts', '../src/task/review-budget.ts', '../src/web/subagents.ts', '../dist/task/review-handoff.js', '../dist/task/review.js', '../dist/task/review-evidence.js', '../dist/task/git.js', '../dist/task/review-budget.js', '../dist/web/subagents.js', '../dist/task/budget.js', '../dist/verification/evidence.js'].map((path) => new URL(path, import.meta.url))].map((path) => new URL(path));
+const harnessSources = [import.meta.url, ...[
+  './swebench-review-source.py', './evaluation-evidence.mjs',
+  '../src/task/review-handoff.ts', '../src/task/review.ts', '../src/task/review-evidence.ts', '../src/task/git.ts', '../src/task/review-budget.ts', '../src/web/subagents.ts',
+  '../src/task/behavior.ts', '../src/task/review-discrimination.ts', '../src/task/result.ts', '../src/task/plan.ts',
+  '../dist/task/review-handoff.js', '../dist/task/review.js', '../dist/task/review-evidence.js', '../dist/task/git.js', '../dist/task/review-budget.js', '../dist/web/subagents.js', '../dist/task/budget.js', '../dist/verification/evidence.js',
+  '../dist/task/behavior.js', '../dist/task/review-discrimination.js', '../dist/task/result.js', '../dist/task/plan.js'
+].map((path) => new URL(path, import.meta.url))].map((path) => new URL(path));
 let report, homeRoot;
 const persist = () => json(join(paths.output, 'report.json'), report);
 
@@ -142,6 +149,7 @@ try {
         sourceImage: { imageId: layer.imageId, imageRef: layer.imageRef, manifestDigest: layer.manifestDigest, layerDigest: layer.layerDigest, layerBytes: layer.layerBytes,
           sourceMode: layer.sourceMode, fullLayerVerified: layer.fullLayerVerified, downloadedSourceSha256: layer.downloadedSourceSha256, downloadedBytes: layer.downloadedBytes },
         acceptanceIds: task.plan.acceptance.map((entry) => entry.id), commandSummary: commands.summary, handoffSha256: sha(handoff.prompt), handoffCharacters: handoff.characters,
+        behaviorEvidence: { present: task.behavior !== undefined, calibrationPresent: task.behavior?.calibration !== undefined },
         workspace: await captureWorkspace(project) };
       assert.ok(item.workspace.digest, 'Candidate workspace fingerprint unavailable');
       report.preparation.push(item); await persist();
@@ -153,7 +161,9 @@ try {
       missingEvidencePolicy: 'insufficient_evidence, incomplete coverage, format failures and budget exhaustion are abstentions, not successful defect detections',
       freshnessPolicy: 'Original configured-check result marked historical/unconfirmed; no check or test is rerun. Historical native command receipts retain original outputs/classification.',
       selection: 'First original Planned repetition for Flask, Matplotlib, Astropy and SymPy, fixed before new model calls. Labels and prior review outcomes excluded from every handoff.',
-      order: 'Rotate four-case start position by repetition; serial independent fresh reviewer sessions.' };
+      order: 'Rotate four-case start position by repetition; serial independent fresh reviewer sessions.',
+      measurement: { compatibilityAB: 'Raw model verdict retained separately from normalized/effective review; no discrimination host guard invoked.',
+        discriminationC: 'Unmeasured on these original snapshots without behavior/calibration; no baseline or receipts synthesized.', hostGuardApplied: false } };
     report.protocolSha256 = sha(JSON.stringify(report.protocol));
     await json(join(paths.output, 'protocol.json'), { ...report.protocol, protocolSha256: report.protocolSha256 });
     report.prepared = true; await persist();
@@ -193,12 +203,19 @@ try {
       const manager = SessionManager.create(project, join(home, 'sessions'));
       const agents = new ForgeSubagents({ home, project, manager, modelRuntime: runtime, parentModel: () => model, thinkingLevel: () => thinking, budget: () => budget,
         allowed: () => false, reviewAllowed: () => true, reviewBudget: () => 'standard', onChange() {} });
-      const record = { ...scheduled, expectedDefect: candidate.expectedDefect, startedAt: new Date().toISOString(), tools: [] };
+      const record = { ...scheduled, expectedDefect: candidate.expectedDefect, startedAt: new Date().toISOString(), tools: [],
+        rawModelVerdict: null, normalizedModelVerdict: null, effectiveModelVerdict: null, hostGuardApplied: false };
       const started = performance.now();
       console.log('Review ' + (report.results.length + 1) + '/12: ' + candidate.id + ' r' + scheduled.run);
       try {
         const result = await agents.reviewGate('PFORGE TASK PHASE: review\n' + handoff, new AbortController().signal);
+        record.rawReviewText = result.text; record.rawReviewTextSha256 = sha(result.text);
+        const rawReview = parseHandoffJson(result.text, 100_000);
+        record.rawModelVerdict = rawReview?.verdict ?? null;
         record.review = parseReview(result.text); record.formatRetries = result.formatRetries;
+        record.normalizedModelVerdict = record.review?.verdict ?? null;
+        // This replay measures the model's A/B judgment, not the controller's C guard.
+        record.effectiveModelVerdict = record.normalizedModelVerdict;
         record.reviewStop = record.review ? reviewStop(record.review, candidate.acceptanceIds) : undefined;
         const acceptance = record.review?.acceptance;
         record.coverage = Boolean(acceptance && acceptance.length === candidate.acceptanceIds.length && new Set(acceptance.map((item) => item.id)).size === acceptance.length && candidate.acceptanceIds.every((id) => acceptance.some((item) => item.id === id)));

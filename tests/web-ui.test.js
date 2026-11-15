@@ -1446,6 +1446,7 @@ describe('Web client integration', () => {
   it.each([
     [{ reason: 'budget_exhausted', action: 'adjust_budget', issueCount: 0, unconfirmedIds: [], budgetScope: 'reviewer' }, '审阅未完成', '执行预算'],
     [{ reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: ['A1'] }, '证据不足', '人工验收'],
+    [{ reason: 'missing_execution', action: 'run_required_tests', issueCount: 0, unconfirmedIds: ['A1'] }, '必需测试未执行', '运行原始任务要求的测试'],
     [{ reason: 'code_defects', action: 'fix_code', issueCount: 2, unconfirmedIds: [] }, '审阅发现 2 个问题', '修复代码']
   ])('shows review outcome %j and its recovery action in actual task UI', async (reviewStop, label, action) => {
     const { window, app } = await client(); app.state.sessionId = 'review-stopped';

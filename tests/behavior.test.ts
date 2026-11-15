@@ -17,7 +17,7 @@ const receipt = (runId: string, index: number, exitCode = 0): BehaviorReceipt =>
 // These receipt-policy tests intentionally exercise legacy evidence without calibration.
 // Production baseline admission is covered in behavior-production-calibration.test.ts.
 const initial = () => beginBehaviorRun({ ...newBehaviorState(request), calibration: undefined, plan }, workspace);
-function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean } = {}) {
+function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean; identical?: boolean; unchangedFailure?: boolean } = {}) {
   let designs = 0, checks = 0;
   const controller = new TaskController(() => {});
   const verification = { status: 'passed' as const, attempts: 0, evidenceId: randomUUID(), evidence: { workspace, configHash: 'b'.repeat(64), freshness: 'current' as const }, report: { passed: true, summary: 'Configured check passed', results: [{ command: 'node --check main.js', passed: true, exitCode: 0, durationMs: 1, output: '' }] } };
@@ -26,7 +26,7 @@ function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean } 
     async execute(phase) {
       phases.push(phase);
       if (phase === 'inspect') return JSON.stringify({ ...handoff.brief, steps: ['Implement the requested scope'] });
-      if (phase === 'check') { checks++; if (!options.skip || controller.state!.behavior!.runPurpose === 'baseline') plan.checks.forEach((_, index) => controller.recordBehaviorReceipt(receipt(controller.state!.behavior!.runId!, index, options.fail && index === 1 ? 1 : 0))); }
+      if (phase === 'check') { checks++; if (!options.skip || controller.state!.behavior!.runPurpose === 'baseline') plan.checks.forEach((_, index) => controller.recordBehaviorReceipt(receipt(controller.state!.behavior!.runId!, index, options.fail && index === 1 || index === 0 && (controller.state!.behavior!.runPurpose === 'baseline' ? !options.identical : options.unchangedFailure) ? 1 : 0))); }
       return 'Phase complete; checks passed (prose must never be evidence)';
     },
     async behaviorPlan() { designs++; return { text: options.badPlan ? 'not JSON' : JSON.stringify(plan), sessionId: randomUUID(), model: 'mock/independent' }; },
@@ -39,6 +39,15 @@ function fixture(options: { skip?: boolean; fail?: boolean; badPlan?: boolean } 
 }
 
 describe('independent behavioral evidence', () => {
+  it.each([{identical:true},{unchangedFailure:true}])('does not let static ready or repair allowance bypass all-identical observations: %j', async options => {
+    const f=fixture(options);
+    const task=await f.controller.run(request,2,f.adapter,undefined,undefined,{workflow:'planned',mode:'agent',behaviorRequired:true});
+    expect(task.status).toBe('needs_attention'); expect(task.review?.verdict).toBe('insufficient_evidence');
+    expect(task.reviewStop).toMatchObject({reason:'insufficient_evidence',action:'provide_evidence',issueCount:0,unconfirmedIds:handoff.acceptance.map(item=>item.id)});
+    expect(task.repairs).toBe(0); expect(task.reviewEvidenceRepairs).toBeUndefined();
+    expect(task.phases.filter(item=>item.phase==='implement')).toHaveLength(1);
+    expect(task.error).toContain('全部冻结检查'); expect(taskResult(task).status).toBe('blocked');
+  });
   it('requires anchored quotes, distinct commands, a reproduction and a boundary', () => {
     expect(parseBehaviorPlan(JSON.stringify(plan), request, 'bash')).toEqual(plan);
     expect(parseBehaviorPlan(JSON.stringify(plan), 'unrelated request', 'bash')).toBeUndefined();
@@ -64,7 +73,7 @@ describe('independent behavioral evidence', () => {
   it('maps missing execution to evidence recovery without inventing a code defect', () => {
     const review = parseReview(JSON.stringify({ verdict: 'changes_requested', summary: 'Required test not run', issues: ['npm test was not executed'], issueKinds: ['missing_execution'], acceptance: [{ id: 'A1', status: 'unmet', evidence: 'No tool receipt' }] }), { requireIssueKinds: true })!;
     expect(review).toMatchObject({ verdict: 'insufficient_evidence', issues: [], acceptance: [{ id: 'A1', status: 'unconfirmed' }] });
-    expect(reviewStop(review, ['A1'])).toEqual({ reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: ['A1'] });
+    expect(reviewStop(review, ['A1'])).toEqual({ reason: 'missing_execution', action: 'run_required_tests', issueCount: 0, unconfirmedIds: ['A1'] });
     expect(parseReview(JSON.stringify({ verdict: 'changes_requested', summary: 'Unknown kind', issues: ['failure'] }), { requireIssueKinds: true })).toBeUndefined();
     expect(parseReview(JSON.stringify({ verdict: 'changes_requested', summary: 'No typed finding for unmet execution', issues: [], acceptance: [{ id: 'A1', status: 'unmet', evidence: 'Test missing' }] }), { requireIssueKinds: true })).toBeUndefined();
   });

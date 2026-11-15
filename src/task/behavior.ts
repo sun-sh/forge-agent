@@ -168,3 +168,25 @@ export function behaviorNeedsEvidence(state: BehaviorState | undefined): boolean
     return finding ? finding.kind !== 'expected_failure' : state.plan?.checks.find(item => item.id === row.checkId)?.kind !== 'reproduction';
   }));
 }
+
+export interface BehaviorDiscrimination {
+  checkId: string; status: "discriminating" | "non_discriminating" | "unconfirmed";
+  baselineExitCode: number | null; candidateExitCode: number | null;
+}
+/** Exact native observations only. Changed output is not proof that requirements are met. */
+export function behaviorCheckDiscrimination(state: BehaviorState | undefined): BehaviorDiscrimination[] {
+  if (!state?.calibration) return [];
+  const baseline = behaviorBaseline(state), compared = compareBehaviorBaseline(state);
+  return (state.plan?.checks ?? []).map(check => {
+    const before = baseline?.receipts.find(item => item.checkId === check.id);
+    const after = state.receipts.find(item => item.checkId === check.id);
+    const comparison = compared.find(item => item.checkId === check.id);
+    const valid = Boolean(comparison && comparison.outcome !== "unconfirmed" && before && after);
+    const identical = valid && before!.exitCode === after!.exitCode && before!.status === after!.status && before!.outputSha256 === after!.outputSha256;
+    return {checkId:check.id,status:!valid ? "unconfirmed" : identical ? "non_discriminating" : "discriminating",baselineExitCode:valid ? before!.exitCode : null,candidateExitCode:valid ? after!.exitCode : null};
+  });
+}
+export function allBehaviorChecksNonDiscriminating(state: BehaviorState | undefined): boolean {
+  const checks = behaviorCheckDiscrimination(state);
+  return checks.length > 0 && checks.every(check => check.status === "non_discriminating");
+}

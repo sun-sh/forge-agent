@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Require compatibility-narrowing and pre-existing-test-regression reasoning in independent review; docstrings and predicted test updates cannot justify acceptance.
+- Recompute frozen-check discrimination from valid native receipts. An otherwise valid ready review becomes insufficient_evidence when all comparisons are identical; no new model call or result-semantic change.
+- Preserve typed missing_execution provenance across normalization/recovery and expose run_required_tests with zero code-defect count.
+
 - Supply field-specific schema diagnostics to the sole baseline-diagnosis format retry, keeping tools closed and strict schemas, turn and cost ceilings unchanged.
 
 - Keep frozen expectations for explicitly retained checks with identical commands; audit ignored model rephrases instead of accepting them or adding model retries.

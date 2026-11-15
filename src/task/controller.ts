@@ -8,9 +8,11 @@ import { TASK_KINDS, intentHint, type TaskKind, type TaskIntentContext } from '.
 import { BudgetExceededError, BudgetRuntime, budgetSnapshotSchema, type BudgetSnapshot } from './budget.js';
 import { progressSnapshotSchema, TaskStalledError, type ProgressSnapshot } from './progress.js';
 import { acceptanceSatisfied, BRIEF_OUTPUT_CONTRACT, parseTaskBrief, parseTaskPlan, planFromBrief, preserveTaskBrief, PLAN_OUTPUT_CONTRACT, planReference, taskBriefSchema, taskPlanSchema, taskRequirements, taskRequirementsSchema, type TaskBrief, type TaskPlan, type TaskRequirements } from './plan.js';
-import { normalizeReview, parseReview, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, reviewSchema, type ReviewStop, type TaskReview } from './review.js';
+import { normalizeReview, parseReview, persistedReviewSchema, reviewStop, reviewStopSchema, ReviewBudgetExceededError, ReviewFormatError, type ReviewStop, type TaskReview } from './review.js';
 import { buildReviewHandoff } from './review-handoff.js';
 import { behaviorStateSchema, behaviorReceiptSchema, behaviorBaseline, baselineNeedsDiagnosis, behaviorNeedsEvidence, behaviorCurrent, behaviorHash, newBehaviorState, beginBehaviorRun, settleBehaviorRun, parseBehaviorPlan, behaviorDesignPrompt, behaviorExecutionPrompt, type BehaviorState, type BehaviorReceipt, type BehaviorCorrection } from './behavior.js';
+import { allBehaviorChecksNonDiscriminating } from './behavior.js';
+import { constrainReviewDiscrimination, NON_DISCRIMINATING_REVIEW_LIMIT } from './review-discrimination.js';
 import type { WorkspaceStamp } from '../verification/evidence.js';
 import type { ReviewCommandEvidence } from './review-evidence.js';
 import { parseBehaviorCorrection, behaviorCorrectionPrompt, preserveBehaviorExpectations } from './behavior-correction.js';
@@ -75,7 +77,6 @@ export interface TaskState {
   finalization?: 'pending' | 'succeeded' | 'failed';
 }
 const fileSchema = z.object({ path: z.string().max(4096), status: z.string().max(2), fingerprint: z.string().max(128) });
-const persistedReviewSchema = reviewSchema.extend({ freshness: z.enum(['current', 'stale', 'unconfirmed']).optional(), evidenceId: z.uuid().optional() });
 const artifactSchema = z.object({ path: z.string().max(4096), operation: z.enum(['write', 'edit']) }).strict();
 export const taskStateSchema = z.object({
   version: z.literal(1), id: z.uuid(), prompt: z.string().max(2000000),
@@ -490,7 +491,9 @@ export class TaskController {
           const handoff = buildReviewHandoff(task, patch, previousFindings, adapter.commandEvidence?.(task));
           const text = await execute('review', handoff.prompt);
           if (task.reviewer) task.reviewer.handoff = { version: handoff.version, scope: handoff.scope, characters: handoff.characters };
-          task.review = parseReview(text, { requireIssueKinds: true });
+          const parsedReview = parseReview(text, { requireIssueKinds: true });
+          task.review = parsedReview ? constrainReviewDiscrimination(parsedReview, task.plan, task.behavior) : undefined;
+          const discriminationLimited = Boolean(parsedReview && task.review !== parsedReview);
           task.reviewStop = task.review ? reviewStop(task.review, task.plan?.acceptance.map((item) => item.id))
             : { reason: 'invalid_review', action: 'retry_review', issueCount: 0, unconfirmedIds: [] };
           task.verification = structuredClone(await adapter.refreshVerification(signal)); check();
@@ -500,8 +503,9 @@ export class TaskController {
           task.changes = reviewedChanges;
           const passed = isVerified(task.verification);
           const behaviorPassed = behaviorCurrent(task.behavior, task.verification.evidence?.workspace.digest);
-          const checkDiagnosisNeeded = behaviorNeedsEvidence(task.behavior);
-          if (checkDiagnosisNeeded) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
+          const nonDiscriminatingChecks = allBehaviorChecksNonDiscriminating(task.behavior);
+          const checkDiagnosisNeeded = behaviorNeedsEvidence(task.behavior) || nonDiscriminatingChecks;
+          if (checkDiagnosisNeeded && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (!behaviorPassed && !task.reviewStop) task.reviewStop = { reason: 'insufficient_evidence', action: 'provide_evidence', issueCount: 0, unconfirmedIds: [] };
           if (task.review) { task.review.freshness = stale ? 'stale' : passed ? 'current' : 'unconfirmed'; task.review.evidenceId = task.verification.evidenceId; }
           // Only a complete, consistent acceptance ledger may ask the parent
@@ -528,7 +532,7 @@ export class TaskController {
           }
           if (!task.review || task.review.verdict !== 'ready' || task.review.issues.length || !acceptanceSatisfied(task.plan, task.review.acceptance) || !passed || stale || !behaviorPassed) {
             task.status = 'needs_attention';
-            task.error = !behaviorPassed ? task.behavior?.reason ?? '行为检查没有当前版本的完整通过回执；未用模型 ready 覆盖该缺口。' : stale ? '验证后工作区发生变化，现有证据已过期，请重新检查并验证。' : !passed ? task.verification.evidence?.reason ?? '没有有效的自动验证通过证据，请配置验证或人工检查。' : !task.review ? '审阅结果格式无效，需要人工检查。' : evidenceGaps.length ? `审阅证据仍未确认（${evidenceGaps.map((item) => item.id).join('、')}）；补证机会或共享修复额度已用尽，请检查执行记录。` : !acceptanceSatisfied(task.plan, task.review.acceptance) ? '审阅未逐项确认全部验收条件；缺失、重复或未确认的条目不能算完成。' : '审阅发现待处理问题，修复预算已耗尽或结果不一致。';
+            task.error = task.reviewStop?.reason === 'missing_execution' ? '原任务明确要求的测试尚无执行证据，请运行要求的测试并保留输出后继续审阅。' : discriminationLimited ? NON_DISCRIMINATING_REVIEW_LIMIT : !behaviorPassed ? task.behavior?.reason ?? '行为检查没有当前版本的完整通过回执；未用模型 ready 覆盖该缺口。' : stale ? '验证后工作区发生变化，现有证据已过期，请重新检查并验证。' : !passed ? task.verification.evidence?.reason ?? '没有有效的自动验证通过证据，请配置验证或人工检查。' : !task.review ? '审阅结果格式无效，需要人工检查。' : evidenceGaps.length ? `审阅证据仍未确认（${evidenceGaps.map((item) => item.id).join('、')}）；补证机会或共享修复额度已用尽，请检查执行记录。` : !acceptanceSatisfied(task.plan, task.review.acceptance) ? '审阅未逐项确认全部验收条件；缺失、重复或未确认的条目不能算完成。' : '审阅发现待处理问题，修复预算已耗尽或结果不一致。';
           } else { task.reviewFollowup = undefined; task.reviewStop = undefined; this.phase('complete'); task.status = 'completed'; task.error = undefined; }
           break;
         }

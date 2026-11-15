@@ -33,6 +33,8 @@ Forge 将“宿主执行流程已结束”与“用户需求已验收”分开�
 
 ### 审阅补证与恢复
 
+`reviewStop` 的 `missing_execution` / `run_required_tests` 仅表示审阅明确标注了缺少必需测试或检查执行，`issueCount=0`；界面要求运行原始任务所需检查并保留实际输出。宿主通过可选 `review.evidenceIssues` 保存归一化时的种类与原文，恢复后仍可区分补执行与修代码。混合具体缺陷继续使用 `code_defects` / `fix_code`；无类型旧记录不根据措辞补造种类。此处只细分停止原因和恢复动作，不改变 `result.status`、`modelReview`、`acceptance` 或 `resolutionClaimed` 的定义，也不添加调用或预算。
+
 规划任务可带有 `reviewEvidenceRepairs: 0 | 1`，记录唯一一次自动补证是否已经使用；旧任务缺少该字段时按 0 处理。它消耗共享的 `repairs` / `verifyRetries`，继续与恢复保留次数。只有完整唯一的验收 ID、无具体 issues、无 `unmet` 且存在 `unconfirmed` 时可触发；补证在父 Pi 会话中进行，再重新验证和独立审阅。仍缺证据时 `result.status` 保持 `blocked`，不会由补证次数直接升级为审阅通过或需求验收。
 
 ### 评测不能靠换名字变好
@@ -66,6 +68,8 @@ SWE-bench retains official resolution, integrity and workflow-finished quality m
 A 9/15 resolution result with six unsuccessful patches remains 9/15 after changing labels. This change improves honesty of reporting, not measured coding quality. Deterministic regression/API tests are not a new real-model benchmark. A future behavioral-attestation contract would need explicit requirement coverage and workspace/test/evidence identities; no such contract is inferred from command keywords or generic model review here.
 
 See [review outcomes / 审阅结果](review-outcomes.md) for structured stop reasons, recovery actions, legacy records, budget opt-in and missed-defect evidence boundaries.
+
+The stop/action surface additionally distinguishes explicitly typed `missing_execution` / `run_required_tests` with `issueCount=0`. Optional host-owned `review.evidenceIssues` retains normalized finding kinds/text across persistence and restore; mixed concrete defects remain `code_defects` / `fix_code`. No kind is inferred from historical prose. This is recovery guidance only: task-result/resolution definitions, model calls and budgets are unchanged.
 
 
 ## Behavioral receipt gate

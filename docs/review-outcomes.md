@@ -6,11 +6,16 @@ The host persists `task.reviewStop` and exports it as `task.result.reviewStop`. 
 | --- | --- | --- |
 | `budget_exhausted` | 审阅未完成；未得出代码结论 | `adjust_budget`: adjust the reviewer or parent limit, identified by `budgetScope`, then retry |
 | `insufficient_evidence` | 需求未验收；无法判断 | `provide_evidence`: supply relevant checks/evidence or perform manual acceptance |
+| `missing_execution` | 需求未验收；必需测试未执行 | `run_required_tests`: run the originally required tests/checks, retain actual output, then verify and review; `issueCount=0` |
 | `code_defects` | 审阅发现 N 个问题 | `fix_code`: inspect findings and unmet requirements, repair and reverify |
 | `invalid_review` | 无效的结构化审阅 | `retry_review`: inspect/retry after the one format correction |
 | `review_failed` | 审阅运行错误 | `retry_review`: inspect the actual provider/runtime failure |
 
 The model contract adds `verdict=insufficient_evidence`, with empty issues and no unmet items. Concrete issues or unmet behavior remain `changes_requested`. Legacy changes_requested plus empty issues and unconfirmed acceptance is normalized to insufficient_evidence; it does not invent defects or passing evidence. Unknown/duplicate acceptance IDs remain invalid, not a new implementation request. The host's one evidence follow-up still consumes shared verifyRetries, survives recovery and must be followed by current verification and a fresh reviewer.
+
+For explicitly typed non-code findings, normalization preserves the original kind and text in optional host-owned `review.evidenceIssues` (also on `reviewFollowup`), alongside the existing notes. `persistedReviewSchema` retains this provenance across restore; the model-facing `reviewSchema` does not accept this host field. A `missing_execution` finding selects `run_required_tests` with zero concrete defects; environment/requirement ambiguity still select `provide_evidence`. Mixed findings containing concrete code defects retain `code_defects` / `fix_code` and count only typed concrete defects. Malformed/unknown/duplicate acceptance IDs remain invalid before either recovery action is selected.
+
+Legacy prose and command names never supply a missing kind. Old records without typed findings are not assigned `issueKinds` or `evidenceIssues`; the saved [no-tests probe](evaluations/review-no-tests-2026-11-13.md) and its original `code_defects` label remain unchanged. The deterministic regression tests the conditional case with an explicit new `missing_execution` annotation; it is not new reviewer-quality evidence. This stop/action distinction adds no model calls or budgets and does not change task-result or resolution semantics.
 
 `modelReview` additionally exposes `budget_exhausted` and `insufficient_evidence`; concrete defects retain `changes_requested` for compatibility. All variants are schema-validated. Model-ready is still not externally resolved, and product behavioral acceptance remains unverified.
 
@@ -39,4 +44,4 @@ The [24-review real-model diagnostic](evaluations/review-counterexamples-2026-11
 
 ## Independent behavioral execution
 
-[Behavioral checks](behavior-checks.md) adds a persisted original-request check plan, native Pi execution receipts and current workspace binding before final review for configured Planned changes. A ready model cannot bypass missing/failed receipts. New reviews supply a parallel `issueKinds` enum per finding; execution gaps/environment/ambiguous requirements normalize to evidence recovery, not code-defect counts. The original failing no-test classification report remains immutable; the new behavior requires new qualification.
+[Behavioral checks](behavior-checks.md) adds a persisted original-request check plan, native Pi execution receipts and current workspace binding before final review for configured Planned changes. A ready model cannot bypass missing/failed receipts. New reviews supply a parallel `issueKinds` enum per finding; typed execution gaps use `run_required_tests`, while environment/ambiguous requirements use `provide_evidence`, with zero code-defect counts. The original failing no-test classification report remains immutable; the new behavior requires new qualification.

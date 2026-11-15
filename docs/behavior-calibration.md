@@ -78,3 +78,7 @@ On a Linux Docker host omit --prepare-only and supply --package with the freshly
 ## Production qualification evidence
 
 The [controlled real-model qualification](evaluations/behavior-production-2026-11-15.md) retains both protocols, the first false block, the corrected run and their exact code fingerprints. It is not autonomous coding quality or a SWE-bench result.
+
+## Review discrimination constraint
+
+The reviewer receives host-derived discrimination for each valid frozen baseline/candidate pair. Same native exit code/status and output hash means non_discriminating: it can document execution/stability, but cannot prove patch effect or a newly introduced defect. Different output alone is not correctness proof. Incomplete/stale receipts remain unconfirmed, not non-discriminating. If every valid frozen comparison is identical, the host downgrades a complete ready review to insufficient_evidence with the original acceptance IDs unconfirmed, preserving raw model text in the independent child record and all command outcomes. No B-to-A requirement mapping is guessed. Independent concrete source-defect reviews remain blocking; the constraint never upgrades an existing stop or changes task.result/resolutionClaimed. A futile automatic evidence-only repair is not dispatched for this all-identical case. Commands explicitly required by the original request can still be reported as executed, without turning an identical failure into a pass or a new defect.

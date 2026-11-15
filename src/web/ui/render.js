@@ -82,14 +82,24 @@ export function behaviorCheckView(task) {
 export function reviewStopView(task) {
   let stop = task?.result?.reviewStop ?? task?.reviewStop;
   if (!stop && task?.review) {
-    const review = task.review, unconfirmedIds = (review.acceptance || []).filter((item) => item.status === 'unconfirmed').map((item) => item.id);
-    const nonCode = review.issues?.length && review.issueKinds?.length === review.issues.length && review.issueKinds.every((kind) => kind !== 'code_defect');
-    if (nonCode) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds: (review.acceptance || []).filter((item) => item.status !== 'met').map((item) => item.id) };
-    else if (review.issues?.length || review.acceptance?.some((item) => item.status === 'unmet')) stop = { reason: 'code_defects', issueCount: review.issues?.length || review.acceptance.filter((item) => item.status === 'unmet').length, unconfirmedIds };
-    else if (review.verdict === 'insufficient_evidence' || unconfirmedIds.length) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds };
+    const review = task.review, findings = review.acceptance || [], issues = review.issues || [], acceptanceIds = (task.plan?.acceptance || []).map((item) => item.id);
+    const evidenceKinds = ['missing_execution', 'environment', 'requirement_ambiguity'];
+    const invalid = findings.some((item) => !/^A(?:[1-9]|1[0-2])$/.test(item.id) || acceptanceIds.length && !acceptanceIds.includes(item.id))
+      || acceptanceIds.length > 12 || acceptanceIds.some((id) => !/^A(?:[1-9]|1[0-2])$/.test(id)) || new Set(acceptanceIds).size !== acceptanceIds.length
+      || new Set(findings.map((item) => item.id)).size !== findings.length
+      || review.issueKinds && (review.issueKinds.length !== issues.length || review.issueKinds.some((kind) => !['code_defect', ...evidenceKinds].includes(kind)))
+      || review.evidenceIssues?.some((item) => !evidenceKinds.includes(item.kind));
+    const nonCode = issues.length && review.issueKinds?.length === issues.length && review.issueKinds.every((kind) => evidenceKinds.includes(kind));
+    const unconfirmedIds = [...new Set([...findings.filter((item) => item.status === 'unconfirmed' || nonCode && item.status === 'unmet').map((item) => item.id), ...acceptanceIds.filter((id) => !findings.some((item) => item.id === id))])];
+    const unmet = nonCode ? 0 : findings.filter((item) => item.status === 'unmet').length;
+    if (invalid) stop = { reason: 'invalid_review', issueCount: 0, unconfirmedIds: [] };
+    else if (issues.length && !nonCode || unmet) stop = { reason: 'code_defects', issueCount: review.issueKinds ? Math.max(1, review.issueKinds.filter((kind) => kind === 'code_defect').length) : Math.max(issues.length, unmet), unconfirmedIds };
+    else if (nonCode && review.issueKinds.includes('missing_execution') || review.evidenceIssues?.some((item) => item.kind === 'missing_execution')) stop = { reason: 'missing_execution', issueCount: 0, unconfirmedIds };
+    else if (nonCode || review.verdict === 'insufficient_evidence' || unconfirmedIds.length) stop = { reason: 'insufficient_evidence', issueCount: 0, unconfirmedIds };
   }
   if (!stop) return null;
   if (stop.reason === 'budget_exhausted') return { label: '审阅未完成 · 预算耗尽', kind: 'unverified', action: 'adjust_budget', detail: (stop.budgetScope === 'parent' ? '父任务总预算已用尽。' : '独立审阅预算已用尽。') + '请在设置 → 关于 → 执行预算中调整对应预算后重试；现有文件和检查记录保留。' };
+  if (stop.reason === 'missing_execution') return { label: '需求未验收 · 必需测试未执行', kind: 'unverified', action: 'run_required_tests', detail: '请运行原始任务要求的测试或检查，保留实际执行输出，再验证和独立审阅' + (stop.unconfirmedIds?.length ? '（' + stop.unconfirmedIds.join('、') + '）' : '') + '。' };
   if (stop.reason === 'insufficient_evidence') return { label: '需求未验收 · 证据不足', kind: 'unverified', action: 'provide_evidence', detail: '无法确认' + (stop.unconfirmedIds?.length ? '：' + stop.unconfirmedIds.join('、') : '当前验收条件') + '。请补充相关测试或执行证据，或进行人工验收；这不表示已发现代码缺陷。' };
   if (stop.reason === 'code_defects') return { label: '审阅发现 ' + stop.issueCount + ' 个问题', kind: 'failed', action: 'fix_code', detail: '请根据审阅问题和未满足的验收项修复代码，再运行验证和独立审阅。' };
   return { label: stop.reason === 'invalid_review' ? '审阅结果格式无效' : '审阅执行失败', kind: 'failed', action: 'retry_review', detail: '审阅尚未产生有效结论。请查看执行记录并重试；未将其视为代码缺陷或审阅通过。' };
