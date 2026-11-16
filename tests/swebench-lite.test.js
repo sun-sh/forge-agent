@@ -196,7 +196,7 @@ describe('retained SWE-bench workflow classification', () => {
 
 describe('fixed native-boundary capture admission',()=>{
   const spec={id:'owner__repo-1',patchSha256:'a'.repeat(64),effectiveHead:'b'.repeat(40)};
-  const make=()=>({case:spec,result:{candidateUnchanged:true,finalPatchSha256:spec.patchSha256,protection:'unchanged',designCompletedAt:'2026-11-16T00:00:00.000Z',injectedAt:'2026-11-16T00:00:01.000Z',children:[],reviewEvidence:{task:{prompt:'Original request',behavior:{requestSha256:sha256('Original request'),receipts:[{source:'pi-builtin-shell'}]}}}}});
+  const make=()=>({case:spec,result:{candidateUnchanged:true,finalPatchSha256:spec.patchSha256,protection:'unchanged',designCompletedAt:'2026-11-16T00:00:00.000Z',injectedAt:'2026-11-16T00:00:01.000Z',children:[],reviewEvidence:{task:{prompt:'Original request',behavior:{requestSha256:sha256('Original request'),plan:{status:'ready'},receipts:[{source:'pi-builtin-shell'}]}}}}});
   it('preserves real receipt identity without rewriting its source',async()=>{
     const {admitNativeReviewCapture}=await import('../scripts/behavior-replay-protocol.mjs');const report=make(),saved=structuredClone(report);
     const value=admitNativeReviewCapture(spec,report,'Original request',behavior=>{expect(behavior.receipts[0].source).toBe('pi-builtin-shell');return behavior;});
@@ -216,4 +216,12 @@ describe('fixed native-boundary capture admission',()=>{
     if(kind==='receipt_source')report.result.reviewEvidence.task.behavior.receipts[0].source='pi-programmatic-shell';
     expect(()=>admitNativeReviewCapture(spec,report,'Original request',behavior=>{if(behavior.receipts[0].source!=='pi-builtin-shell')throw Error('invalid source');return behavior;})).toThrow();
   });
+});
+
+it('retains a captured unavailable plan without a fabricated design timestamp',async()=>{
+ const {admitNativeReviewCapture}=await import('../scripts/behavior-replay-protocol.mjs');
+ const spec={id:'owner__repo-1',patchSha256:'a'.repeat(64),effectiveHead:'b'.repeat(40)};
+ const behavior={requestSha256:sha256('Original request'),plan:{status:'unavailable',checks:[]}};
+ const report={case:spec,result:{candidateUnchanged:true,finalPatchSha256:spec.patchSha256,protection:'unchanged',children:[],reviewEvidence:{task:{prompt:'Original request',behavior}}}};
+ expect(admitNativeReviewCapture(spec,report,'Original request',x=>x)).toMatchObject({behavior,unavailable:expect.any(String)});
 });

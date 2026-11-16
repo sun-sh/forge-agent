@@ -43,6 +43,8 @@ export function admitNativeReviewCapture(spec, report, originalRequest, parseBeh
   if(result.children?.some(child=>child.purpose==='review_gate'))throw new Error('Native preparation included reviewer decisions');
   const captured=result.reviewEvidence.task;equal(captured.prompt,originalRequest,'original request');
   equal(captured.behavior?.requestSha256,replaySha256(originalRequest),'request hash');
+  const behavior=parseBehavior(captured.behavior);
+  if(behavior.plan?.status!=='ready')return {behavior,unavailable:'Native capture has no ready frozen check plan; no paired evidence invented'};
   if(!(result.designCompletedAt<result.injectedAt))throw new Error('Native design did not precede fixed patch injection');
-  return {behavior:parseBehavior(captured.behavior),unavailable:null};
+  return {behavior,unavailable:null};
 }
