@@ -48,6 +48,25 @@ The editor supports OpenAI Chat Completions, Responses and Anthropic Messages in
 
 The Agent engineering work lives in the host controls above Pi, not in model inference or a custom runtime:
 
+```mermaid
+flowchart TD
+  User[User] --> Web[Forge Web workspace]
+  Web --> Gateway[Forge local gateway]
+  Gateway --> Host[Forge host controls<br/>task state · permissions · budgets · recovery]
+  Host <--> Pi[Pi AgentSession<br/>model/tool loop · sessions]
+  Pi --> Model[Configured model provider]
+  Pi --> Tools[Pi tools · MCP · Skills]
+  Host --> Evidence[Forge evidence gates<br/>verification · protected paths]
+  Evidence <--> Project[Local project files]
+  Host --> State[Task records · checkpoints]
+  Host --> Result[Progress · result · artifacts]
+  Result --> Web
+  CLI[Optional CLI] --> TUI[Pi TUI]
+  TUI --> Pi
+```
+
+A Web request enters the Forge host layer, which creates and tracks the task while Pi executes model/tool turns. Forge uses workspace, verification and protected-path evidence to manage task state and recovery. The optional CLI uses Pi's TUI with Forge's verification extension. The source map below locates the main components.
+
 | Path | Responsibility |
 | --- | --- |
 | `src/pi-cli.ts` | CLI entry; wires Pi TUI, identity and verification extension |

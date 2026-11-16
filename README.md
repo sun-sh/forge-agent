@@ -50,6 +50,25 @@ npm start
 
 Forge 的 Agent 工程工作集中在 Pi 上方的宿主控制层，而不是模型推理或工具循环本身：
 
+```mermaid
+flowchart TD
+  User[用户] --> Web[Forge Web 工作区]
+  Web --> Gateway[Forge 本机网关]
+  Gateway --> Host[Forge 宿主控制<br/>任务状态 · 权限 · 预算 · 恢复]
+  Host <--> Pi[Pi AgentSession<br/>模型与工具循环 · 会话]
+  Pi --> Model[已配置的模型服务]
+  Pi --> Tools[Pi 工具 · MCP · Skills]
+  Host --> Evidence[Forge 证据门禁<br/>验证 · 保护路径]
+  Evidence <--> Project[本机项目文件]
+  Host --> State[任务记录 · 检查点]
+  Host --> Result[进度 · 结果 · 产物]
+  Result --> Web
+  CLI[可选 CLI] --> TUI[Pi TUI]
+  TUI --> Pi
+```
+
+一次 Web 请求由 Forge 建立宿主任务并交给 Pi 执行模型/工具回合；Forge 再根据当前工作区、验证输出和保护路径证据管理状态与恢复。CLI 则直接使用 Pi 的 TUI，并接入 Forge 的验证扩展。下方代码表对应图中的主要模块。
+
 | 目录 / 文件 | 职责 |
 | --- | --- |
 | `src/pi-cli.ts` | CLI 入口；接入 Pi TUI、身份与验证扩展 |
