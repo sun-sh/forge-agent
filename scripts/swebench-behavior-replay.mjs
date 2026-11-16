@@ -63,7 +63,8 @@ try{
   input={protocol:calibrationManifest.protocol,instanceId:spec.id,effectiveHead:spec.effectiveHead,patchSha256:spec.patchSha256,plan:calibration.plan,planSha256:expected.planSha256};
   report.calibrationSource={runId:calibrationManifest.designSourceRunId,...expected};report.modelCalls=0;
   if(!calibration.plan){report.unavailableReason=calibration.reason;report.controls={};report.comparison=[];}
- }else input={...admitted.worker,historicalCommands:reviewCommandEvidence(admitted.entries,admitted.originalTaskId,new Set(['bash','powershell'])),model:manifest.model.provider+'/'+manifest.model.id,thinking:manifest.model.thinking,limits:manifest.limits};
+ }else input={...admitted.worker,historicalCommands:reviewCommandEvidence(admitted.entries,admitted.originalTaskId,new Set(['bash','powershell'])),model:manifest.model.provider+'/'+manifest.model.id,thinking:manifest.model.thinking,limits:manifest.limits,
+  ...(args.includes('--capture-review-evidence')?{captureReviewEvidence:true}:{})};
  await json(join(output,'worker-input.json'),input);await writeFile(join(output,'candidate.patch'),patch);
  report.protocolIdentity={sourceRunId:manifest.sourceRunId,gradedRunId:manifest.gradedRunId,sourceReportSha256:sha(sourceBytes),gradedReportSha256:sha(gradeBytes),manifestSha256:sha(JSON.stringify(manifest)),workerInputSha256:sha(JSON.stringify(input)),limits:manifest.limits,model:manifest.model,repairs:0};
  report.registeredAt=new Date().toISOString();await persist();

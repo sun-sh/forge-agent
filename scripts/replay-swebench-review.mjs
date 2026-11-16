@@ -16,6 +16,9 @@ import { ForgeSubagents } from '../dist/web/subagents.js';
 import { BudgetRuntime, DEFAULT_BUDGET_LIMITS } from '../dist/task/budget.js';
 import { REVIEW_BUDGETS } from '../dist/task/review-budget.js';
 import { summarizeReviewTelemetry } from '../dist/task/review-telemetry.js';
+import { behaviorStateSchema, behaviorHash } from '../dist/task/behavior.js';
+import { reviewBoundaryEvidence } from '../dist/task/review-boundary-evidence.js';
+import { admitNativeReviewCapture } from './behavior-replay-protocol.mjs';
 import { buildReviewHandoff } from '../dist/task/review-handoff.js';
 import { reviewCommandEvidence } from '../dist/task/review-evidence.js';
 import { parseReview, reviewStop, ReviewBudgetExceededError } from '../dist/task/review.js';
@@ -31,6 +34,7 @@ const modelKey = option('--model'), output = option('--output'), sourceRun = opt
 if (!modelKey?.includes('/') || !output || !sourceRun || !gradedRun) throw new Error('Build first; use --model provider/model --source-run ORIGINAL_RUN_ROOT --graded-run REGRADED_RUN_ROOT --output NEW_DIRECTORY [--prepare-only | --run-prepared]');
 const paths = { output: resolve(output), source: resolve(sourceRun), graded: resolve(gradedRun), cache: resolve(option('--cache', '.forge-agent/review-replay-source-cache')) };
 const configHome = resolve(option('--config-home', pforgeHome())), thinking = 'medium', repeat = 3;
+const boundaryManifestPath = option('--boundary-evidence');
 const ids = ['pallets__flask-4045', 'matplotlib__matplotlib-23563', 'astropy__astropy-6938', 'sympy__sympy-18189'];
 const execute = promisify(execFile), sha = (value) => createHash('sha256').update(value).digest('hex');
 const json = (path, value) => writeFile(path, JSON.stringify(value, null, 2) + '\n');
@@ -41,7 +45,7 @@ const safePath = (root, path) => { const target = resolve(root, path), rel = rel
 const schedule = Array.from({ length: repeat }, (_, index) => ids.map((_, position) => ({ id: ids[(position + index) % ids.length], run: index + 1, position: position + 1 }))).flat();
 const harnessSources = [import.meta.url, ...[
   '../src/task/review-telemetry.ts', '../dist/task/review-telemetry.js', '../src/task/review-boundary-evidence.ts', '../dist/task/review-boundary-evidence.js',
-  './swebench-review-source.py', './evaluation-evidence.mjs',
+  './swebench-review-source.py', './evaluation-evidence.mjs', './behavior-replay-protocol.mjs',
   '../src/task/review-handoff.ts', '../src/task/review.ts', '../src/task/review-evidence.ts', '../src/task/git.ts', '../src/task/review-budget.ts', '../src/web/subagents.ts',
   '../src/task/behavior.ts', '../src/task/review-discrimination.ts', '../src/task/result.ts', '../src/task/plan.ts',
   '../dist/task/review-handoff.js', '../dist/task/review.js', '../dist/task/review-evidence.js', '../dist/task/git.js', '../dist/task/review-budget.js', '../dist/web/subagents.js', '../dist/task/budget.js', '../dist/verification/evidence.js',
@@ -100,6 +104,13 @@ try {
     report.harnessFingerprint = await saveHarnessEvidence(paths.output, harnessSources);
     await persist();
     const source = await load(join(paths.source, 'report.json')), graded = await load(join(paths.graded, 'report.json'));
+    const boundaryManifest = boundaryManifestPath ? await load(resolve(boundaryManifestPath)) : undefined;
+    if (boundaryManifest) {
+      assert.equal(boundaryManifest.protocol, 'fixed-native-boundary-evidence-v1');
+      assert.deepEqual(boundaryManifest.cases.map(item => item.id), ids);
+      report.boundaryManifestSha256 = await digestFile(resolve(boundaryManifestPath));
+      report.boundaryEvidence = true;
+    }
     const published = await load(resolve('docs/evaluations/swebench-ablation-2026-11-12.json'));
     report.sourceReportSha256 = await digestFile(join(paths.source, 'report.json'));
     report.gradedReportSha256 = await digestFile(join(paths.graded, 'report.json'));
@@ -136,13 +147,30 @@ try {
       const exactPatch = (await git(project, ['diff', '--binary', '--no-ext-diff', '--no-textconv'])).stdout;
       assert.equal(sha(exactPatch), row.patchHash, 'Reconstructed candidate diff is not byte-identical');
       const task = structuredClone(snapshot.task);
+      let nativeEvidence;
+      if (boundaryManifest) {
+        const spec = boundaryManifest.cases.find(item => item.id === id);
+        const file = safePath(resolve(boundaryManifest.root), spec.file);
+        assert.equal(await digestFile(file), spec.sha256, 'Native evidence report changed');
+        const native = await load(file), result = native.result;
+        const admitted = admitNativeReviewCapture({id,patchSha256:row.patchHash,effectiveHead:row.effectiveHead},native,task.prompt,value=>behaviorStateSchema.parse(value));
+        if(admitted.behavior)task.behavior=admitted.behavior;
+        nativeEvidence = { reportSha256: spec.sha256, captureRevision: boundaryManifest.captureRevision,
+          capturedAt: result?.reviewEvidence?.capturedAt ?? null, unavailable: admitted.unavailable, source: 'original-image-native-pi-session',
+          freshness: 'captured-observations-not-current-replay-attestation',
+          pairCount: reviewBoundaryEvidence(task.behavior, task.prompt)?.pairs.length ?? 0,
+          attributablePairs: reviewBoundaryEvidence(task.behavior, task.prompt)?.pairs.filter(pair => pair.attributable).length ?? 0,
+          planSha256: task.behavior?.plan ? behaviorHash(JSON.stringify(task.behavior.plan)) : null };
+      }
       task.changes = await compareGit(project, baseline);
       const patch = await captureReviewPatch(project, task.changes);
       const commands = reviewCommandEvidence(snapshot.entries, task.id, new Set(['bash', 'powershell']));
       // Original successful checks remain historical observations, not a fresh attestation.
       task.verification.reason = 'Historical original-candidate check; not executed on this source-only replay host.';
       if (task.verification.evidence) task.verification.evidence.freshness = 'unconfirmed';
-      const handoff = buildReviewHandoff(task, patch, undefined, commands);
+      const baseHandoff = buildReviewHandoff(task, patch, undefined, commands);
+      const prompt = nativeEvidence ? 'NATIVE EVIDENCE PROVENANCE: The paired receipts were captured once on the exact original source/candidate in the pinned task image. They are observations from that separate execution, not checks run on this source-only reviewer host. Unavailable captures or unconfirmed pairs provide no boundary proof. No labels or hidden tests were supplied.\n' + baseHandoff.prompt : baseHandoff.prompt;
+      const handoff = {...baseHandoff, prompt, characters: prompt.length};
       await writeFile(join(paths.output, id + '.handoff.txt'), handoff.prompt);
       const item = { id, sourceKey: key, project, expectedDefect: !grade.officialResolved, originalCompleted: row.completed,
         originalReviewVerdict: snapshot.task.review?.verdict ?? null, originalTaskError: snapshot.task.error ?? null,
@@ -152,6 +180,7 @@ try {
           sourceMode: layer.sourceMode, fullLayerVerified: layer.fullLayerVerified, downloadedSourceSha256: layer.downloadedSourceSha256, downloadedBytes: layer.downloadedBytes },
         acceptanceIds: task.plan.acceptance.map((entry) => entry.id), commandSummary: commands.summary, handoffSha256: sha(handoff.prompt), handoffCharacters: handoff.characters,
         behaviorEvidence: { present: task.behavior !== undefined, calibrationPresent: task.behavior?.calibration !== undefined },
+        ...(nativeEvidence ? {nativeEvidence} : {}),
         workspace: await captureWorkspace(project) };
       assert.ok(item.workspace.digest, 'Candidate workspace fingerprint unavailable');
       report.preparation.push(item); await persist();
@@ -165,7 +194,7 @@ try {
       selection: 'First original Planned repetition for Flask, Matplotlib, Astropy and SymPy, fixed before new model calls. Labels and prior review outcomes excluded from every handoff.',
       order: 'Rotate four-case start position by repetition; serial independent fresh reviewer sessions.',
       measurement: { compatibilityAB: 'Raw model verdict retained separately from normalized/effective review; no discrimination host guard invoked.',
-        discriminationC: 'Unmeasured on these original snapshots without behavior/calibration; no baseline or receipts synthesized.', hostGuardApplied: false } };
+        discriminationC: boundaryManifest ? 'Native captured calibration supplied as evidence; no host discrimination guard invoked in reviewer-only decisions.' : 'Unmeasured on these original snapshots without behavior/calibration; no baseline or receipts synthesized.', hostGuardApplied: false } };
     report.protocolSha256 = sha(JSON.stringify(report.protocol));
     await json(join(paths.output, 'protocol.json'), { ...report.protocol, protocolSha256: report.protocolSha256 });
     report.prepared = true; await persist();

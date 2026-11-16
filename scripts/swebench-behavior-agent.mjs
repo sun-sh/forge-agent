@@ -10,7 +10,8 @@ import { TaskController } from '/opt/forge/node_modules/forge-agent/dist/task/co
 import { BudgetRuntime } from '/opt/forge/node_modules/forge-agent/dist/task/budget.js';
 import { behaviorExecutionExtension } from '/opt/forge/node_modules/forge-agent/dist/task/behavior-runtime.js';
 import { taskResult } from '/opt/forge/node_modules/forge-agent/dist/task/result.js';
-import { captureGit, compareGit, captureReviewPatch } from '/opt/forge/node_modules/forge-agent/dist/task/git.js';
+import { captureGit, compareGit, captureReviewPatch, ReviewEvidenceError } from '/opt/forge/node_modules/forge-agent/dist/task/git.js';
+import { validateBehaviorCorrection } from '/opt/forge/node_modules/forge-agent/dist/task/behavior-correction.js';
 import { captureWorkspace } from '/opt/forge/node_modules/forge-agent/dist/verification/evidence.js';
 import { createPforgeVerification } from '/opt/forge/node_modules/forge-agent/dist/verification/pi-extension.js';
 import { ForgeSubagents } from '/opt/forge/node_modules/forge-agent/dist/web/subagents.js';
@@ -56,8 +57,19 @@ try{
    throw new Error('Unexpected fixed-candidate phase');
   },
   async behaviorPlan(message,signal){console.log('Designing independent behavioral checks from original request');await writeFile(join(output,'designer-input.txt'),message);const design=await agents.behaviorPlan(message,signal);await json('frozen-design.json',design);result.designCompletedAt=new Date().toISOString();return design;},
+  ...(input.captureReviewEvidence ? {
+    behaviorCorrection:(message,signal)=>agents.behaviorCorrection(message,signal),
+    behaviorCorrectionEvidence:(plan,correction,request,signal)=>validateBehaviorCorrection(project,plan,correction,request,signal)
+  } : {}),
   behaviorWorkspace:signal=>captureWorkspace(project,signal),behaviorShell:'bash',verify:signal=>verifier.verifyTrusted(signal),refreshVerification:signal=>verifier.refreshEvidence(signal),baseline:signal=>captureGit(project,signal),changes:(baseline,signal)=>compareGit(project,baseline,signal),reviewPatch:(changes,signal)=>captureReviewPatch(project,changes,signal),commandEvidence:()=>input.historicalCommands,
-  async review(message,signal){console.log('Reviewing fixed patch and actual receipts');await writeFile(join(output,'review-input.txt'),message);return agents.reviewGate('PFORGE TASK PHASE: review\n'+message,signal);}
+  async review(message,signal){
+    await writeFile(join(output,'review-input.txt'),message);
+    if(input.captureReviewEvidence){
+      result.reviewEvidence={capturedAt:new Date().toISOString(),handoffSha256:hash(message),task:structuredClone(controller.state),scope:'Evaluation-only native evidence capture; no reviewer decision or acceptance claim'};
+      throw new ReviewEvidenceError('Evaluation-only native evidence capture ended before reviewer calls.');
+    }
+    console.log('Reviewing fixed patch and actual receipts');return agents.reviewGate('PFORGE TASK PHASE: review\n'+message,signal);
+  }
  };
  result.task=await controller.run(input.originalRequest,0,adapter,undefined,budget,{workflow:'planned',mode:'agent',behaviorRequired:true,model:model.id});result.product=taskResult(result.task);
  result.parentMessages=manager.buildSessionContext().messages;result.children=agents.snapshot();for(const child of result.children)await json(child.purpose+'.detail.json',await agents.detail(child.id));

@@ -192,3 +192,28 @@ describe('retained SWE-bench workflow classification', () => {
     expect(grade).toMatchObject({ officialResolved: true, accepted: true, falseCompletion: null, infrastructureFailure: false });
   });
 });
+
+
+describe('fixed native-boundary capture admission',()=>{
+  const spec={id:'owner__repo-1',patchSha256:'a'.repeat(64),effectiveHead:'b'.repeat(40)};
+  const make=()=>({case:spec,result:{candidateUnchanged:true,finalPatchSha256:spec.patchSha256,protection:'unchanged',designCompletedAt:'2026-11-16T00:00:00.000Z',injectedAt:'2026-11-16T00:00:01.000Z',children:[],reviewEvidence:{task:{prompt:'Original request',behavior:{requestSha256:sha256('Original request'),receipts:[{source:'pi-builtin-shell'}]}}}}});
+  it('preserves real receipt identity without rewriting its source',async()=>{
+    const {admitNativeReviewCapture}=await import('../scripts/behavior-replay-protocol.mjs');const report=make(),saved=structuredClone(report);
+    const value=admitNativeReviewCapture(spec,report,'Original request',behavior=>{expect(behavior.receipts[0].source).toBe('pi-builtin-shell');return behavior;});
+    expect(value.behavior).toEqual(report.result.reviewEvidence.task.behavior);expect(report).toEqual(saved);
+  });
+  it('retains unavailable preparation instead of making up a native baseline',async()=>{
+    const {admitNativeReviewCapture}=await import('../scripts/behavior-replay-protocol.mjs');const report=make();delete report.result.reviewEvidence;report.executionFailure='budget exhausted';
+    expect(admitNativeReviewCapture(spec,report,'Original request',()=>{throw Error('must not parse');})).toMatchObject({behavior:undefined,unavailable:expect.any(String)});
+  });
+  it.each(['patch','request','protection','reviewer','order','receipt_source'])('rejects a %s mismatch',async kind=>{
+    const {admitNativeReviewCapture}=await import('../scripts/behavior-replay-protocol.mjs');const report=make();
+    if(kind==='patch')report.case={...spec,patchSha256:'f'.repeat(64)};
+    if(kind==='request')report.result.reviewEvidence.task.prompt='Different request';
+    if(kind==='protection')report.result.protection='changed';
+    if(kind==='reviewer')report.result.children=[{purpose:'review_gate'}];
+    if(kind==='order')report.result.designCompletedAt='2026-11-16T00:00:02.000Z';
+    if(kind==='receipt_source')report.result.reviewEvidence.task.behavior.receipts[0].source='pi-programmatic-shell';
+    expect(()=>admitNativeReviewCapture(spec,report,'Original request',behavior=>{if(behavior.receipts[0].source!=='pi-builtin-shell')throw Error('invalid source');return behavior;})).toThrow();
+  });
+});

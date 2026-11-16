@@ -31,3 +31,18 @@ export function prepareFrozenReplay(spec, source, grade, patchBytes, snapshotByt
     originalRequest: task.prompt, brief, originalPlan: { ...task.plan, acceptance: task.plan.acceptance.map(criterion) } };
   return { worker, originalTaskId: task.id, entries: snapshot.entries };
 }
+
+/** Admit captured observations only; never convert programmatic controls to session receipts. */
+export function admitNativeReviewCapture(spec, report, originalRequest, parseBehavior) {
+  const equal=(a,b,label)=>{if(a!==b)throw new Error('Native capture identity mismatch: '+label);};
+  equal(report.case?.id,spec.id,'case');equal(report.case?.patchSha256,spec.patchSha256,'patch');equal(report.case?.effectiveHead,spec.effectiveHead,'HEAD');
+  const result=report.result;
+  if(report.error||report.executionFailure||result?.error||!result?.reviewEvidence?.task)
+    return {behavior:undefined,unavailable:'Native capture did not reach the review handoff; no evidence synthesized'};
+  equal(result.candidateUnchanged,true,'candidate unchanged');equal(result.finalPatchSha256,spec.patchSha256,'final patch');equal(result.protection,'unchanged','protected paths');
+  if(result.children?.some(child=>child.purpose==='review_gate'))throw new Error('Native preparation included reviewer decisions');
+  const captured=result.reviewEvidence.task;equal(captured.prompt,originalRequest,'original request');
+  equal(captured.behavior?.requestSha256,replaySha256(originalRequest),'request hash');
+  if(!(result.designCompletedAt<result.injectedAt))throw new Error('Native design did not precede fixed patch injection');
+  return {behavior:parseBehavior(captured.behavior),unavailable:null};
+}

@@ -15,6 +15,11 @@ on:
         required: true
         default: all
         type: string
+      capture_review_evidence:
+        description: Capture native baseline/candidate evidence only, without a final reviewer call
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
   actions: read
@@ -89,14 +94,17 @@ jobs:
       - name: Execute fixed original candidate with native behavior gate
         env:
           CASE_ID: ${{ matrix.instance }}
+          CAPTURE_REVIEW_EVIDENCE: ${{ inputs.capture_review_evidence || 'false' }}
         run: |
+          flags=()
+          if [ "$CAPTURE_REVIEW_EVIDENCE" = "true" ]; then flags+=(--capture-review-evidence); fi
           node scripts/swebench-behavior-replay.mjs \
             --case "$CASE_ID" \
             --source-run .forge-agent/behavior-source/swebench-real-run \
             --graded-run .forge-agent/behavior-grade/swebench-regraded \
             --package .forge-agent/behavior-package/forge-agent-0.2.0.tgz \
             --config-home .forge-agent/behavior-model-config \
-            --output .forge-agent/behavior-upstream-result
+            --output .forge-agent/behavior-upstream-result "${flags[@]}"
       - name: Remove temporary model configuration
         if: always()
         run: rm -rf .forge-agent/behavior-model-config
