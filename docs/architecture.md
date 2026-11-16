@@ -1,6 +1,6 @@
 # Forge Agent architecture and current scope
 
-The current package is `forge-agent` 0.2.0 and pins Pi Coding Agent and Pi AI to 1.4.0.
+The current package is `forge-agent` 0.2.1 and pins Pi Coding Agent and Pi AI to 1.4.0.
 
 See [Architecture Deep Dive](architecture-deep-dive.md) for design decisions,
 failure semantics, source/test references and the remaining gaps.

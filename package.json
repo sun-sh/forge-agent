@@ -1,6 +1,6 @@
 {
   "name": "forge-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local coding agent with a Web client, planned task orchestration and verification.",
   "private": false,
   "type": "module",

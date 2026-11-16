@@ -55,12 +55,17 @@ jobs:
         env:
           CASE_ID: ${{ matrix.instance }}
         run: |
+          package_files=(.forge-agent/behavior-package/forge-agent-*.tgz)
+          if [ "${#package_files[@]}" -ne 1 ] || [ ! -f "${package_files[0]}" ]; then
+            echo "Expected exactly one Forge package artifact" >&2
+            exit 1
+          fi
           node scripts/swebench-behavior-replay.mjs \
             --case "$CASE_ID" \
             --source-run .forge-agent/behavior-source/swebench-real-run \
             --graded-run .forge-agent/behavior-grade/swebench-regraded \
             --calibrate-from .forge-agent/frozen-design \
-            --package .forge-agent/behavior-package/forge-agent-0.2.0.tgz \
+            --package "${package_files[0]}" \
             --output .forge-agent/behavior-calibration-result
       - name: Retain all controls, missing plans and failures
         if: always()

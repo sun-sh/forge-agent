@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.1 — 2026-11-16
+
+- Freeze review-mechanism expansion after the final preregistered fixed four-patch × three-review experiment. Retain Flask 0/3 and Matplotlib 1/3 targeted findings, one related Nx2 block, both controls accepted 3/3, and two duration abstentions; driver blocks are not automatically target detections.
+- Preserve original-image native preparation failures (0/4 attributable cases), all fingerprints and individual reviewer-call latency. Neither usable-boundary efficacy nor a universal theoretical ceiling is established. Keep Planned review experimental and adaptive default; no production review module, budget, result semantic or trust rule changes in this release qualification.
+- Consolidate the bilingual README review scope and publish explicit review boundaries alongside the immutable historical evidence.
+- Prepare GitHub tarball/checksum release and make the two fixed-candidate workflows select exactly one downloaded package independent of its version. No npm-registry publication or desktop installer.
+
 - Observe individual reviewer requests through Pi hooks, with first-header/content timing, numeric-only checkpoints, censored cancellations/timeouts and separate successful/error latency distributions.
 - Pair existing native baseline/candidate boundary evidence in review handoffs; reference only exact historical duplicates while preserving failed receipts and counts.
 - Require evidence for claims that an input was already broken before a change; retain A/B/C/D, result semantics and all reviewer budgets.
