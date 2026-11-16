@@ -54,44 +54,10 @@ This is the complete documentation map, organized by reader needs rather than ch
 
 ## 评测档案
 
-报告绑定各自记录的代码、模型、协议和预算。它们是历史样本，不自动验证后续版本；失败运行和原始判读应与汇总一起阅读。相应协议与机器可读数据在报告或评测索引中链接；并非每份叙述报告都有独立 JSON。
+评测结果绑定各自记录的代码、模型、协议和预算，不自动代表当前版本。公开入口只保留三个读者最需要的结论：
 
-### 当前发布边界与审阅实验
+- [评测摘要](evaluation.md) — 当前发布边界、工程证据与真实模型结论。
+- [SWE-bench 三组比较](evaluations/swebench-ablation-2026-11-12.md) — 真实仓库任务的历史对照，结果绑定旧代码。
+- [最终 reviewer 边界实验](evaluations/reviewer-boundary-2026-11-16.md) — reviewer 机制冻结前的最后资格实验。
 
-- [Final reviewer boundary qualification — 2026-11-16](evaluations/reviewer-boundary-2026-11-16.md) — 最终四补丁实验；原生证据准备不合格，假设未获资格验证。
-- [Boundary preregistration](evaluations/reviewer-boundary-protocol-2026-11-16.md) — 选择、顺序、预算和停止门槛。
-- [Reviewer compatibility replay — 2026-11-16](evaluations/reviewer-compatibility-2026-11-16.md) — 固定候选审阅结果；未达漏检门槛。
-- [Compatibility preregistration](evaluations/reviewer-compatibility-protocol-2026-11-15.md) — 目标归因和预注册判读规则。
-- [Reviewer call latency — 2026-11-16](evaluations/review-call-latency-2026-11-16.md) and [protocol](evaluations/review-call-latency-protocol-2026-11-16.md) — 固定输入单次调用计时。
-- [Required tests omitted — 2026-11-13](evaluations/review-no-tests-2026-11-13.md) — 一次明确漏跑用户要求测试的拦截探针。
-- [Reviewer counterexamples — 2026-11-13](evaluations/review-counterexamples-2026-11-13.md) — 固定模拟机制，不代表真实仓库质量。
-- [Upstream review replay — 2026-11-14](evaluations/review-upstream-replay-2026-11-14.md) — 历史漏检复放。
-- [Command-evidence repair — 2026-11-12](evaluations/review-command-evidence-2026-11-12.md) — 定向 Astropy/SymPy 修复路径。
-- [Review budget/evidence — 2026-11-13](evaluations/review-budget-evidence-2026-11-13.md) — 两次不同样本的预算和证据变化。
-- [Review fault-injection challenge — 2026-11-09](evaluations/review-challenge-2026-11-09.md) — 控制性挑战，不是自然任务精度。
-- [Earlier review ablation — 2026-11-09](evaluations/review-ablation-2026-11-09.md) · [focused review](evaluations/focused-review-2026-11-10.md) — 较早机制试验。
-
-### 验证门禁、恢复与会话
-
-- [Production behavior calibration — 2026-11-15](evaluations/behavior-production-2026-11-15.md) — 新版生产基线流程及保留失败。
-- [Frozen-check calibration — 2026-11-15](evaluations/behavior-calibration-2026-11-15.md) — 历史原生回执诊断。
-- [Native behavior gate — 2026-11-14](evaluations/behavior-native-gate-2026-11-14.md) — 单一正确/错误对照任务。
-- [Upstream behavior replay — 2026-11-14](evaluations/behavior-upstream-2026-11-14.md) — 原始镜像中的固定候选。
-- [Upstream replay protocol](upstream-behavior-replay.md) — 固定原始镜像复放的输入、隔离与判读规则。
-- [Conversation stability — 2026-11-10](evaluations/conversation-stability-2026-11-10.md) — 历史导航、恢复与压缩验收。
-- [Network and empty-verification recovery — 2026-11-10](evaluations/network-empty-verification-2026-11-10.md) — 联网、交付与空验证回归。
-- [Structured handoff — 2026-11-08](evaluations/structured-handoff-2026-11-08.md) · [runtime-depth replay](evaluations/runtime-depth-2026-11-08.md) — 较早任务理解和执行链路。
-
-### 模型和仓库任务比较
-
-- [SWE-bench three-arm ablation — 2026-11-12](evaluations/swebench-ablation-2026-11-12.md) — Direct / Planned-no-review / Planned 固定样本对照。
-- [Direct baseline](evaluations/swebench-direct-final-2026-11-12.md) · [baseline repair history](evaluations/swebench-direct-baseline-2026-11-12.md) — 原始评测及修复后补判。
-- [SWE-bench protocol](evaluations/swebench-lite-2026-11-10.md) — 数据、harness、环境和预算。
-- [GitHub Docker smoke](evaluations/swebench-lite-github-smoke-2026-11-11.md) · [first real-model run](evaluations/swebench-real-github-2026-11-11.md) — 环境验证与首次 Provider 网络失败。
-- [DeepSeek clean ablation](evaluations/deepseek-current-ablation-2026-11-11.md) — 简单任务对照。
-- [Five-task, three-workflow run](evaluations/five-task-ablation-2026-11-10.md) — 早期固定小题重复实验。
-- [Planned delivery regression](evaluations/deepseek-planned-delivery-2026-11-10.md) · [multilingual repository pilot](evaluations/deepseek-swe-multilingual-pilot-2026-11-09.md) — 早期定向试运行。
-
-### 附属原始工件
-
-底层 JSON、预注册、分阶段报告和工程对照保留在 evaluations 目录；优先从上面的 Markdown 报告进入，以免把孤立数据误读为独立成绩。完整原始文件清单见 [evaluation directory](evaluations/)。
+完整历史协议、失败记录、预注册文件和机器可读 JSON 保留在 [评测档案目录](evaluations/)。这些文件用于复现和审计，不是推荐的线性阅读路径，也不应被合并成一个“总分”。
