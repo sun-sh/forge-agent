@@ -9,7 +9,7 @@
 
 Forge 是一个以 Web 工作区为主的本机 coding agent。连接你配置的模型，打开项目后即可对话、编辑文件、运行工具和检查 Git 差异。
 
-Forge 关注的是交付边界：测试通过时，模型是否改坏了测试本身？任务中断后，能否保留目标、计划和已有工作继续？界面的“完成”是否真的有当前版本的证据？这些控制构建在 **Pi Coding Agent 1.4.0** 会话之上，Pi 继续负责模型与工具循环。
+Forge 基于 **Pi Coding Agent 1.4.0** 构建，Pi 负责模型与工具循环。项目重点不是另写一套 Agent Runtime，而是做好本机编码任务的宿主层：任务状态与恢复、基于当前证据的验证和保护门禁，以及围绕这些流程的 Web 工作区。
 
 ![Forge Web 工作区](docs/assets/workspace.png)
 
@@ -35,6 +35,33 @@ npm start
 
 兼容 OpenAI Chat Completions、Responses 和 Anthropic Messages 接口。当前 Web 界面为中文；完整设置与协议边界见[使用指南](docs/usage.md)。终端入口由 Pi 提供，可在源码目录运行 `npm link` 后使用 `forge-agent`。
 
+## 文档与入口
+
+| 你要做什么 | 从这里开始 |
+| --- | --- |
+| 安装、配置与日常使用 | [中文指南](docs/usage.md) · [English guide](docs/usage.en.md) |
+| 中文阅读项目结构 | [架构深读（中文）](docs/architecture-deep-dive.md) |
+| 中文阅读安全与验证 | [结果语义（中文）](docs/task-results.md#中文) · [中文安全说明](docs/security.zh.md) |
+| English technical references | [Architecture map](docs/architecture.md) · [SECURITY.md](SECURITY.md) |
+| 配置验证、运行与恢复 | [结果语义](docs/task-results.md) · [运行手册](docs/operations.md) |
+| 查看评测结论和完整目录 | [评测中文摘要](docs/evaluation.md#中文摘要) · [全部文档与历史报告](docs/README.md) |
+
+## 项目重点与代码结构
+
+Forge 的 Agent 工程工作集中在 Pi 上方的宿主控制层，而不是模型推理或工具循环本身：
+
+| 目录 / 文件 | 职责 |
+| --- | --- |
+| `src/pi-cli.ts` | CLI 入口；接入 Pi TUI、身份与验证扩展 |
+| `src/web/server.ts`、`src/web/` | 本机 Web 网关、API、项目/会话/Provider 适配和执行生命周期 |
+| `src/web/ui/` | 浏览器客户端：聊天、历史会话、设置、工作区与任务进度 |
+| `src/task/` | 宿主任务状态、阶段编排、队列、预算、持久化、检查点和子任务 |
+| `src/verification/` | 项目检查、受保护路径和当前版本证据门禁 |
+| `src/tools/command.ts` | 验证和本机终端共用的有界命令执行器 |
+| Pi Coding Agent SDK | 模型/工具回合、Provider、会话、压缩、MCP、Skills 与资源发现 |
+
+中文读者可从[架构深读](docs/architecture-deep-dive.md)了解组件关系、任务流程和设计取舍；上方代码表给出源码定位。简明组件总览另有[英文版](docs/architecture.md)。
+
 ## 核心行为
 
 | 需要 | Forge 的处理 |
@@ -42,18 +69,16 @@ npm start
 | **检查可交付性** | 配置验证绑定工作区和规则指纹；保护文件变化即使测试通过也会失败。历史通过与当前通过分开展示。 |
 | **可选的规划闭环** | 调研同时产出简短计划，缺失时才补独立规划；实现后验证并独立审阅，附有界历史命令回执，修复后聚焦复查；约束与验收完整保留，模型推断不增加用户要求。 |
 | **中断后继续** | 保留 Pi 会话与当前文件，从有效的已保存阶段继续；不重复追加原始请求，不自动重放工具调用。验证/审阅阶段恢复先重新验证。 |
-| **交付文件可见** | 任务卡直接列出模型写入或修改的文件，Git 项目和普通文件夹都适用；点击即可在右侧文件面板打开，不需要手动寻找项目目录。 |
+| **交付文件可见** | 任务卡列出 Forge 观察到的文件工具写入/修改，可点击打开；shell 创建的文件目前不保证进入交付清单，可在右侧“文件”面板浏览。 |
 | **紧凑的可视化** | 项目组织会话与分支，用户消息靠右，过程默认折叠；右侧查看差异、文件、终端与执行历史，聊天框旁展示暂停原因。 |
 | **会话独立、按需引用** | 后台任务运行时可切换其他会话或新建对话；模型、推理强度和模式选择按会话暂存，下一条消息生效。明确要求引用同项目旧对话时，可检索并分段读取来源；不自动合并历史。 |
 | **受控的并行工作** | 最多 3 个不同项目排队并行；子 Agent 可只读探索/审阅，worker 在独立 worktree 提出补丁，主项目由用户审阅应用并验证。 |
 
-独立 reviewer 默认上限恢复为 5 分钟、24 回合、120 次工具、32,000 生成 token 和 4 美元；需要时可在设置中显式选择扩展档。界面区分审阅预算耗尽、证据不足和具体代码缺陷，并显示对应下一步操作。历史回执和模型审阅均不等于外部验收。详见[审阅结果与边界](docs/review-outcomes.md)。
+规划与独立审阅是显式选择的实验流程，默认保持自适应。Reviewer 标准上限为 5 分钟、24 回合、120 次工具、32,000 生成 token 和设定的 4 美元；扩展档需显式选择。预算耗尽、证据不足和具体缺陷分别处理；审阅不等于外部验收。中文状态说明见[审阅结果](docs/review-outcomes.md#中文)，实测结论见[评测摘要](docs/evaluation.md#中文摘要)。
 
 网页搜索与网址正文读取默认可用，无需搜索 API Key；在 **设置 → 工具** 中开关并测试实际文档连接。回复保留来源网址；需要交互或登录的动态网页使用浏览器 MCP。模型管理、MCP、Skills、上下文压缩和分层参考记忆均可在界面管理。普通 worker 无 shell、MCP 或嵌套委派，适合有界文件任务；它不是独立全功能团队。[子 Agent 设计](docs/subagents.md)说明权限、预算及提案边界。
 
-**规划并执行及独立审阅仍属实验能力，尚未证明能改善真实编码交付。** 新建且配置了 `verify` 的规划任务，会在实现前设计并执行冻结检查、保留基线，之后再验证并独立审阅。检查设计、环境或模型判断都可能失败；不以 `ready` 代替有效证据，也不把未运行或无区分度的检查说成验收通过。详见[行为检查](docs/behavior-checks.md)、[基线校准与恢复](docs/behavior-calibration.md)及[审阅能力边界](docs/reviewer-limits.md)。
-
-审阅记录单次模型调用耗时，并并排交付原生前后证据；证据不足时最多在共享修复额度内补证一次。**这些是已实现的工程机制，不是已证明的检出收益。** [固定补丁兼容性回放](docs/evaluations/reviewer-compatibility-2026-11-16.md)未达门槛；[最终边界证据实验](docs/evaluations/reviewer-boundary-2026-11-16.md)保留证据准备失败和全部审阅，不能据此证明边界证据有效或存在理论上限。机制到此冻结，默认仍为自适应。历史实验、失败和代码指纹见[评测索引](docs/evaluation.md)。
+已配置 `verify` 的 Planned 任务会在实现前设计、运行冻结检查并保留基线，再执行验证和审阅；检查设计、环境或模型判断仍可能失败。两项固定补丁实验均未证明 reviewer 的通用检出收益，边界假设也未获资格验证。检查规则、调用诊断与失败报告见[完整文档目录](docs/README.md)。
 
 ## 配置验证与保护路径
 
@@ -84,15 +109,15 @@ Web 对单条模型回复触及最大输出（含只有思考、没有正文或�
 
 达到上限会保存状态并说明原因；点击继续开启新的有界用量段，目标、保护基线和已用修复次数保留。后台运行见[运行与恢复](docs/operations.md)。
 
-数据默认在 `~/.forge-agent`，支持 `FORGE_AGENT_HOME` 及旧 `PFORGE_HOME` / `~/.pforge`。新项目集中管理，主动打开的外部文件夹在原位置工作。远程模型仍会收到相关内容；Agent、MCP、扩展和命令拥有启动者系统权限，信任与 worktree 都不是 OS 沙箱。见 [SECURITY.md](SECURITY.md)。
+数据默认在 `~/.forge-agent`，支持 `FORGE_AGENT_HOME` 及旧 `PFORGE_HOME` / `~/.pforge`。新项目集中管理，主动打开的外部文件夹在原位置工作。远程模型仍会收到相关内容；Agent、MCP、扩展和命令拥有启动者系统权限，信任与 worktree 都不是 OS 沙箱。中文边界见[使用指南本机安全章节](docs/usage.md#本机数据与安全)；更完整的策略为英文版 [SECURITY.md](SECURITY.md)。
 
-## 实现归属与证据
+中文安全入口：[安全边界说明](docs/security.zh.md)。英文版 SECURITY.md 提供完整威胁模型和控制清单。
 
-**Pi 负责**模型/工具循环、认证、内置工具、会话树、压缩、MCP 协议、Skills、扩展及资源发现。**Forge 负责**任务状态与交接、验证及保护门禁、预算/执行所有权、恢复、子任务生命周期和 Web 产品层；旧原型不属于活动构建。
+## 评测证据
 
-[Architecture Deep Dive](docs/architecture-deep-dive.md)解释设计与取舍；[评测文档](docs/evaluation.md)保留回归、模拟服务及真实模型结果。最新的 [SWE-bench Lite 三组实测](docs/evaluations/swebench-ablation-2026-11-12.md)使用 5 道真实 issue、每题每组重复 3 次：Direct / Planned-no-review / Planned 官方通过分别为 **9/15、11/15、9/15**，正确且完成交付分别为 **9、11、5**。当前独立审阅未带来交付改善；小样本也不足以证明规划普遍更强。默认保持自适应。分数绑定报告中的旧代码。补齐审阅命令证据后的 [Astropy / SymPy 定向真实回归](docs/evaluations/review-command-evidence-2026-11-12.md)为 2/2 官方通过并完成交付；它只确认修复路径可用，尚未证明通用质量或效率收益。
+[评测中文摘要](docs/evaluation.md#中文摘要)区分工程回归与模型结果。[SWE-bench Lite 三组实测](docs/evaluations/swebench-ablation-2026-11-12.md)覆盖 5 道 issue、每组每题 3 次：Direct / Planned-no-review / Planned 官方通过为 **9/15、11/15、9/15**，正确且完成交付为 **9、11、5**。这是旧代码上的小样本，不证明规划或审阅普遍更强。[最终 reviewer 资格实验](docs/evaluations/reviewer-boundary-2026-11-16.md)未达预注册门槛，机制保持冻结，默认自适应。所有历史评测及原始数据见[文档目录](docs/README.md)。
 
-[真实模型 GitHub 工作流](.github/workflows/swebench-real.yml)需要显式配置的 Provider Secrets；[无 Key 补判](.github/workflows/swebench-regrade.yml)使用原补丁、保留旧报告并单列已解决但未交付的结果。[评测协议](docs/evaluations/swebench-lite-2026-11-10.md)记录固定名单、官方 harness、预算和隔离边界；[早期小题对照](docs/evaluations/deepseek-current-ablation-2026-11-11.md)及原始失败继续保留。关闭审阅仅限隔离评测，生产请求不能绕过门禁。
+[真实模型 GitHub 工作流](.github/workflows/swebench-real.yml)需要显式配置 Provider Secrets；[无 Key 补判](.github/workflows/swebench-regrade.yml)对保留补丁补判，不重跑模型。
 
 ```bash
 npm run check

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Organize the bilingual README around the project's host-side Agent focus and common reader journeys, map the active source layout, and add a complete documentation/evaluation catalog. Keep historical results and machine-readable artifacts in the archive; clarify that shell-created files are not guaranteed to appear in the observed delivery-artifact list.
+
 ## 0.2.1 — 2026-11-16
 
 - Freeze review-mechanism expansion after the final preregistered fixed four-patch × three-review experiment. Retain Flask 0/3 and Matplotlib 1/3 targeted findings, one related Nx2 block, both controls accepted 3/3, and two duration abstentions; driver blocks are not automatically target detections.

@@ -1,5 +1,18 @@
 # Evaluation and evidence
 
+## 中文摘要
+
+本页汇总工程回归、模拟服务和真实模型评测；三者不能互相替代。公开结果均绑定各自记录的代码、模型、协议与预算，不代表后续版本。
+
+- **当前发布的 reviewer 边界**：[2026-11-16 固定补丁实验](evaluations/reviewer-boundary-2026-11-16.md)中 Flask 目标命中 0/3、Matplotlib 目标命中 1/3，两个正确对照各 3/3 放行；原生边界证据准备为 0/4，因此假设未获资格验证，也不能据此宣称存在理论上限。
+- **较早 SWE-bench 三组比较**：[2026-11-12 报告](evaluations/swebench-ablation-2026-11-12.md)包含 5 道 issue、每组每题 3 次；Direct / Planned-no-review / Planned 官方通过为 9/15、11/15、9/15，正确且完成交付为 9、11、5。它绑定旧代码，不证明规划或 reviewer 普遍更强。
+
+按主题浏览全部[历史协议、结果和保留失败](README.md)。无模型 fixture/CI 证明工程链路，不代表模型编码质量。
+
+## English overview
+
+This index separates engineering regressions, fixtures and model evaluations. The latest fixed-patch reviewer qualification did not meet its preregistered threshold; native-evidence preparation was unavailable in all four cases, so efficacy remains unqualified. The older five-issue SWE-bench ablation is tied to its recorded code revision and does not establish a general planning/review benefit. Individual reports preserve their own protocols, failures and fingerprints.
+
 ## Final boundary-evidence qualification — 2026-11-16
 
 The [final preregistered four-patch × three-review batch](evaluations/reviewer-boundary-2026-11-16.md) retains all 12 outcomes: Flask 0/3 and Matplotlib 1/3 targeted findings, one related Nx2 block, controls 3/3 each and two duration abstentions. Native preparation is attributable in 0/4 cases, failing eligibility before calls; this does not qualify usable-boundary efficacy or prove a theoretical ceiling. All 30 frozen harness/source/dist files remain unchanged through execution. Per-call timing preserves the slow Flask r3 median and two censored calls. Mechanism expansion stops; Planned remains experimental. See [release limits](reviewer-limits.md).
