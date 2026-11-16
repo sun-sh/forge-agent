@@ -51,18 +51,9 @@ npm start
 
 网页搜索与网址正文读取默认可用，无需搜索 API Key；在 **设置 → 工具** 中开关并测试实际文档连接。回复保留来源网址；需要交互或登录的动态网页使用浏览器 MCP。模型管理、MCP、Skills、上下文压缩和分层参考记忆均可在界面管理。普通 worker 无 shell、MCP 或嵌套委派，适合有界文件任务；它不是独立全功能团队。[子 Agent 设计](docs/subagents.md)说明权限、预算及提案边界。
 
-审阅契约要求检查已接受输入的兼容性收窄和新增测试回归，文档或未来测试更新不能单独豁免。宿主会拦住全部有效冻结检查均无区分度时的 ready；带类型的缺失执行记录引导补跑要求的测试。[固定补丁回放](docs/evaluations/reviewer-compatibility-2026-11-16.md)仍未达到预注册的漏检修复门槛，不能把这些约束当作可靠检出保证。
+**规划并执行及独立审阅仍属实验能力，尚未证明能改善真实编码交付。** 新建且配置了 `verify` 的规划任务，会在实现前设计并执行冻结检查、保留基线，之后再验证并独立审阅。检查设计、环境或模型判断都可能失败；不以 `ready` 代替有效证据，也不把未运行或无区分度的检查说成验收通过。详见[行为检查](docs/behavior-checks.md)、[基线校准与恢复](docs/behavior-calibration.md)及[审阅能力边界](docs/reviewer-limits.md)。
 
-审阅按单次模型调用记录耗时和首内容等待，超时保留为未完成观测；原生边界证据并排展示实现前后结果。详见[审阅诊断与证据边界](docs/reviewer-diagnostics.md)。
-
-审阅仅缺少执行证据时，可以在共享修复额度内自动补证一次，再验证并独立复查；仍未确认会列出具体原因，继续或重启不会重置次数。
-
-新建且配置了 `verify` 的“规划并执行”变更任务，由全新只读 Pi 会话设计 2–3 条原始需求检查，再由父 Pi 会话在实现前实际执行基线。预期的复现失败保留为观测；边界失败或基线不完整至多触发一次全新只读诊断。更正命令或预期必须有宿主核对的源码原文，保留检查数量、ID、类型、shell、需求引用和不增大的超时；原方案与回执保留，替换方案先重跑基线再实现。实现后不重设计或补造基线，无效基线仍阻断静态 `ready`。命令继续受 Agent 模式、项目信任及预算约束，shell 不构成 OS 沙箱；前后变化不自动证明代码缺陷，通过也不等于需求已验收。详见[行为检查](docs/behavior-checks.md)与[生产校准及恢复边界](docs/behavior-calibration.md)。不增加配置键，自适应、只读和未配置验证的路径保持原行为。
-
-原始镜像中固定上游补丁的通过、误阻断与未完成情况见[真实行为门禁复测](docs/evaluations/behavior-upstream-2026-11-14.md)；另有[历史冻结检查校准](docs/behavior-calibration.md#historical-frozen-check-diagnostic)以无模型重放区分已有失败与候选变化。旧报告及其数字保持原代码身份，不验证新的生产校准，也未证明修复历史漏检；生产流程的受控实测及首轮失败见[校准验证记录](docs/evaluations/behavior-production-2026-11-15.md)。
-
-
-新一轮[审阅预算与证据回归](docs/evaluations/review-budget-evidence-2026-11-13.md)保留了首轮通过 2/2、交付 1/2，以及调整过严回执规则后第二轮通过并交付 2/2 的结果；后续自动补证分支仅有工程回归，未继承这些成绩。
+审阅记录单次模型调用耗时，并并排交付原生前后证据；证据不足时最多在共享修复额度内补证一次。**这些是已实现的工程机制，不是已证明的检出收益。** [固定补丁兼容性回放](docs/evaluations/reviewer-compatibility-2026-11-16.md)未达门槛；[最终边界证据实验](docs/evaluations/reviewer-boundary-2026-11-16.md)保留证据准备失败和全部审阅，不能据此证明边界证据有效或存在理论上限。机制到此冻结，默认仍为自适应。历史实验、失败和代码指纹见[评测索引](docs/evaluation.md)。
 
 ## 配置验证与保护路径
 
@@ -110,6 +101,6 @@ npm run pack:check
 npm run eval:smoke -- --workflow ablation
 ```
 
-源码和 tgz 构建校验可用，尚未发布 npm registry 或桌面安装器；发布流程见[运行文档](docs/operations.md)。欢迎提供脱敏复现或参与[贡献](CONTRIBUTING.md)。
+[GitHub v0.2.1](https://github.com/sun-sh/forge-agent/releases/tag/v0.2.1) 提供可安装的 tgz 与 SHA-256；下载并核对后，可用 `npm install -g ./forge-agent-0.2.1.tgz` 安装，再运行 `forge-agent web`。尚未发布 npm registry 或桌面安装器；发布流程见[运行文档](docs/operations.md)。欢迎提供脱敏复现或参与[贡献](CONTRIBUTING.md)。
 
 [MIT License](LICENSE)。感谢 [Pi](https://github.com/earendil-works/pi) 和本项目使用的开源依赖。

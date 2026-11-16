@@ -47,3 +47,7 @@ The [24-review real-model diagnostic](evaluations/review-counterexamples-2026-11
 ## Independent behavioral execution
 
 [Behavioral checks](behavior-checks.md) adds a persisted original-request check plan, native Pi execution receipts and current workspace binding before final review for configured Planned changes. A ready model cannot bypass missing/failed receipts. New reviews supply a parallel `issueKinds` enum per finding; typed execution gaps use `run_required_tests`, while environment/ambiguous requirements use `provide_evidence`, with zero code-defect counts. The original failing no-test classification report remains immutable; the new behavior requires new qualification.
+
+## Release qualification boundary
+
+Planned review remains experimental. The [release boundary](reviewer-limits.md) separates enforceable host controls, controlled fixtures and unqualified model-quality hypotheses. The [final fixed-patch experiment](evaluations/reviewer-boundary-2026-11-16.md) retains unavailable native evidence rather than inferring efficacy or a theoretical ceiling from it. No further review mechanism or default allowance is added for publication.

@@ -31,3 +31,7 @@ Exactly matching historical copies may reference their full native receipt inste
 A historical claim such as “2D input was already broken” requires a baseline receipt for that exact case or a pre-change source path. A different failing shape, the current implementation or a docstring cannot excuse narrowing. Without evidence the affected acceptance remains unconfirmed. This adds an instruction; it does not turn prose into a host-verified theorem. A native boundary pass-to-fail observation blocks the existing receipt gate even if a scripted reviewer says ready, but still needs contract/environment analysis before being called a source defect.
 
 A/B/C/D remain in place. All-identical checks do not establish patch effect; typed missing execution still requests `run_required_tests` with zero code-defect count. Result semantics, protected paths, trust checks, parent limits and reviewer budgets are unchanged. Validating these engineering paths is distinct from qualifying the historical Flask/Matplotlib misses or a general safety claim.
+
+## Release qualification boundary
+
+Planned review remains experimental. The [release boundary](reviewer-limits.md) separates enforceable host controls, controlled fixtures and unqualified model-quality hypotheses. The [final fixed-patch experiment](evaluations/reviewer-boundary-2026-11-16.md) retains unavailable native evidence rather than inferring efficacy or a theoretical ceiling from it. No further review mechanism or default allowance is added for publication.

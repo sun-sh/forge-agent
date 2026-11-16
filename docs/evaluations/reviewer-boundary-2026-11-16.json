@@ -1,0 +1,3296 @@
+{
+  "schemaVersion": 1,
+  "protocol": "reviewer-boundary-readout-v1",
+  "preregistration": {
+    "markdownSha256": "3b7a181f6f4b301cea781ce00d1e1d9f10794318f8a81d50581c6e2265a6f850",
+    "priorMarkdownSha256": "737d22986a541e9ca437175b4275b0859c55f64c8025e1f9d57c6c31568b94ab",
+    "priorJsonSha256": "7bfb115c6b5b2e58748a93bf58c56f9fc1e9d22bcdd2e182875629745ae2afe9"
+  },
+  "execution": {
+    "codeRevision": "b143cc6301e96bf8373ebc1fb124e732ae0c7c66",
+    "productionReviewBaseRevision": "77627049978c9f110e5f8cdbfd235a3f9735505f",
+    "harnessFingerprint": "0d682aa167f7fa7f7e525b2baebc9516561fdc5497226325cbb03b4b0b38f32e",
+    "protocolContentSha256": "af325d33d8b344d382f1c6c470e859a9d50781c6f927e8b0cf0b5d3cac489e89",
+    "protocolFileSha256": "ad8f90a9a9fa912c29591ae752f025cc794d5a721a35e48e9525b87f99306ead",
+    "rawReportSha256": "f57e3d6fb2a3d31cd7f5116826023b867a62b06009b6725f5ffede73a4b0956b",
+    "admissionManifestSha256": "b7599f97ca8b3575be723565d0b9c62102a5604c3290747df97d7dfbc61ca4c5",
+    "nativeManifestSha256": "4a32b66201413a400bcccfb88da9ef2bda0173becd25591fdf6d54c928935b56",
+    "startedAt": "2026-11-16T02:22:17.456Z",
+    "finishedAt": "2026-11-16T02:56:08.996Z",
+    "environment": {
+      "node": "v24.19.0",
+      "platform": "win32",
+      "piVersion": "1.4.0"
+    },
+    "frozenBytesVerifiedBeforeReleaseBuild": true
+  },
+  "nativeCapture": {
+    "workflowRunId": "43789515334",
+    "codeRevision": "2f61645d430227273296a4df1e2c89e9c4b3e6b2",
+    "cases": 4,
+    "casesWithAttributablePairs": 0,
+    "efficacyEligibleBeforeReviews": false,
+    "designerCorrectionAttemptsPerCase": 1,
+    "providerPreflightCalls": 4,
+    "captureBackendEquivalentToReviewerEstablished": false
+  },
+  "model": {
+    "id": "deepseek/deepseek-v4.1-flash",
+    "api": "openai-completions",
+    "thinking": "medium",
+    "pricingKnown": false,
+    "sameServiceBackendAsPriorEstablished": false
+  },
+  "reviewBudget": {
+    "profile": "standard",
+    "maxDurationMs": 300000,
+    "maxModelTurns": 24,
+    "maxToolCalls": 120,
+    "maxOutputTokens": 32000,
+    "maxCostUsd": 4
+  },
+  "parentBudget": {
+    "maxDurationMs": 5400000,
+    "maxModelTurns": 240,
+    "maxToolCalls": 500,
+    "maxTotalTokens": 0,
+    "maxOutputTokens": 300000,
+    "maxCostUsd": 40
+  },
+  "scope": {
+    "fixedCandidates": 4,
+    "reviewsPerCandidate": 3,
+    "newImplementations": 0,
+    "newOfficialGrades": 0,
+    "hostGuardApplied": false,
+    "nativeSource": "separate-original-image-pi-session",
+    "localReviewSourceOnly": true
+  },
+  "cases": [
+    {
+      "id": "pallets__flask-4045",
+      "patchHash": "770690aee527cfcd6752d1ddc9d66866709be021b54e4dcc49f8affa1b859191",
+      "snapshotSha256": "376241542e109e5a7a631f54e345f03513d84d95509c1abea3e6c406c50fec8f",
+      "officialReportSha256": "8e7eeb60c63a4807dfe2bc194d400b1deee6f440ecca5af1eedbc94ffb418493",
+      "baseCommit": "d8c37f43724cd9fb0870f77877b7c4c7e38a19e0",
+      "effectiveHead": "277886950a064f3525e9eda7c47e22363343af61",
+      "sourceTree": "dbead88be96fabe6a398df3f124987b9f78e1524",
+      "sourceFileCount": 235,
+      "sourceImage": {
+        "imageId": "sha256:459abea2907f6db45f2a50cea2929e3e0867665eab9b9c6feb80fa737b2f0426",
+        "imageRef": "swebench/sweb.eval.x86_64.pallets_1776_flask-4045:latest",
+        "manifestDigest": "sha256:431573fcf066022cec6e296bdb1105b5135283a3ebdf13b9ad1bd1859580a7c0",
+        "layerDigest": "sha256:5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "layerBytes": 5749961,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "5e8ce42a0394c52f92c75ce26882e2d49f07e020234999388856eeb01da8e012",
+        "downloadedBytes": 5749961
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5"
+      ],
+      "commandSummary": {
+        "receipts": 18,
+        "retainedReceipts": 12,
+        "testReceipts": 8,
+        "failedReceipts": 7,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "1f206244854b13ed140941012f0053c44f036b582eb7d57b28d394963cd4ebef",
+      "handoffCharacters": 50562,
+      "workspace": {
+        "version": 1,
+        "scope": "git",
+        "digest": "9e4d2349c4de96becd0d53c50e8329d613190c8a2822473408bca7d4e08fb643",
+        "files": 234
+      },
+      "retainedOfficialLabel": "failed",
+      "nativePreparation": {
+        "reportSha256": "416ee62f4cb7cf028122b718223a7af7d2639f0a55ce18cc6860586d28c765a4",
+        "captureRevision": "2f61645d430227273296a4df1e2c89e9c4b3e6b2",
+        "capturedAt": "2026-11-16T02:03:19.727Z",
+        "unavailable": null,
+        "source": "original-image-native-pi-session",
+        "freshness": "captured-observations-not-current-replay-attestation",
+        "pairCount": 3,
+        "attributablePairs": 0,
+        "planSha256": "dc6d0969a6a0b4ca0cd73e4d299582617c9b3141fdbc5cc511c12adb77714d96",
+        "harnessFingerprint": "83d42c9e6b56ee626746efbf1da5f70c111e2363f3864ca0e062200d7c43d8c9",
+        "packageSha256": "924e3ad99df341df6316208c3fa7009a9473c83a2356b36322a3ad5b8b8d78ae",
+        "runtimeFingerprint": "fec1fdc4860e90b2cf2df42d947862898b226cd52b9ab238d8ca51a223de2ff6",
+        "requestSha256": "e02f98d392d2bfe1862ecb96dbf40f6b79cf9edb243762441fb4661703d8768e",
+        "captureHandoffSha256": "ade4f509cbab489d595a4cc2219ef2069837c159555f7ce9cbecfa951e2aa8c4",
+        "designCompletedAt": "2026-11-16T02:02:23.622Z",
+        "injectedAt": "2026-11-16T02:03:11.944Z",
+        "candidateUnchanged": true,
+        "protection": "unchanged",
+        "planStatus": "ready",
+        "calibrationStatus": "observed",
+        "children": [
+          {
+            "purpose": "behavior_plan",
+            "status": "completed"
+          },
+          {
+            "purpose": "behavior_correction",
+            "status": "failed",
+            "errorCode": "invalid_behavior_correction"
+          }
+        ],
+        "pairObservations": [
+          {
+            "checkId": "B1",
+            "kind": "reproduction",
+            "quotePresent": true,
+            "commandSha256": "10434892130eaf01e9c351774573c502b18ff88eddb5904ee54185a0530da45e",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "c779c2eb-4229-46da-b7a3-386a89ccbf73",
+              "toolCallId": "call_00_ET_bhbtR131wsXecBj6Kr0g5388",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "10434892130eaf01e9c351774573c502b18ff88eddb5904ee54185a0530da45e",
+              "outputSha256": "f195af4532f5ebbb3f0c3fa2da86b0e8781479b57a1cdcd2330cb568aa18b3c0",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            },
+            "candidate": {
+              "runId": "054e1147-9217-4e79-a559-f4caec241862",
+              "toolCallId": "call_00_ET_q9rtS7AYFUt9F28iKFKZ4374",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "commandSha256": "10434892130eaf01e9c351774573c502b18ff88eddb5904ee54185a0530da45e",
+              "outputSha256": "01f512dc43e618d312147694507e2d2209c27536473fced2cad4c9b7387596c9",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            }
+          },
+          {
+            "checkId": "B2",
+            "kind": "boundary",
+            "quotePresent": true,
+            "commandSha256": "0bfa46fbb79375ded327000fd78d460b09df0a5d3ac37a94defb25427fd1ffe4",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "c779c2eb-4229-46da-b7a3-386a89ccbf73",
+              "toolCallId": "call_00_9JMA8UNHAT9ToglqNGwB8663",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "0bfa46fbb79375ded327000fd78d460b09df0a5d3ac37a94defb25427fd1ffe4",
+              "outputSha256": "52fcf36b7097c4d7c8f46f37cfff2e9dcb42b2667afc279d7d0b4fb78d99238b",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            },
+            "candidate": {
+              "runId": "054e1147-9217-4e79-a559-f4caec241862",
+              "toolCallId": "call_00_ET_AfDlDBidB3Jyb2bZE5Y72076",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "commandSha256": "0bfa46fbb79375ded327000fd78d460b09df0a5d3ac37a94defb25427fd1ffe4",
+              "outputSha256": "736a632456ce73ffd41f669f9832a9d3f2d572a97f9c180e26c6431979c960bf",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            }
+          },
+          {
+            "checkId": "B3",
+            "kind": "regression",
+            "quotePresent": true,
+            "commandSha256": "8b5cf7fa4691ffeca40457f9a5f7995b19aa4946cd88a0f80af09f7a44ec192a",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "c779c2eb-4229-46da-b7a3-386a89ccbf73",
+              "toolCallId": "call_01_1RNW1Negleg6yota655a8694",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "8b5cf7fa4691ffeca40457f9a5f7995b19aa4946cd88a0f80af09f7a44ec192a",
+              "outputSha256": "1f6c3cb9b0c1be3d47b3cc429fe032d14fcf045846b312374071b804210ec1eb",
+              "usableNativeOutput": true,
+              "excerptTruncated": true
+            },
+            "candidate": {
+              "runId": "054e1147-9217-4e79-a559-f4caec241862",
+              "toolCallId": "call_01_ET_Gk1qFstTNkNM7BGD9fuZ6924",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "8b5cf7fa4691ffeca40457f9a5f7995b19aa4946cd88a0f80af09f7a44ec192a",
+              "outputSha256": "1f6c3cb9b0c1be3d47b3cc429fe032d14fcf045846b312374071b804210ec1eb",
+              "usableNativeOutput": true,
+              "excerptTruncated": true
+            }
+          }
+        ],
+        "failure": "Baseline diagnosis exceeded the strict maximum of three findings after one format correction; calibration remained unconfirmed. B1/B2 exit 1->0; B3 1->1 is inherited environment failure, not a targeted endpoint finding."
+      },
+      "counts": {
+        "denominator": 3,
+        "accepted": 1,
+        "targetedBlocks": 0,
+        "otherConcreteBlocks": 0,
+        "abstentions": 2
+      }
+    },
+    {
+      "id": "matplotlib__matplotlib-23563",
+      "patchHash": "4ca8be6d8883e43dc0de1b03fb0c04693267689874425d756b645c0077431cd7",
+      "snapshotSha256": "0d849310a98c3b387266367ebac982d35269bf424a6b505edcceb98d125a0896",
+      "officialReportSha256": "a816053557e1f5e3a03e89d67d8f1076dfe32c09a6bd1beab584d33719c03e4b",
+      "baseCommit": "149a0398b391cfc4eddb5e659f50b3c66f32ea65",
+      "effectiveHead": "84620c55178a66fa19105e561e5ff461fc07f9e4",
+      "sourceTree": "ad28d05b4c4bba6fbd08eec3b7e70612497b33aa",
+      "sourceFileCount": 4471,
+      "sourceImage": {
+        "imageId": "sha256:93f13bec950adf1aa64132b4653af0503c6acdb49e8c3a771ae8efdf0813dac6",
+        "imageRef": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23563:latest",
+        "manifestDigest": "sha256:d868994deae1f816cb23b878db1e4c4cf371ef5f8d77d8bd2129c133ed0a4cbf",
+        "layerDigest": "sha256:10cb0b56e4d746893b68e02ddb5bfcf303a79f2bcd7266d16a35d3eaaa17e1f3",
+        "layerBytes": 971577772,
+        "sourceMode": "base-shallow-fetch-plus-verified-loose-objects",
+        "fullLayerVerified": false,
+        "downloadedSourceSha256": "489b6fd9265c9db11d47c2abc2438152e01dac6117502dfe6e55c12b9841cb83",
+        "downloadedBytes": 16777216
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4"
+      ],
+      "commandSummary": {
+        "receipts": 6,
+        "retainedReceipts": 6,
+        "testReceipts": 2,
+        "failedReceipts": 0,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "b3ce3379c9997d012e2dd9394c3bfb65fed7122ddaae1d89ace676d535637232",
+      "handoffCharacters": 29185,
+      "workspace": {
+        "version": 1,
+        "scope": "git",
+        "digest": "82e08fbe94362bd322b01074fcdf494a2fb8596a713178e4b73a8ec7afe5dd51",
+        "files": 4471
+      },
+      "retainedOfficialLabel": "failed",
+      "nativePreparation": {
+        "reportSha256": "3daab70af6d54c1906d6f2d484081f5554a2dfebb304a31cbc32410f4ec00885",
+        "captureRevision": "2f61645d430227273296a4df1e2c89e9c4b3e6b2",
+        "capturedAt": "2026-11-16T02:03:42.535Z",
+        "unavailable": "Native capture has no ready frozen check plan; no paired evidence invented",
+        "source": "original-image-native-pi-session",
+        "freshness": "captured-observations-not-current-replay-attestation",
+        "pairCount": 0,
+        "attributablePairs": 0,
+        "planSha256": null,
+        "harnessFingerprint": "83d42c9e6b56ee626746efbf1da5f70c111e2363f3864ca0e062200d7c43d8c9",
+        "packageSha256": "924e3ad99df341df6316208c3fa7009a9473c83a2356b36322a3ad5b8b8d78ae",
+        "runtimeFingerprint": "fec1fdc4860e90b2cf2df42d947862898b226cd52b9ab238d8ca51a223de2ff6",
+        "requestSha256": "860bd5a11a45d624c1817fb2bf7b7556baea86f0df87937d46a3a3cf69ab171d",
+        "captureHandoffSha256": "debeab9c0c4f8b57c1f7707f1597bd8656cb905d6c0b9fb4df9941d78f78bd7d",
+        "designCompletedAt": null,
+        "injectedAt": "2026-11-16T02:03:40.535Z",
+        "candidateUnchanged": true,
+        "protection": "unchanged",
+        "planStatus": null,
+        "calibrationStatus": "pending",
+        "children": [
+          {
+            "purpose": "behavior_plan",
+            "status": "failed",
+            "errorCode": "invalid_behavior_plan"
+          }
+        ],
+        "pairObservations": [],
+        "failure": "Designer still emitted a read tool call instead of final plan JSON after the sole format correction; no ready plan or native pair."
+      },
+      "counts": {
+        "denominator": 3,
+        "accepted": 1,
+        "targetedBlocks": 1,
+        "otherConcreteBlocks": 1,
+        "abstentions": 0
+      }
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "patchHash": "f580d0ca660630f9a048e6dcf975f1d6d370a85fb2a9ea2defc0e7e8dc16e2e9",
+      "snapshotSha256": "7d84a12aca57b095145ee22d3b7d8ee25c95b159f27364248135096155d8925e",
+      "officialReportSha256": "1424c0b3621434e905557f55c3c9318987743e4ecade58760625f5b22d30f95c",
+      "baseCommit": "c76af9ed6bb89bfba45b9f5bc1e635188278e2fa",
+      "effectiveHead": "8784d2be8f7d89ee795e36e4fa751ea6a8ee3e0f",
+      "sourceTree": "e74e96d9bd4359a51960f6ba465da019aec0ab1a",
+      "sourceFileCount": 1793,
+      "sourceImage": {
+        "imageId": "sha256:23df7aaa729e3a457bd0b6a83665178777019580c31c0b8a18069709167fb730",
+        "imageRef": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938:latest",
+        "manifestDigest": "sha256:e71ac0096dd19e742e2e70d088e970ee10471347847409c89cd40dbf32f4715e",
+        "layerDigest": "sha256:cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "layerBytes": 55724179,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "cd4dbbbb45d1d173342739f08a1e0ecc4ca6eb6d0d1c68279b46d140b562b706",
+        "downloadedBytes": 55724179
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ],
+      "commandSummary": {
+        "receipts": 13,
+        "retainedReceipts": 12,
+        "testReceipts": 7,
+        "failedReceipts": 4,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "d500bb0aac8baab4b3173abe3a986f698a5909c3a1283f28c8629e4ea2a6a9a2",
+      "handoffCharacters": 35305,
+      "workspace": {
+        "version": 1,
+        "scope": "git",
+        "digest": "5d07ab20607b8ee7a90a54dbcd28bdd0f2ade9667306302435b77e06da784e40",
+        "files": 1793
+      },
+      "retainedOfficialLabel": "passed",
+      "nativePreparation": {
+        "reportSha256": "4e94795af619798437426db68f9d2fe6504a831c877c3e4dd1b5ce91ae82e7f8",
+        "captureRevision": "2f61645d430227273296a4df1e2c89e9c4b3e6b2",
+        "capturedAt": "2026-11-16T02:05:43.337Z",
+        "unavailable": "Native capture has no ready frozen check plan; no paired evidence invented",
+        "source": "original-image-native-pi-session",
+        "freshness": "captured-observations-not-current-replay-attestation",
+        "pairCount": 0,
+        "attributablePairs": 0,
+        "planSha256": null,
+        "harnessFingerprint": "83d42c9e6b56ee626746efbf1da5f70c111e2363f3864ca0e062200d7c43d8c9",
+        "packageSha256": "924e3ad99df341df6316208c3fa7009a9473c83a2356b36322a3ad5b8b8d78ae",
+        "runtimeFingerprint": "fec1fdc4860e90b2cf2df42d947862898b226cd52b9ab238d8ca51a223de2ff6",
+        "requestSha256": "f4679ec3597819f460d33f2468f6cb94b8a0fa9d0c1c6a64e0236ba1d54fed02",
+        "captureHandoffSha256": "93249d41fcb02e3ef8d920ea30c42ec32d007304c6202d5fe1f144c948f8f31d",
+        "designCompletedAt": null,
+        "injectedAt": "2026-11-16T02:05:41.952Z",
+        "candidateUnchanged": true,
+        "protection": "unchanged",
+        "planStatus": null,
+        "calibrationStatus": "pending",
+        "children": [
+          {
+            "purpose": "behavior_plan",
+            "status": "failed",
+            "errorCode": "invalid_behavior_plan"
+          }
+        ],
+        "pairObservations": [],
+        "failure": "Designer still emitted a read tool call instead of final plan JSON after the sole format correction; no ready plan or native pair."
+      },
+      "counts": {
+        "denominator": 3,
+        "accepted": 3,
+        "targetedBlocks": 0,
+        "otherConcreteBlocks": 0,
+        "abstentions": 0
+      }
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "patchHash": "10189ce6e8dfae864b295a89204755ba2bf71fa42ac4224230d45ebc012708a8",
+      "snapshotSha256": "e9087998fa38a2b3c1ad9667c99a2ebece005ebe39dceb642f5763e3a3d6513e",
+      "officialReportSha256": "762355f91a368a129fbfd8250150856ebb28c7e57e56982463f49cd509c2a15b",
+      "baseCommit": "1923822ddf8265199dbd9ef9ce09641d3fd042b9",
+      "effectiveHead": "32537e483e2c24352d01019e86ed5199a9350ae4",
+      "sourceTree": "cdeb81de0eaea114053d5f2427930110d5c34ad6",
+      "sourceFileCount": 1723,
+      "sourceImage": {
+        "imageId": "sha256:576f6177b9b019c7eaaad1b546d6805007436b1a0cff5707d52236a741f37f47",
+        "imageRef": "swebench/sweb.eval.x86_64.sympy_1776_sympy-18189:latest",
+        "manifestDigest": "sha256:5d4dcec6309087223683586740b4fd96e27c0ef1678bccc872a0dd4eba1743b9",
+        "layerDigest": "sha256:f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "layerBytes": 73036869,
+        "sourceMode": "full-task-layer",
+        "fullLayerVerified": true,
+        "downloadedSourceSha256": "f5513a412976dc23e51e041a22fe651eaca03d8aacad5f8e4587b26de11e9942",
+        "downloadedBytes": 73036869
+      },
+      "acceptanceIds": [
+        "A1",
+        "A2",
+        "A3"
+      ],
+      "commandSummary": {
+        "receipts": 7,
+        "retainedReceipts": 7,
+        "testReceipts": 4,
+        "failedReceipts": 1,
+        "zeroTestReceipts": 0,
+        "sourceTruncatedReceipts": 0
+      },
+      "handoffSha256": "982aec0e533291636fbeb73ec17dd106e4f60bcdb4aa238e064cb9cee8083149",
+      "handoffCharacters": 36576,
+      "workspace": {
+        "version": 1,
+        "scope": "git",
+        "digest": "c42373d744e1515d1b037042de3f2c1829e424c798d28e2cd9badd0108680990",
+        "files": 1723
+      },
+      "retainedOfficialLabel": "passed",
+      "nativePreparation": {
+        "reportSha256": "8acb5b2a4502e9e4ff8cc8911d78afcb1a349531b86e4bbff9ffa0ce2edd3032",
+        "captureRevision": "2f61645d430227273296a4df1e2c89e9c4b3e6b2",
+        "capturedAt": "2026-11-16T02:06:45.618Z",
+        "unavailable": null,
+        "source": "original-image-native-pi-session",
+        "freshness": "captured-observations-not-current-replay-attestation",
+        "pairCount": 3,
+        "attributablePairs": 0,
+        "planSha256": "b7af5f0c8f70b24f85076179b270bee2df3132786ca7ae50aebef6e7283f72f4",
+        "harnessFingerprint": "83d42c9e6b56ee626746efbf1da5f70c111e2363f3864ca0e062200d7c43d8c9",
+        "packageSha256": "924e3ad99df341df6316208c3fa7009a9473c83a2356b36322a3ad5b8b8d78ae",
+        "runtimeFingerprint": "fec1fdc4860e90b2cf2df42d947862898b226cd52b9ab238d8ca51a223de2ff6",
+        "requestSha256": "7c149ce2847c80cbf0f06e4007106d2c5b9ac6733725d94a2670b26dd29d5e3a",
+        "captureHandoffSha256": "c4d856cb38d95456610a80ac9b01f01b66618613d5ff64a78e491b91c6b08837",
+        "designCompletedAt": "2026-11-16T02:05:44.337Z",
+        "injectedAt": "2026-11-16T02:06:37.140Z",
+        "candidateUnchanged": true,
+        "protection": "unchanged",
+        "planStatus": "ready",
+        "calibrationStatus": "observed",
+        "children": [
+          {
+            "purpose": "behavior_plan",
+            "status": "completed"
+          },
+          {
+            "purpose": "behavior_correction",
+            "status": "failed",
+            "errorCode": "invalid_behavior_correction"
+          }
+        ],
+        "pairObservations": [
+          {
+            "checkId": "B1",
+            "kind": "reproduction",
+            "quotePresent": true,
+            "commandSha256": "ee796cebe9e1c29b1eba1ee58a95a603e07392a5a96f29e0849a8b49aa59fddd",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "8c9b5bb3-cfde-4561-960d-de006674e1dd",
+              "toolCallId": "call_00_ET_40u9tkylIxs7W8sLOacs2056",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "ee796cebe9e1c29b1eba1ee58a95a603e07392a5a96f29e0849a8b49aa59fddd",
+              "outputSha256": "1b90fecc08fabacf1a8e13528be9fd6c9fa28c36dc5e37f76d3f97a6f2d55008",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            },
+            "candidate": {
+              "runId": "abc66533-e4e6-4d9f-b900-1e19bd9c9758",
+              "toolCallId": "call_00_ET_paXpBq3G993NlPYKyiRW0367",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "commandSha256": "ee796cebe9e1c29b1eba1ee58a95a603e07392a5a96f29e0849a8b49aa59fddd",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            }
+          },
+          {
+            "checkId": "B2",
+            "kind": "boundary",
+            "quotePresent": true,
+            "commandSha256": "4f6ca6bcd79e2d917412fb93e19af00e6593823a258272c17f0535f07539ba49",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "8c9b5bb3-cfde-4561-960d-de006674e1dd",
+              "toolCallId": "call_01_ET_So8guy83CQZS7LaS9TZH2874",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "4f6ca6bcd79e2d917412fb93e19af00e6593823a258272c17f0535f07539ba49",
+              "outputSha256": "e45f84ff89e7bdefee1aa4e229d463f4fbb4a6c128ce4794cdcf13b0768ebf52",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            },
+            "candidate": {
+              "runId": "abc66533-e4e6-4d9f-b900-1e19bd9c9758",
+              "toolCallId": "call_01_ET_01jqc8REBLMMoMa1FFQr0998",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "commandSha256": "4f6ca6bcd79e2d917412fb93e19af00e6593823a258272c17f0535f07539ba49",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            }
+          },
+          {
+            "checkId": "B3",
+            "kind": "regression",
+            "quotePresent": true,
+            "commandSha256": "d6627689b58782728fb42bb71836aa18daf7fc54a2fd55dedb2feb3fb518ad1b",
+            "observation": "unconfirmed",
+            "attributable": false,
+            "sameOutput": null,
+            "baseline": {
+              "runId": "8c9b5bb3-cfde-4561-960d-de006674e1dd",
+              "toolCallId": "call_02_ET_ZYFRfCWhDnp7neaNdJ6R5504",
+              "source": "pi-builtin-shell",
+              "exitCode": 1,
+              "status": "failed",
+              "commandSha256": "d6627689b58782728fb42bb71836aa18daf7fc54a2fd55dedb2feb3fb518ad1b",
+              "outputSha256": "d71308a438e525dee4203f36fb18e021eebdbd71d960ced6fd919f118407c33f",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            },
+            "candidate": {
+              "runId": "abc66533-e4e6-4d9f-b900-1e19bd9c9758",
+              "toolCallId": "call_02_ET_OosrDF5NSpjzWMzSHmfa1096",
+              "source": "pi-builtin-shell",
+              "exitCode": 0,
+              "status": "passed",
+              "commandSha256": "d6627689b58782728fb42bb71836aa18daf7fc54a2fd55dedb2feb3fb518ad1b",
+              "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "usableNativeOutput": true,
+              "excerptTruncated": false
+            }
+          }
+        ],
+        "failure": "Baseline diagnosis retained forbidden command/expectation fields after one format correction; calibration remained unconfirmed despite all three observed exits 1->0."
+      },
+      "counts": {
+        "denominator": 3,
+        "accepted": 3,
+        "targetedBlocks": 0,
+        "otherConcreteBlocks": 0,
+        "abstentions": 0
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "slot": 1,
+      "id": "pallets__flask-4045",
+      "repetition": 1,
+      "startedAt": "2026-11-16T02:22:18.559Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 113739,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 4,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 4,
+          "medianMs": 13583.5,
+          "p90Ms": 82784,
+          "maxMs": 82784
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 4,
+          "medianMs": 1098.5,
+          "p90Ms": 1562,
+          "maxMs": 1562
+        },
+        "firstContent": {
+          "count": 4,
+          "medianMs": 1135,
+          "p90Ms": 1582,
+          "maxMs": 1582
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Ready; treats dotted-blueprint test failure as authorized behavior and inherited B3 environment failure as out of scope. No dotted route-endpoint exception-contract finding.",
+        "targetRelevance": "no_registered_target_finding",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Flask endpoint exception expectation underspecified; no aligned blocking finding.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch adds the requested dot guard in Blueprint.__init__ (src/flask/blueprints.py:197-198), raises ValueError with the expected message before self.name assignment, and updates the docstring, docs/blueprints.rst, and CHANGES.rst under Version 2.0.1 Unreleased. Dotted names are rejected at construction (B1) while dot-free names still construct and keep their names (B2); the guard does not touch nested-registration or add_url_rule dot assertions. Protected tests/config are unmodified. compileall and flake8 pass on the changed source. The only new suite failure is a stale protected test that constructs a dotted blueprint name, which is directly authorized by the request to reject dots; nested-runtime checks are blocked by an unrelated Werkzeug 2.3.7 environment incompatibility, but code inspection shows dot-free/nested paths are unaffected.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        },
+        {
+          "id": "A5",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "1b6402fdf1cb4a2009c1b565a4ebd8fd3a8ee48249b3271571c40bd07397b98a",
+      "rawRecordSha256": "d047abbb85cd761daf2197add5265e3bf5c997db9589bae58f856dc8ce01cda3",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 4,
+        "toolCalls": 5,
+        "totalTokens": 100112,
+        "usage": {
+          "input": 28061,
+          "output": 9715,
+          "cacheRead": 62336,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:22:18.696Z",
+            "outcome": "completed",
+            "elapsedMs": 6593,
+            "durationMs": 6593,
+            "headersMs": 1562,
+            "firstStreamMs": 1564,
+            "firstContentMs": 1582,
+            "payloadBytes": 60183,
+            "httpStatus": 200,
+            "usage": {
+              "input": 16030,
+              "output": 546,
+              "cacheRead": 448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:22:25.511Z",
+            "outcome": "completed",
+            "elapsedMs": 82784,
+            "durationMs": 82784,
+            "headersMs": 825,
+            "firstStreamMs": 825,
+            "firstContentMs": 847,
+            "payloadBytes": 70035,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2555,
+              "output": 7294,
+              "cacheRead": 16384,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:23:48.303Z",
+            "outcome": "completed",
+            "elapsedMs": 3207,
+            "durationMs": 3207,
+            "headersMs": 1259,
+            "firstStreamMs": 1259,
+            "firstContentMs": 1281,
+            "payloadBytes": 107554,
+            "httpStatus": 200,
+            "usage": {
+              "input": 7965,
+              "output": 187,
+              "cacheRead": 18816,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:23:51.710Z",
+            "outcome": "completed",
+            "elapsedMs": 20574,
+            "durationMs": 20574,
+            "headersMs": 938,
+            "firstStreamMs": 938,
+            "firstContentMs": 989,
+            "payloadBytes": 113192,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1511,
+              "output": 1688,
+              "cacheRead": 26688,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 2,
+      "id": "matplotlib__matplotlib-23563",
+      "repetition": 1,
+      "startedAt": "2026-11-16T02:24:15.417Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 150746,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 11,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 11,
+          "medianMs": 4628,
+          "p90Ms": 27943,
+          "maxMs": 71726
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 11,
+          "medianMs": 1037,
+          "p90Ms": 1198,
+          "maxMs": 1532
+        },
+        "firstContent": {
+          "count": 11,
+          "medianMs": 1066,
+          "p90Ms": 1231,
+          "maxMs": 1532
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Ready; claims ndim>1 inputs were already broken without addressing the exact Nx1 source path. No target credit.",
+        "targetRelevance": "no_registered_target_finding",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Reviewer claims prior input failure; exact Nx1 boundary not addressed.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch adds a pre-artist 1D validation in Axes3D.plot and makes art3d.line_2d_to_3d atomic, so a 2D-coordinate 3D line plot raises a descriptive ValueError before any Line3D is created, and any conversion failure restores Line2D. Code reading confirms no previously working input shape is rejected: every ndim>1 case already failed in Line3D.set_3d_properties via np.broadcast_to (before/inside the conversion), so only the resulting half-converted artist state changes. Existing mplot3d tests and the configured visible syntax check pass, and the scratch receipt shows the reported trigger followed by a clean draw.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "6e55e4b6ceb7b6a140984be9c0950ac82a008ea7bba39b99ab5a0b7b93705679",
+      "rawRecordSha256": "16031f3a16f2500598b71b28efe9700f44a09fad313c3302fbadb4e60a2e3477",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 11,
+        "toolCalls": 16,
+        "totalTokens": 257146,
+        "usage": {
+          "input": 32287,
+          "output": 11419,
+          "cacheRead": 213440,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:24:15.431Z",
+            "outcome": "completed",
+            "elapsedMs": 2730,
+            "durationMs": 2730,
+            "headersMs": 1065,
+            "firstStreamMs": 1066,
+            "firstContentMs": 1081,
+            "payloadBytes": 37169,
+            "httpStatus": 200,
+            "usage": {
+              "input": 9686,
+              "output": 210,
+              "cacheRead": 448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:24:18.167Z",
+            "outcome": "completed",
+            "elapsedMs": 2949,
+            "durationMs": 2949,
+            "headersMs": 956,
+            "firstStreamMs": 956,
+            "firstContentMs": 987,
+            "payloadBytes": 45731,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2607,
+              "output": 230,
+              "cacheRead": 10048,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:24:21.306Z",
+            "outcome": "completed",
+            "elapsedMs": 27943,
+            "durationMs": 27943,
+            "headersMs": 707,
+            "firstStreamMs": 707,
+            "firstContentMs": 738,
+            "payloadBytes": 49963,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1626,
+              "output": 2184,
+              "cacheRead": 12544,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:24:49.479Z",
+            "outcome": "completed",
+            "elapsedMs": 5750,
+            "durationMs": 5750,
+            "headersMs": 1198,
+            "firstStreamMs": 1199,
+            "firstContentMs": 1226,
+            "payloadBytes": 59442,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2814,
+              "output": 379,
+              "cacheRead": 14080,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 5,
+            "turn": 5,
+            "startedAt": "2026-11-16T02:24:55.442Z",
+            "outcome": "completed",
+            "elapsedMs": 10989,
+            "durationMs": 10989,
+            "headersMs": 850,
+            "firstStreamMs": 850,
+            "firstContentMs": 874,
+            "payloadBytes": 66171,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2310,
+              "output": 854,
+              "cacheRead": 16832,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 6,
+            "turn": 6,
+            "startedAt": "2026-11-16T02:25:06.755Z",
+            "outcome": "completed",
+            "elapsedMs": 14521,
+            "durationMs": 14521,
+            "headersMs": 1160,
+            "firstStreamMs": 1161,
+            "firstContentMs": 1231,
+            "payloadBytes": 82469,
+            "httpStatus": 200,
+            "usage": {
+              "input": 6199,
+              "output": 1167,
+              "cacheRead": 19072,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 7,
+            "turn": 7,
+            "startedAt": "2026-11-16T02:25:22.465Z",
+            "outcome": "completed",
+            "elapsedMs": 2278,
+            "durationMs": 2278,
+            "headersMs": 1005,
+            "firstStreamMs": 1005,
+            "firstContentMs": 1034,
+            "payloadBytes": 88678,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2100,
+              "output": 141,
+              "cacheRead": 25152,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 8,
+            "turn": 8,
+            "startedAt": "2026-11-16T02:25:24.750Z",
+            "outcome": "completed",
+            "elapsedMs": 4628,
+            "durationMs": 4628,
+            "headersMs": 1037,
+            "firstStreamMs": 1037,
+            "firstContentMs": 1066,
+            "payloadBytes": 91556,
+            "httpStatus": 200,
+            "usage": {
+              "input": 944,
+              "output": 303,
+              "cacheRead": 27136,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 9,
+            "turn": 9,
+            "startedAt": "2026-11-16T02:25:29.586Z",
+            "outcome": "completed",
+            "elapsedMs": 2527,
+            "durationMs": 2527,
+            "headersMs": 895,
+            "firstStreamMs": 896,
+            "firstContentMs": 918,
+            "payloadBytes": 96316,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1558,
+              "output": 225,
+              "cacheRead": 27968,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 10,
+            "turn": 10,
+            "startedAt": "2026-11-16T02:25:32.397Z",
+            "outcome": "completed",
+            "elapsedMs": 2004,
+            "durationMs": 2004,
+            "headersMs": 1196,
+            "firstStreamMs": 1196,
+            "firstContentMs": 1196,
+            "payloadBytes": 100373,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1407,
+              "output": 104,
+              "cacheRead": 29440,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 11,
+            "turn": 11,
+            "startedAt": "2026-11-16T02:25:34.407Z",
+            "outcome": "completed",
+            "elapsedMs": 71726,
+            "durationMs": 71726,
+            "headersMs": 1532,
+            "firstStreamMs": 1532,
+            "firstContentMs": 1532,
+            "payloadBytes": 103242,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1036,
+              "output": 5622,
+              "cacheRead": 30720,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 3,
+      "id": "astropy__astropy-6938",
+      "repetition": 1,
+      "startedAt": "2026-11-16T02:26:50.743Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 153541,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 5,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 5,
+          "medianMs": 26214,
+          "p90Ms": 54487,
+          "maxMs": 54487
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 5,
+          "medianMs": 933,
+          "p90Ms": 1873,
+          "maxMs": 1873
+        },
+        "firstContent": {
+          "count": 5,
+          "medianMs": 961,
+          "p90Ms": 1903,
+          "maxMs": 1903
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch replaces the discarded chararray.replace() call with an in-place assignment (`output_field[:] = output_field.replace(...)`), which is exactly the requested D-exponent fix. Historical receipts show explicit D and default/derived D25.17 ASCII columns now write D exponents with field widths preserved, E/F/A/I columns are unchanged, and the changed-value write/read script finished with ALL CHECKS PASSED. test_table.py passed 84 tests with 2 skips. The two test_core.py failures are shown by the baseline stash receipt to fail identically with the fix reverted, so they are pre-existing environment/mock failures, not regressions. The supplied patch touches only astropy/io/fits/fitsrec.py.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        },
+        {
+          "id": "A5",
+          "status": "met"
+        },
+        {
+          "id": "A6",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "b60009b3758ab42d5906d107db2d32e65a4715e8556234496788b213d6eb8a1e",
+      "rawRecordSha256": "4d16b018a4e2469f47021e8ab5dd315be9a9440edf0e43e6c0cb563e9f28b109",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 5,
+        "toolCalls": 6,
+        "totalTokens": 101301,
+        "usage": {
+          "input": 24558,
+          "output": 11847,
+          "cacheRead": 64896,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:26:50.783Z",
+            "outcome": "completed",
+            "elapsedMs": 26214,
+            "durationMs": 26214,
+            "headersMs": 1873,
+            "firstStreamMs": 1873,
+            "firstContentMs": 1903,
+            "payloadBytes": 43528,
+            "httpStatus": 200,
+            "usage": {
+              "input": 11053,
+              "output": 2136,
+              "cacheRead": 448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:27:17.282Z",
+            "outcome": "completed",
+            "elapsedMs": 10898,
+            "durationMs": 10898,
+            "headersMs": 832,
+            "firstStreamMs": 832,
+            "firstContentMs": 889,
+            "payloadBytes": 59551,
+            "httpStatus": 200,
+            "usage": {
+              "input": 4335,
+              "output": 829,
+              "cacheRead": 11392,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:27:28.191Z",
+            "outcome": "completed",
+            "elapsedMs": 13977,
+            "durationMs": 13977,
+            "headersMs": 933,
+            "firstStreamMs": 934,
+            "firstContentMs": 961,
+            "payloadBytes": 67391,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2154,
+              "output": 983,
+              "cacheRead": 15616,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:27:42.418Z",
+            "outcome": "completed",
+            "elapsedMs": 47339,
+            "durationMs": 47339,
+            "headersMs": 929,
+            "firstStreamMs": 929,
+            "firstContentMs": 957,
+            "payloadBytes": 75032,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2199,
+              "output": 3621,
+              "cacheRead": 17664,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 5,
+            "turn": 5,
+            "startedAt": "2026-11-16T02:28:29.768Z",
+            "outcome": "completed",
+            "elapsedMs": 54487,
+            "durationMs": 54487,
+            "headersMs": 1091,
+            "firstStreamMs": 1091,
+            "firstContentMs": 1112,
+            "payloadBytes": 94835,
+            "httpStatus": 200,
+            "usage": {
+              "input": 4817,
+              "output": 4278,
+              "cacheRead": 19776,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 4,
+      "id": "sympy__sympy-18189",
+      "repetition": 1,
+      "startedAt": "2026-11-16T02:29:27.642Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 41325,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 3,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 3,
+          "medianMs": 10620,
+          "p90Ms": 27663,
+          "maxMs": 27663
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 3,
+          "medianMs": 1346,
+          "p90Ms": 2736,
+          "maxMs": 2736
+        },
+        "firstContent": {
+          "count": 3,
+          "medianMs": 1346,
+          "p90Ms": 2767,
+          "maxMs": 2767
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The one-line patch forwards permute into the recursive diophantine call used when syms differs from the alphabetically sorted variable order, so the issue repro with syms=(n,m), permute=True now produces the full signed-permutation solution set before tuple reordering. The change only broadens results for the explicitly requested permute=True case, leaves default/permute=False and syms ordering behavior intact, and touches only the affected public entry point. Existing module tests and the visible syntax check passed.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "eb7912d820a531bd6db395d506634f3c22ff2bb517fd79450d9a2642bef875ce",
+      "rawRecordSha256": "7e2c36b2c77c25947bc7d5baff59f9c1294e74b7f06fff2777d676abec064548",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 3,
+        "toolCalls": 4,
+        "totalTokens": 47691,
+        "usage": {
+          "input": 16720,
+          "output": 2939,
+          "cacheRead": 28032,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:29:27.668Z",
+            "outcome": "completed",
+            "elapsedMs": 2564,
+            "durationMs": 2564,
+            "headersMs": 1346,
+            "firstStreamMs": 1346,
+            "firstContentMs": 1346,
+            "payloadBytes": 45389,
+            "httpStatus": 200,
+            "usage": {
+              "input": 12717,
+              "output": 178,
+              "cacheRead": 448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:29:30.461Z",
+            "outcome": "completed",
+            "elapsedMs": 10620,
+            "durationMs": 10620,
+            "headersMs": 2736,
+            "firstStreamMs": 2736,
+            "firstContentMs": 2767,
+            "payloadBytes": 50556,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1543,
+              "output": 735,
+              "cacheRead": 13056,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:29:41.282Z",
+            "outcome": "completed",
+            "elapsedMs": 27663,
+            "durationMs": 27663,
+            "headersMs": 774,
+            "firstStreamMs": 774,
+            "firstContentMs": 799,
+            "payloadBytes": 57853,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2460,
+              "output": 2026,
+              "cacheRead": 14528,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 5,
+      "id": "matplotlib__matplotlib-23563",
+      "repetition": 2,
+      "startedAt": "2026-11-16T02:30:13.629Z",
+      "rawModelVerdict": "changes_requested",
+      "normalizedModelVerdict": "changes_requested",
+      "effectiveModelVerdict": "changes_requested",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 260628,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewStop": {
+        "reason": "code_defects",
+        "action": "fix_code",
+        "issueCount": 1,
+        "unconfirmedIds": []
+      },
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 11,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 11,
+          "medianMs": 5514,
+          "p90Ms": 67548,
+          "maxMs": 70768
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 11,
+          "medianMs": 1210,
+          "p90Ms": 2420,
+          "maxMs": 2609
+        },
+        "firstContent": {
+          "count": 11,
+          "medianMs": 1276,
+          "p90Ms": 2444,
+          "maxMs": 2617
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "targeted_changes_requested",
+        "reason": "Concrete axes3d.py regression with np.arange(3)[:, None] trigger and pre-change column-splitting source path; matches the registered Nx1 target. No usable native pair was supplied.",
+        "targetRelevance": "explicit_Nx1_boundary",
+        "pathAndTrigger": "lib/mpl_toolkits/mplot3d/axes3d.py; ax.plot(np.arange(3), np.arange(3)[:, None], 0)",
+        "requirementAuthority": "Inferred compatibility preservation; original request does not authorize narrowing.",
+        "officialAlignment": "matches_retained_Nx1_failure",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch removes the reported corruption: Axes3D.plot validates before creating artists, and line_2d_to_3d restores Line2D on conversion failure, so no Line3D lacking _verts3d can persist (confirmed by the /tmp/check_issue.py receipt and by the 136 passing test_mplot3d tests plus the syntax check). However, the blanket np.ndim > 1 guard is broader than the reported trigger and rejects shapes the pre-change code handled correctly (2D y that Axes.plot splits into per-column datasets, e.g. column vectors and multi-line plots), so it is an unauthorized compatibility narrowing.",
+      "findings": [
+        "lib/mpl_toolkits/mplot3d/axes3d.py:1279-1289 — the new guard `any(np.ndim(data) > 1 for data in (xs, ys, zs))` rejects every non-1D coordinate, including shapes the previous implementation accepted. Trigger: `ax = plt.figure().add_subplot(projection='3d'); ax.plot(np.arange(3), np.arange(3)[:, None], 0)` (or `ax.plot(np.arange(3), np.arange(6).reshape(3, 2), np.arange(3))`). Pre-change behavior: Axes.plot/_plot_args treats 2D y as one dataset per column (x of length M, zs broadcast to `np.shape(xs)` = (M,)) and each resulting 1D Line2D converts successfully, producing valid Line3D artists that draw. Post-change behavior: ValueError before any artist is created. Expected: the corruption fix must not reject these previously working call paths; validate only the shape that actually cannot be converted (e.g. per-line zs/len(xs) compatibility) or rely on the atomic conversion in art3d.line_2d_to_3d, which already prevents the reported half-converted Line3D. Neither an existing test asserting rejection of this shape nor an explicit statement in the original request authorizes it; the docstring/model-authored ledger is not such authority."
+      ],
+      "issueKinds": [
+        "code_defect"
+      ],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "4d9214812bc83a690526272ef527f709cee47255036bea69ea23f691a15846fa",
+      "rawRecordSha256": "82d921501e178d5c4ac057f1be31a4db3b9ffc2a53a476af1bff7fff9ab3021c",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 11,
+        "toolCalls": 13,
+        "totalTokens": 284092,
+        "usage": {
+          "input": 23235,
+          "output": 20345,
+          "cacheRead": 240512,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:30:13.656Z",
+            "outcome": "completed",
+            "elapsedMs": 33812,
+            "durationMs": 33812,
+            "headersMs": 2609,
+            "firstStreamMs": 2610,
+            "firstContentMs": 2617,
+            "payloadBytes": 37169,
+            "httpStatus": 200,
+            "usage": {
+              "input": 86,
+              "output": 2706,
+              "cacheRead": 10048,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:30:47.481Z",
+            "outcome": "completed",
+            "elapsedMs": 6314,
+            "durationMs": 6314,
+            "headersMs": 1759,
+            "firstStreamMs": 1759,
+            "firstContentMs": 1793,
+            "payloadBytes": 54646,
+            "httpStatus": 200,
+            "usage": {
+              "input": 5185,
+              "output": 405,
+              "cacheRead": 10112,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:30:55.152Z",
+            "outcome": "completed",
+            "elapsedMs": 2191,
+            "durationMs": 2191,
+            "headersMs": 1210,
+            "firstStreamMs": 1210,
+            "firstContentMs": 1239,
+            "payloadBytes": 57118,
+            "httpStatus": 200,
+            "usage": {
+              "input": 962,
+              "output": 127,
+              "cacheRead": 15232,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:30:57.356Z",
+            "outcome": "completed",
+            "elapsedMs": 64515,
+            "durationMs": 64515,
+            "headersMs": 814,
+            "firstStreamMs": 815,
+            "firstContentMs": 841,
+            "payloadBytes": 60983,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1181,
+              "output": 5187,
+              "cacheRead": 16128,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 5,
+            "turn": 5,
+            "startedAt": "2026-11-16T02:32:02.120Z",
+            "outcome": "completed",
+            "elapsedMs": 1885,
+            "durationMs": 1885,
+            "headersMs": 1021,
+            "firstStreamMs": 1021,
+            "firstContentMs": 1260,
+            "payloadBytes": 80209,
+            "httpStatus": 200,
+            "usage": {
+              "input": 5429,
+              "output": 145,
+              "cacheRead": 17216,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 6,
+            "turn": 6,
+            "startedAt": "2026-11-16T02:32:04.017Z",
+            "outcome": "completed",
+            "elapsedMs": 70768,
+            "durationMs": 70768,
+            "headersMs": 2420,
+            "firstStreamMs": 2420,
+            "firstContentMs": 2444,
+            "payloadBytes": 86743,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1764,
+              "output": 6005,
+              "cacheRead": 22528,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 7,
+            "turn": 7,
+            "startedAt": "2026-11-16T02:33:14.793Z",
+            "outcome": "completed",
+            "elapsedMs": 5514,
+            "durationMs": 5514,
+            "headersMs": 985,
+            "firstStreamMs": 985,
+            "firstContentMs": 1044,
+            "payloadBytes": 110997,
+            "httpStatus": 200,
+            "usage": {
+              "input": 6602,
+              "output": 405,
+              "cacheRead": 24192,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 8,
+            "turn": 8,
+            "startedAt": "2026-11-16T02:33:20.545Z",
+            "outcome": "completed",
+            "elapsedMs": 1646,
+            "durationMs": 1646,
+            "headersMs": 1125,
+            "firstStreamMs": 1125,
+            "firstContentMs": 1276,
+            "payloadBytes": 112719,
+            "httpStatus": 200,
+            "usage": {
+              "input": 493,
+              "output": 85,
+              "cacheRead": 30720,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 9,
+            "turn": 9,
+            "startedAt": "2026-11-16T02:33:22.392Z",
+            "outcome": "completed",
+            "elapsedMs": 1903,
+            "durationMs": 1903,
+            "headersMs": 904,
+            "firstStreamMs": 905,
+            "firstContentMs": 926,
+            "payloadBytes": 113484,
+            "httpStatus": 200,
+            "usage": {
+              "input": 323,
+              "output": 119,
+              "cacheRead": 31104,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 10,
+            "turn": 10,
+            "startedAt": "2026-11-16T02:33:24.510Z",
+            "outcome": "completed",
+            "elapsedMs": 1993,
+            "durationMs": 1993,
+            "headersMs": 1568,
+            "firstStreamMs": 1568,
+            "firstContentMs": 1718,
+            "payloadBytes": 114899,
+            "httpStatus": 200,
+            "usage": {
+              "input": 514,
+              "output": 84,
+              "cacheRead": 31360,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 11,
+            "turn": 11,
+            "startedAt": "2026-11-16T02:33:26.683Z",
+            "outcome": "completed",
+            "elapsedMs": 67548,
+            "durationMs": 67548,
+            "headersMs": 2049,
+            "firstStreamMs": 2049,
+            "firstContentMs": 2049,
+            "payloadBytes": 117138,
+            "httpStatus": 200,
+            "usage": {
+              "input": 696,
+              "output": 5077,
+              "cacheRead": 31872,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 6,
+      "id": "astropy__astropy-6938",
+      "repetition": 2,
+      "startedAt": "2026-11-16T02:34:38.779Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 86770,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 4,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 4,
+          "medianMs": 16524,
+          "p90Ms": 51231,
+          "maxMs": 51231
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 4,
+          "medianMs": 939,
+          "p90Ms": 1537,
+          "maxMs": 1537
+        },
+        "firstContent": {
+          "count": 4,
+          "medianMs": 973,
+          "p90Ms": 1558,
+          "maxMs": 1558
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch makes the D-exponent replacement effective with the minimal in-place assignment in FITS_rec._scale_back_ascii (astropy/io/fits/fitsrec.py:1264-1266), matching the safe-default approach in the plan. A verification script receipt shows explicit D25.17 and default float64 ASCII columns written with 'D+'/'D-' exponents while E, F, A, I raw output is unchanged, and the table test module passes (84 passed, 2 skipped) once the broken PYTEST_ADDOPTS env value is cleared; the two test_core failures are shown to fail identically with the fix stashed. The remaining precision-0 float read-back limitation is pre-existing formatting behavior (trailing decimal point) that the patch does not touch and that lies outside the original request.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        },
+        {
+          "id": "A5",
+          "status": "met"
+        },
+        {
+          "id": "A6",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "0a6d0e8f3a89f0a062606634629dffdda715ee76707900bd7a89550b2984d994",
+      "rawRecordSha256": "c1981b5de11c3a64b7bd6f7aa930401cd9da8e1e4f6739a0a008bda131fe0402",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 4,
+        "toolCalls": 4,
+        "totalTokens": 65580,
+        "usage": {
+          "input": 5619,
+          "output": 6585,
+          "cacheRead": 53376,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:34:38.810Z",
+            "outcome": "completed",
+            "elapsedMs": 24659,
+            "durationMs": 24659,
+            "headersMs": 1537,
+            "firstStreamMs": 1538,
+            "firstContentMs": 1558,
+            "payloadBytes": 43528,
+            "httpStatus": 200,
+            "usage": {
+              "input": 109,
+              "output": 1783,
+              "cacheRead": 11392,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:35:03.724Z",
+            "outcome": "completed",
+            "elapsedMs": 8389,
+            "durationMs": 8389,
+            "headersMs": 985,
+            "firstStreamMs": 985,
+            "firstContentMs": 985,
+            "payloadBytes": 56292,
+            "httpStatus": 200,
+            "usage": {
+              "input": 3138,
+              "output": 569,
+              "cacheRead": 11392,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:35:12.342Z",
+            "outcome": "completed",
+            "elapsedMs": 1955,
+            "durationMs": 1955,
+            "headersMs": 815,
+            "firstStreamMs": 816,
+            "firstContentMs": 929,
+            "payloadBytes": 62604,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1751,
+              "output": 126,
+              "cacheRead": 14464,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:35:14.306Z",
+            "outcome": "completed",
+            "elapsedMs": 51231,
+            "durationMs": 51231,
+            "headersMs": 893,
+            "firstStreamMs": 893,
+            "firstContentMs": 961,
+            "payloadBytes": 64992,
+            "httpStatus": 200,
+            "usage": {
+              "input": 621,
+              "output": 4107,
+              "cacheRead": 16128,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 7,
+      "id": "sympy__sympy-18189",
+      "repetition": 2,
+      "startedAt": "2026-11-16T02:36:09.063Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 48010,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 2,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 2,
+          "medianMs": 23870.5,
+          "p90Ms": 33921,
+          "maxMs": 33921
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 2,
+          "medianMs": 762,
+          "p90Ms": 851,
+          "maxMs": 851
+        },
+        "firstContent": {
+          "count": 2,
+          "medianMs": 801,
+          "p90Ms": 900,
+          "maxMs": 900
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The one-line patch propagates permute into the recursive call made in the syms-reordering branch of diophantine(). For the reported equation both syms=(m,n) and syms=(n,m) now return the complete 8-element set (the set is symmetric under entry swap, so the reordered tuples still equal the expected set), while permute=False base-solution behavior and syms ordering are unchanged. Paired native receipts show B1/B2/B3 failing before and passing after, and the full diophantine test module passes.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "45121ce08db43a94c90e8003af2065a512400f6c938337692c46e5f1b44fb2e4",
+      "rawRecordSha256": "0d83b0053b8331ddae33fd2987820221b1e4e97919a5f000d1f1ac20b1bee2cf",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 2,
+        "toolCalls": 2,
+        "totalTokens": 37307,
+        "usage": {
+          "input": 7073,
+          "output": 4122,
+          "cacheRead": 26112,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:36:09.089Z",
+            "outcome": "completed",
+            "elapsedMs": 13820,
+            "durationMs": 13820,
+            "headersMs": 673,
+            "firstStreamMs": 673,
+            "firstContentMs": 702,
+            "payloadBytes": 45389,
+            "httpStatus": 200,
+            "usage": {
+              "input": 109,
+              "output": 1174,
+              "cacheRead": 13056,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:36:23.138Z",
+            "outcome": "completed",
+            "elapsedMs": 33921,
+            "durationMs": 33921,
+            "headersMs": 851,
+            "firstStreamMs": 851,
+            "firstContentMs": 900,
+            "payloadBytes": 69640,
+            "httpStatus": 200,
+            "usage": {
+              "input": 6964,
+              "output": 2948,
+              "cacheRead": 13056,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 8,
+      "id": "pallets__flask-4045",
+      "repetition": 2,
+      "startedAt": "2026-11-16T02:36:59.946Z",
+      "rawModelVerdict": null,
+      "normalizedModelVerdict": null,
+      "effectiveModelVerdict": null,
+      "hostGuardApplied": false,
+      "elapsedMs": 300031,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewFailure": "budget_exhausted",
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 3,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 2,
+          "medianMs": 56736.5,
+          "p90Ms": 61150,
+          "maxMs": 61150
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 3,
+          "medianMs": 2644,
+          "p90Ms": 3274,
+          "maxMs": 3274
+        },
+        "firstContent": {
+          "count": 3,
+          "medianMs": 2785,
+          "p90Ms": 3737,
+          "maxMs": 3737
+        },
+        "censoredCalls": 1,
+        "longCensoredCalls": 1,
+        "priority": "collect_more_data"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "abstained",
+        "reason": "300-second reviewer duration limit with no final verdict; not a targeted detection or an insufficient_evidence model verdict.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "No final review.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": "reviewer_duration_budget_300s"
+      },
+      "summary": null,
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [],
+      "rawFinalTextSha256": null,
+      "rawRecordSha256": "c162b3c2874dbfc330cf001e2aa8eaf160c71ed85a1c69f54f945d5901b446a3",
+      "errorSha256": "ddb1ce43a037103c898d06f4ad26f0991059089112c9c9128b9d6971dd92c975",
+      "usage": {
+        "modelTurns": 3,
+        "toolCalls": 4,
+        "totalTokens": 42321,
+        "usage": {
+          "input": 6885,
+          "output": 2668,
+          "cacheRead": 32768,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:36:59.982Z",
+            "outcome": "completed",
+            "elapsedMs": 52323,
+            "durationMs": 52323,
+            "headersMs": 1017,
+            "firstStreamMs": 1017,
+            "firstContentMs": 1017,
+            "payloadBytes": 60183,
+            "httpStatus": 200,
+            "usage": {
+              "input": 94,
+              "output": 1324,
+              "cacheRead": 16384,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:37:52.637Z",
+            "outcome": "completed",
+            "elapsedMs": 61150,
+            "durationMs": 61150,
+            "headersMs": 2644,
+            "firstStreamMs": 2644,
+            "firstContentMs": 2785,
+            "payloadBytes": 84028,
+            "httpStatus": 200,
+            "usage": {
+              "input": 6791,
+              "output": 1344,
+              "cacheRead": 16384,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:38:53.788Z",
+            "outcome": "budget_exhausted",
+            "elapsedMs": 186162,
+            "durationMs": null,
+            "headersMs": 3274,
+            "firstStreamMs": 3274,
+            "firstContentMs": 3737,
+            "payloadBytes": 93139,
+            "httpStatus": 200,
+            "usage": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 9,
+      "id": "astropy__astropy-6938",
+      "repetition": 3,
+      "startedAt": "2026-11-16T02:42:02.912Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 167948,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 9,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 9,
+          "medianMs": 8503,
+          "p90Ms": 57068,
+          "maxMs": 57068
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 9,
+          "medianMs": 1332,
+          "p90Ms": 2239,
+          "maxMs": 2239
+        },
+        "firstContent": {
+          "count": 9,
+          "medianMs": 1332,
+          "p90Ms": 2240,
+          "maxMs": 2240
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The patch fixes the reported no-op by assigning the result of the chararray separator replacement back into output_field. Historical candidate receipts show D25.17 explicit and default float64 columns now emit D exponents with no E exponent, E/F/A/I output is unchanged, and astropy/io/fits/tests/test_table.py passes (84 passed, 2 skipped). Only fitsrec.py is modified. A pre-existing precision-0 D/E readback problem and a broken PYTEST_ADDOPTS environment quirk are noted but are not introduced by this change and are outside the user's reported bug.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        },
+        {
+          "id": "A5",
+          "status": "met"
+        },
+        {
+          "id": "A6",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "da945eba17abd89d7653ef8c122370bc19a9041da8b6614dec951446714055c9",
+      "rawRecordSha256": "5fc92fdb93de0a86928aeb243365e6b7b912a23fe69835762750672d518f80e6",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 9,
+        "toolCalls": 10,
+        "totalTokens": 211706,
+        "usage": {
+          "input": 17727,
+          "output": 11131,
+          "cacheRead": 182848,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:42:02.956Z",
+            "outcome": "completed",
+            "elapsedMs": 20202,
+            "durationMs": 20202,
+            "headersMs": 654,
+            "firstStreamMs": 654,
+            "firstContentMs": 658,
+            "payloadBytes": 43528,
+            "httpStatus": 200,
+            "usage": {
+              "input": 109,
+              "output": 1733,
+              "cacheRead": 11392,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:42:23.174Z",
+            "outcome": "completed",
+            "elapsedMs": 8503,
+            "durationMs": 8503,
+            "headersMs": 881,
+            "firstStreamMs": 881,
+            "firstContentMs": 932,
+            "payloadBytes": 58236,
+            "httpStatus": 200,
+            "usage": {
+              "input": 3638,
+              "output": 658,
+              "cacheRead": 11392,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:42:32.041Z",
+            "outcome": "completed",
+            "elapsedMs": 1826,
+            "durationMs": 1826,
+            "headersMs": 1470,
+            "firstStreamMs": 1470,
+            "firstContentMs": 1470,
+            "payloadBytes": 74750,
+            "httpStatus": 200,
+            "usage": {
+              "input": 5061,
+              "output": 101,
+              "cacheRead": 14912,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:42:33.876Z",
+            "outcome": "completed",
+            "elapsedMs": 34996,
+            "durationMs": 34996,
+            "headersMs": 2171,
+            "firstStreamMs": 2171,
+            "firstContentMs": 2191,
+            "payloadBytes": 76685,
+            "httpStatus": 200,
+            "usage": {
+              "input": 614,
+              "output": 2587,
+              "cacheRead": 19904,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 5,
+            "turn": 5,
+            "startedAt": "2026-11-16T02:43:09.108Z",
+            "outcome": "completed",
+            "elapsedMs": 37714,
+            "durationMs": 37714,
+            "headersMs": 2239,
+            "firstStreamMs": 2239,
+            "firstContentMs": 2240,
+            "payloadBytes": 89821,
+            "httpStatus": 200,
+            "usage": {
+              "input": 3460,
+              "output": 1691,
+              "cacheRead": 20416,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 6,
+            "turn": 6,
+            "startedAt": "2026-11-16T02:43:47.074Z",
+            "outcome": "completed",
+            "elapsedMs": 2152,
+            "durationMs": 2152,
+            "headersMs": 1002,
+            "firstStreamMs": 1002,
+            "firstContentMs": 1021,
+            "payloadBytes": 100333,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2667,
+              "output": 130,
+              "cacheRead": 23808,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 7,
+            "turn": 7,
+            "startedAt": "2026-11-16T02:43:49.231Z",
+            "outcome": "completed",
+            "elapsedMs": 1743,
+            "durationMs": 1743,
+            "headersMs": 861,
+            "firstStreamMs": 861,
+            "firstContentMs": 887,
+            "payloadBytes": 103808,
+            "httpStatus": 200,
+            "usage": {
+              "input": 859,
+              "output": 111,
+              "cacheRead": 26368,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 8,
+            "turn": 8,
+            "startedAt": "2026-11-16T02:43:50.980Z",
+            "outcome": "completed",
+            "elapsedMs": 2790,
+            "durationMs": 2790,
+            "headersMs": 1332,
+            "firstStreamMs": 1332,
+            "firstContentMs": 1332,
+            "payloadBytes": 105485,
+            "httpStatus": 200,
+            "usage": {
+              "input": 492,
+              "output": 151,
+              "cacheRead": 27136,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 9,
+            "turn": 9,
+            "startedAt": "2026-11-16T02:43:53.776Z",
+            "outcome": "completed",
+            "elapsedMs": 57068,
+            "durationMs": 57068,
+            "headersMs": 1907,
+            "firstStreamMs": 1908,
+            "firstContentMs": 1923,
+            "payloadBytes": 108317,
+            "httpStatus": 200,
+            "usage": {
+              "input": 827,
+              "output": 3969,
+              "cacheRead": 27520,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 10,
+      "id": "sympy__sympy-18189",
+      "repetition": 3,
+      "startedAt": "2026-11-16T02:44:53.748Z",
+      "rawModelVerdict": "ready",
+      "normalizedModelVerdict": "ready",
+      "effectiveModelVerdict": "ready",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 74591,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 3,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 3,
+          "medianMs": 23405,
+          "p90Ms": 48492,
+          "maxMs": 48492
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 3,
+          "medianMs": 1322,
+          "p90Ms": 3415,
+          "maxMs": 3415
+        },
+        "firstContent": {
+          "count": 3,
+          "medianMs": 1322,
+          "p90Ms": 3470,
+          "maxMs": 3470
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "accepted",
+        "reason": "Accepted control; no blocking finding.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "Original requested control behavior retained.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": null
+      },
+      "summary": "The one-line patch forwards permute into the recursive diophantine call made in the syms-reordering branch, so permutations are generated before the result is reordered into syms order. For permute=False the recursive call still defaults to False, so prior no-permute behavior is preserved. The reported trigger is covered by a candidate native receipt (B1 exit 0, baseline exit 1 with {(3,2)}), the pre-change source visibly dropped the flag, and the full existing diophantine test module run reports OK. All acceptance IDs are met.",
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "b892e9be247a104b8a353048d5f36745a7acdadb4a3d145ca5fd131ebd72378d",
+      "rawRecordSha256": "5c46a78e09de98eef5254ed471a0aad50fd02e4d37ab2af6c50e19f410ac4264",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 3,
+        "toolCalls": 4,
+        "totalTokens": 51638,
+        "usage": {
+          "input": 4603,
+          "output": 5179,
+          "cacheRead": 41856,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:44:53.768Z",
+            "outcome": "completed",
+            "elapsedMs": 23405,
+            "durationMs": 23405,
+            "headersMs": 3415,
+            "firstStreamMs": 3415,
+            "firstContentMs": 3470,
+            "payloadBytes": 45389,
+            "httpStatus": 200,
+            "usage": {
+              "input": 109,
+              "output": 1412,
+              "cacheRead": 13056,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:45:17.387Z",
+            "outcome": "completed",
+            "elapsedMs": 2444,
+            "durationMs": 2444,
+            "headersMs": 1322,
+            "firstStreamMs": 1322,
+            "firstContentMs": 1322,
+            "payloadBytes": 55797,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2782,
+              "output": 159,
+              "cacheRead": 13056,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:45:19.836Z",
+            "outcome": "completed",
+            "elapsedMs": 48492,
+            "durationMs": 48492,
+            "headersMs": 1259,
+            "firstStreamMs": 1259,
+            "firstContentMs": 1261,
+            "payloadBytes": 62169,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1712,
+              "output": 3608,
+              "cacheRead": 15744,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 11,
+      "id": "pallets__flask-4045",
+      "repetition": 3,
+      "startedAt": "2026-11-16T02:46:24.474Z",
+      "rawModelVerdict": null,
+      "normalizedModelVerdict": null,
+      "effectiveModelVerdict": null,
+      "hostGuardApplied": false,
+      "elapsedMs": 300031,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewFailure": "budget_exhausted",
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 3,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 2,
+          "medianMs": 115797.5,
+          "p90Ms": 195391,
+          "maxMs": 195391
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 3,
+          "medianMs": 1736,
+          "p90Ms": 12129,
+          "maxMs": 12129
+        },
+        "firstContent": {
+          "count": 3,
+          "medianMs": 1763,
+          "p90Ms": 12130,
+          "maxMs": 12130
+        },
+        "censoredCalls": 1,
+        "longCensoredCalls": 1,
+        "priority": "investigate_call_latency"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "abstained",
+        "reason": "300-second reviewer duration limit with no final verdict; not a targeted detection or an insufficient_evidence model verdict.",
+        "targetRelevance": "not_applicable",
+        "pathAndTrigger": null,
+        "requirementAuthority": "No final review.",
+        "officialAlignment": "not_regraded",
+        "disagreementReason": null,
+        "abstentionCause": "reviewer_duration_budget_300s"
+      },
+      "summary": null,
+      "findings": [],
+      "issueKinds": [],
+      "acceptance": [],
+      "rawFinalTextSha256": null,
+      "rawRecordSha256": "2054a950d26a49f19fed78de20a30c5b8ba58102407c9df3d440f61249746e1d",
+      "errorSha256": "ddb1ce43a037103c898d06f4ad26f0991059089112c9c9128b9d6971dd92c975",
+      "usage": {
+        "modelTurns": 3,
+        "toolCalls": 6,
+        "totalTokens": 56462,
+        "usage": {
+          "input": 17961,
+          "output": 5669,
+          "cacheRead": 32832,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:46:24.494Z",
+            "outcome": "completed",
+            "elapsedMs": 36204,
+            "durationMs": 36204,
+            "headersMs": 12129,
+            "firstStreamMs": 12130,
+            "firstContentMs": 12130,
+            "payloadBytes": 60183,
+            "httpStatus": 200,
+            "usage": {
+              "input": 30,
+              "output": 1153,
+              "cacheRead": 16448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:47:01.107Z",
+            "outcome": "completed",
+            "elapsedMs": 195391,
+            "durationMs": 195391,
+            "headersMs": 1736,
+            "firstStreamMs": 1736,
+            "firstContentMs": 1763,
+            "payloadBytes": 122001,
+            "httpStatus": 200,
+            "usage": {
+              "input": 17931,
+              "output": 4516,
+              "cacheRead": 16384,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:50:16.502Z",
+            "outcome": "budget_exhausted",
+            "elapsedMs": 67980,
+            "durationMs": null,
+            "headersMs": 1129,
+            "firstStreamMs": 1129,
+            "firstContentMs": 1221,
+            "payloadBytes": 146294,
+            "httpStatus": 200,
+            "usage": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "slot": 12,
+      "id": "matplotlib__matplotlib-23563",
+      "repetition": 3,
+      "startedAt": "2026-11-16T02:51:28.688Z",
+      "rawModelVerdict": "changes_requested",
+      "normalizedModelVerdict": "changes_requested",
+      "effectiveModelVerdict": "changes_requested",
+      "hostGuardApplied": false,
+      "formatRetries": 0,
+      "coverage": true,
+      "elapsedMs": 277419,
+      "unchanged": true,
+      "readerPathsWithinProject": true,
+      "reviewStop": {
+        "reason": "code_defects",
+        "action": "fix_code",
+        "issueCount": 1,
+        "unconfirmedIds": []
+      },
+      "reviewLatency": {
+        "source": "pi-provider-hooks",
+        "observedCalls": 13,
+        "droppedCalls": 0,
+        "successful": {
+          "count": 13,
+          "medianMs": 12418,
+          "p90Ms": 56947,
+          "maxMs": 61626
+        },
+        "errors": {
+          "count": 0,
+          "medianMs": null,
+          "p90Ms": null,
+          "maxMs": null
+        },
+        "headers": {
+          "count": 13,
+          "medianMs": 1045,
+          "p90Ms": 1287,
+          "maxMs": 1522
+        },
+        "firstContent": {
+          "count": 13,
+          "medianMs": 1080,
+          "p90Ms": 1331,
+          "maxMs": 1581
+        },
+        "censoredCalls": 0,
+        "longCensoredCalls": 0,
+        "priority": "no_slow_call_signal"
+      },
+      "evidenceErrorPresent": false,
+      "adjudication": {
+        "outcome": "other_concrete_changes_requested",
+        "reason": "Concrete Nx2 multi-column regression with a 1D-x/2D-y trigger and pre-change column-splitting source path. Related blanket-guard mechanism, but no Nx1/(n,1) or single-column boundary is identified; strict preregistered target gets no credit.",
+        "targetRelevance": "related_Nx2_not_registered_Nx1",
+        "pathAndTrigger": "lib/mpl_toolkits/mplot3d/axes3d.py; ax.plot(np.arange(3), np.array([[0.,1.],[1.,2.],[2.,3.]]))",
+        "requirementAuthority": "Inferred compatibility preservation; original request does not authorize narrowing.",
+        "officialAlignment": "related_ungraded_Nx2_boundary_not_target_credit",
+        "disagreementReason": "Concrete related regression is not a demonstration of the preregistered Nx1 target; keep separate despite possible shared mechanism.",
+        "abstentionCause": null
+      },
+      "summary": "The new early 1D validation plus atomic class revert fixes the reported corruption (A1/A2 receipts confirm the ValueError at plot time, empty ax.lines after the failed call, and a clean subsequent 1D draw; the full test_mplot3d.py run passes and the visible syntax check exits 0). However, the blanket `np.ndim(...) > 1` guard on xs/ys/zs also rejects an input shape the pre-change implementation accepted: 1D xs with a 2D (n, m) ys, which matplotlib's base `Axes.plot` intentionally expands into m lines (one per column). In the old Axes3D.plot, zs is broadcast to `np.shape(xs)` = (n,), each generated column has length n, so `Line3D.set_3d_properties` succeeds and the plot draws; with this patch it raises ValueError. The original request never asks to reject that shape, and no existing test asserts the rejection, so this is a compatibility narrowing that should be avoided (e.g. reject only the shapes that already failed pre-change, such as 2D xs/2D zs).",
+      "findings": [
+        "lib/mpl_toolkits/mplot3d/axes3d.py (new guard in Axes3D.plot, ~line 1280): `if any(np.ndim(data) > 1 for data in (xs, ys, zs)): raise ValueError(...)` rejects 1D xs together with a 2D ys, e.g. `ax = plt.figure().add_subplot(projection='3d'); ax.plot(np.arange(3), np.array([[0., 1.], [1., 2.], [2., 3.]])); fig.canvas.draw()`. Expected: keep the previous behavior, where zs is broadcast to np.shape(xs)=(3,), base Axes.plot splits the 2D y into its two columns (ncx=1, ncy=2 -> two Line2D of length 3) and line_2d_to_3d succeeds for each (no _verts3d error, draw works). Observed: the new check raises ValueError('3D line plots require 1D ...') before any artist is created, so a documented base-plot input shape (2D y columns) that previously produced two 3D lines is now rejected; the original user request contains no authorization to reject this shape and no existing test asserts such rejection. The corruption fix should be preserved (e.g. atomic conversion/cleanup of only the failing artists) without narrowing this previously working input shape."
+      ],
+      "issueKinds": [
+        "code_defect"
+      ],
+      "acceptance": [
+        {
+          "id": "A1",
+          "status": "met"
+        },
+        {
+          "id": "A2",
+          "status": "met"
+        },
+        {
+          "id": "A3",
+          "status": "met"
+        },
+        {
+          "id": "A4",
+          "status": "met"
+        }
+      ],
+      "rawFinalTextSha256": "853ff98b1cedb73c93b16c0b8da0613df64290e7479c3ef7f113d59fab47e02e",
+      "rawRecordSha256": "bc0f1240e8b4ee1c4c55cb37b47e3c0a612fe60e4a928ac1910be15707bbe7c3",
+      "errorSha256": null,
+      "usage": {
+        "modelTurns": 13,
+        "toolCalls": 18,
+        "totalTokens": 368656,
+        "usage": {
+          "input": 33035,
+          "output": 21061,
+          "cacheRead": 314560,
+          "cacheWrite": 0
+        }
+      },
+      "costUsd": null,
+      "telemetry": {
+        "source": "pi-provider-hooks",
+        "droppedCalls": 0,
+        "calls": [
+          {
+            "sequence": 1,
+            "turn": 1,
+            "startedAt": "2026-11-16T02:51:28.712Z",
+            "outcome": "completed",
+            "elapsedMs": 23685,
+            "durationMs": 23685,
+            "headersMs": 801,
+            "firstStreamMs": 802,
+            "firstContentMs": 802,
+            "payloadBytes": 37169,
+            "httpStatus": 200,
+            "usage": {
+              "input": 86,
+              "output": 1799,
+              "cacheRead": 10048,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 2,
+            "turn": 2,
+            "startedAt": "2026-11-16T02:51:52.659Z",
+            "outcome": "completed",
+            "elapsedMs": 2011,
+            "durationMs": 2011,
+            "headersMs": 1522,
+            "firstStreamMs": 1522,
+            "firstContentMs": 1581,
+            "payloadBytes": 49145,
+            "httpStatus": 200,
+            "usage": {
+              "input": 3494,
+              "output": 107,
+              "cacheRead": 10048,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 3,
+            "turn": 3,
+            "startedAt": "2026-11-16T02:51:54.679Z",
+            "outcome": "completed",
+            "elapsedMs": 8795,
+            "durationMs": 8795,
+            "headersMs": 784,
+            "firstStreamMs": 784,
+            "firstContentMs": 806,
+            "payloadBytes": 55212,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1615,
+              "output": 751,
+              "cacheRead": 13440,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 4,
+            "turn": 4,
+            "startedAt": "2026-11-16T02:52:03.735Z",
+            "outcome": "completed",
+            "elapsedMs": 61626,
+            "durationMs": 61626,
+            "headersMs": 1084,
+            "firstStreamMs": 1085,
+            "firstContentMs": 1085,
+            "payloadBytes": 61226,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2053,
+              "output": 4597,
+              "cacheRead": 14976,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 5,
+            "turn": 5,
+            "startedAt": "2026-11-16T02:53:05.818Z",
+            "outcome": "completed",
+            "elapsedMs": 2433,
+            "durationMs": 2433,
+            "headersMs": 922,
+            "firstStreamMs": 922,
+            "firstContentMs": 949,
+            "payloadBytes": 78856,
+            "httpStatus": 200,
+            "usage": {
+              "input": 4957,
+              "output": 155,
+              "cacheRead": 16960,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 6,
+            "turn": 6,
+            "startedAt": "2026-11-16T02:53:08.263Z",
+            "outcome": "completed",
+            "elapsedMs": 15266,
+            "durationMs": 15266,
+            "headersMs": 908,
+            "firstStreamMs": 908,
+            "firstContentMs": 932,
+            "payloadBytes": 82886,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1247,
+              "output": 1049,
+              "cacheRead": 21824,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 7,
+            "turn": 7,
+            "startedAt": "2026-11-16T02:53:23.951Z",
+            "outcome": "completed",
+            "elapsedMs": 56947,
+            "durationMs": 56947,
+            "headersMs": 1124,
+            "firstStreamMs": 1124,
+            "firstContentMs": 1124,
+            "payloadBytes": 92420,
+            "httpStatus": 200,
+            "usage": {
+              "input": 3226,
+              "output": 4675,
+              "cacheRead": 22976,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 8,
+            "turn": 8,
+            "startedAt": "2026-11-16T02:54:21.118Z",
+            "outcome": "completed",
+            "elapsedMs": 7338,
+            "durationMs": 7338,
+            "headersMs": 1154,
+            "firstStreamMs": 1154,
+            "firstContentMs": 1204,
+            "payloadBytes": 113677,
+            "httpStatus": 200,
+            "usage": {
+              "input": 6449,
+              "output": 564,
+              "cacheRead": 26112,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 9,
+            "turn": 9,
+            "startedAt": "2026-11-16T02:54:28.696Z",
+            "outcome": "completed",
+            "elapsedMs": 1969,
+            "durationMs": 1969,
+            "headersMs": 1079,
+            "firstStreamMs": 1080,
+            "firstContentMs": 1233,
+            "payloadBytes": 115557,
+            "httpStatus": 200,
+            "usage": {
+              "input": 691,
+              "output": 99,
+              "cacheRead": 32448,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 10,
+            "turn": 10,
+            "startedAt": "2026-11-16T02:54:30.904Z",
+            "outcome": "completed",
+            "elapsedMs": 8518,
+            "durationMs": 8518,
+            "headersMs": 926,
+            "firstStreamMs": 926,
+            "firstContentMs": 947,
+            "payloadBytes": 125339,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2766,
+              "output": 590,
+              "cacheRead": 33024,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 11,
+            "turn": 11,
+            "startedAt": "2026-11-16T02:54:39.660Z",
+            "outcome": "completed",
+            "elapsedMs": 12418,
+            "durationMs": 12418,
+            "headersMs": 1287,
+            "firstStreamMs": 1287,
+            "firstContentMs": 1331,
+            "payloadBytes": 133397,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2198,
+              "output": 953,
+              "cacheRead": 35712,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 12,
+            "turn": 12,
+            "startedAt": "2026-11-16T02:54:52.090Z",
+            "outcome": "completed",
+            "elapsedMs": 21816,
+            "durationMs": 21816,
+            "headersMs": 1045,
+            "firstStreamMs": 1045,
+            "firstContentMs": 1080,
+            "payloadBytes": 137703,
+            "httpStatus": 200,
+            "usage": {
+              "input": 1465,
+              "output": 1657,
+              "cacheRead": 37824,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "sequence": 13,
+            "turn": 13,
+            "startedAt": "2026-11-16T02:55:14.151Z",
+            "outcome": "completed",
+            "elapsedMs": 51938,
+            "durationMs": 51938,
+            "headersMs": 1018,
+            "firstStreamMs": 1018,
+            "firstContentMs": 1049,
+            "payloadBytes": 146538,
+            "httpStatus": 200,
+            "usage": {
+              "input": 2788,
+              "output": 4065,
+              "cacheRead": 39168,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "scheduledReviews": 12,
+    "accepted": 8,
+    "targetedBlocks": 1,
+    "otherConcreteBlocks": 1,
+    "abstentions": 2,
+    "unexecuted": 0,
+    "requestTokens": 1624012,
+    "outputTokens": 112680,
+    "reviewElapsedMs": 1974779,
+    "costUsd": null,
+    "usageCaveat": "Reported usage only; interrupted streaming calls may have no final usage, so these are not complete billing totals."
+  },
+  "latency": {
+    "source": "pi-provider-hooks",
+    "successful": {
+      "count": 69,
+      "medianMs": 12418,
+      "p90Ms": 61626,
+      "maxMs": 195391
+    },
+    "observedCalls": 71,
+    "censoredCalls": 2,
+    "longCensoredCalls": 2,
+    "firstContent": {
+      "count": 71,
+      "medianMs": 1124,
+      "p90Ms": 2240,
+      "maxMs": 12130
+    },
+    "priority": "no_slow_successful_median_signal",
+    "perReviewSignals": [
+      {
+        "slot": 1,
+        "id": "pallets__flask-4045",
+        "repetition": 1,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 13583.5,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 2,
+        "id": "matplotlib__matplotlib-23563",
+        "repetition": 1,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 4628,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 3,
+        "id": "astropy__astropy-6938",
+        "repetition": 1,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 26214,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 4,
+        "id": "sympy__sympy-18189",
+        "repetition": 1,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 10620,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 5,
+        "id": "matplotlib__matplotlib-23563",
+        "repetition": 2,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 5514,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 6,
+        "id": "astropy__astropy-6938",
+        "repetition": 2,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 16524,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 7,
+        "id": "sympy__sympy-18189",
+        "repetition": 2,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 23870.5,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 8,
+        "id": "pallets__flask-4045",
+        "repetition": 2,
+        "priority": "collect_more_data",
+        "successfulMedianMs": 56736.5,
+        "censoredCalls": 1
+      },
+      {
+        "slot": 9,
+        "id": "astropy__astropy-6938",
+        "repetition": 3,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 8503,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 10,
+        "id": "sympy__sympy-18189",
+        "repetition": 3,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 23405,
+        "censoredCalls": 0
+      },
+      {
+        "slot": 11,
+        "id": "pallets__flask-4045",
+        "repetition": 3,
+        "priority": "investigate_call_latency",
+        "successfulMedianMs": 115797.5,
+        "censoredCalls": 1
+      },
+      {
+        "slot": 12,
+        "id": "matplotlib__matplotlib-23563",
+        "repetition": 3,
+        "priority": "no_slow_call_signal",
+        "successfulMedianMs": 12418,
+        "censoredCalls": 0
+      }
+    ]
+  },
+  "decision": {
+    "numericalThresholdMet": false,
+    "nativeEvidencePrerequisiteMet": false,
+    "hypothesisQualified": false,
+    "controlRollbackTriggered": false,
+    "universalTheoreticalCeilingEstablished": false,
+    "release": "v0.2.1",
+    "furtherMechanismWork": "frozen"
+  },
+  "limitations": [
+    "No attributable native pair was available in any preparation; no causal positive or negative test of usable native evidence.",
+    "Selected fixed patches and three repetitions cannot establish a universal reliability rate or theoretical ceiling.",
+    "Original Flask request does not explicitly specify dotted route endpoint exception type.",
+    "Matplotlib source reconstructs a verified 16 MiB layer prefix and Git tree, not the full 971577772-byte layer; eight resource symlink placeholders remain.",
+    "Astropy has an uninitialized astropy_helpers gitlink; local reviewers cannot execute original Python environments.",
+    "Historical native receipts and capture observations are not a current-workspace attestation; no official regrading occurred.",
+    "Actual model/backend revision and capture/reviewer equivalence are unproven; provider prices are unknown."
+  ]
+}

@@ -1,5 +1,9 @@
 # Evaluation and evidence
 
+## Final boundary-evidence qualification — 2026-11-16
+
+The [final preregistered four-patch × three-review batch](evaluations/reviewer-boundary-2026-11-16.md) retains all 12 outcomes: Flask 0/3 and Matplotlib 1/3 targeted findings, one related Nx2 block, controls 3/3 each and two duration abstentions. Native preparation is attributable in 0/4 cases, failing eligibility before calls; this does not qualify usable-boundary efficacy or prove a theoretical ceiling. All 30 frozen harness/source/dist files remain unchanged through execution. Per-call timing preserves the slow Flask r3 median and two censored calls. Mechanism expansion stops; Planned remains experimental. See [release limits](reviewer-limits.md).
+
 ## Reviewer call-latency diagnostic — 2026-11-16
 
 The [fixed-input measurement](evaluations/review-call-latency-2026-11-16.md) records six calls with a 9.2795-second successful median, 28.173-second maximum and 0.813-second median first content. This sample does not reproduce the registered slow-median threshold or establish the causes of old timeouts. The [registered fixed-input protocol](evaluations/review-call-latency-protocol-2026-11-16.md) measures hook-observed individual provider calls with the previous Flask handoff, unchanged standard limits and explicit censoring. It does not backfill old call timings, replace prior abstentions or add a detection-rate sample to the compatibility replay. See [instrumentation and native evidence](reviewer-diagnostics.md) for persistence, 60-second routing and attribution limits.
