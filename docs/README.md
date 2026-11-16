@@ -60,4 +60,4 @@ This is the complete documentation map, organized by reader needs rather than ch
 - [SWE-bench 三组比较](evaluations/swebench-ablation-2026-11-12.md) — 真实仓库任务的历史对照，结果绑定旧代码。
 - [最终 reviewer 边界实验](evaluations/reviewer-boundary-2026-11-16.md) — reviewer 机制冻结前的最后资格实验。
 
-完整历史协议、失败记录、预注册文件和机器可读 JSON 保留在 [评测档案目录](evaluations/)。这些文件用于复现和审计，不是推荐的线性阅读路径，也不应被合并成一个“总分”。
+完整历史协议、失败记录、预注册文件和机器可读 JSON 保留在 [评测档案目录](evaluations/)。档案文件名中的日期是实验记录时间，用于区分代码、模型和协议不同的历史快照；它不表示结果仍适用于当前版本，也不是质量排名。档案用于复现和审计，不是推荐的线性阅读路径，也不应被合并成一个“总分”。

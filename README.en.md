@@ -111,7 +111,7 @@ Data defaults to `~/.forge-agent`, with `FORGE_AGENT_HOME` and legacy `PFORGE_HO
 
 ## Evaluation evidence
 
-[Chinese Architecture Deep Dive](docs/architecture-deep-dive.md) records detailed design tradeoffs. The [five-issue SWE-bench ablation](docs/evaluations/swebench-ablation-2026-11-12.md) resolved 9/15, 11/15 and 9/15 across Direct / Planned-no-review / Planned; correct completed deliveries were 9, 11 and 5. This small sample belongs to an earlier code revision and does not establish a general planning or review benefit. Real-model evaluation requires explicit GitHub Provider Secrets; protocols and retained failures are in the [documentation catalog](docs/README.md).
+[Chinese Architecture Deep Dive](docs/architecture-deep-dive.md) records detailed design tradeoffs. The evaluation conclusion is deliberately limited: small real-task samples have not shown a general delivery-quality gain from Planned execution or independent review, and the reviewer qualification experiment missed its preregistered threshold. Adaptive execution remains the default; planning and review remain experimental. See the [evaluation overview](docs/evaluation.md#english-overview) for findings and limitations, and the [documentation catalog](docs/README.md) for historical records.
 
 ```bash
 npm run check

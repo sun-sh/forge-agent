@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep the main README focused on the current evaluation conclusion and one overview link; explain that dates in retained evaluation archives identify historical experiment snapshots, not current-version rankings.
 - Organize the bilingual README around the project's host-side Agent focus and common reader journeys, map the active source layout, and add a complete documentation/evaluation catalog. Keep historical results and machine-readable artifacts in the archive; clarify that shell-created files are not guaranteed to appear in the observed delivery-artifact list.
 
 ## 0.2.1 — 2026-11-16

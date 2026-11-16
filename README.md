@@ -115,7 +115,7 @@ Web 对单条模型回复触及最大输出（含只有思考、没有正文或�
 
 ## 评测证据
 
-[评测中文摘要](docs/evaluation.md#中文摘要)区分工程回归与模型结果。[SWE-bench Lite 三组实测](docs/evaluations/swebench-ablation-2026-11-12.md)覆盖 5 道 issue、每组每题 3 次：Direct / Planned-no-review / Planned 官方通过为 **9/15、11/15、9/15**，正确且完成交付为 **9、11、5**。这是旧代码上的小样本，不证明规划或审阅普遍更强。[最终 reviewer 资格实验](docs/evaluations/reviewer-boundary-2026-11-16.md)未达预注册门槛，机制保持冻结，默认自适应。所有历史评测及原始数据见[文档目录](docs/README.md)。
+评测结论目前是克制的：小样本真实任务没有证明 Planned 或独立 reviewer 能普遍提升交付质量，reviewer 资格实验也未达到预注册门槛。因此自适应执行仍是默认，规划与审阅保持实验性。[评测摘要](docs/evaluation.md#中文摘要)说明结果、限制和证据口径；完整历史档案按需查阅[文档目录](docs/README.md)。
 
 [真实模型 GitHub 工作流](.github/workflows/swebench-real.yml)需要显式配置 Provider Secrets；[无 Key 补判](.github/workflows/swebench-regrade.yml)对保留补丁补判，不重跑模型。
 
